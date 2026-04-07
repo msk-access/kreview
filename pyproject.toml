@@ -1,101 +1,30 @@
-[project]
-name = "kreview"
-version = "0.1.0"
-description = "Evaluate cfDNA fragmentomics features for ctDNA detection"
-authors = [{name = "Ronak Shah", email = "shahr2@mskcc.org"}]
-requires-python = ">=3.12"
-readme = "README.md"
-license = { file = "LICENSE" }
-dependencies = [
-    "typer>=0.15.0",
-    "pandas>=2.2.0",
-    "numpy>=1.20.0",
-    "pyarrow>=15.0.0",
-    "duckdb>=1.2.0",
-    "scikit-learn>=1.5.0",
-    "plotly>=5.20.0",
-    "structlog>=24.1.0",
-    "rich>=13.9.0",
-    "nbdev>=2.3.0",
-]
-
-[project.optional-dependencies]
-docs = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocs-mermaid2-plugin",
-    "mkdocs-glightbox",
-    "mkdocs-git-revision-date-localized-plugin",
-    "mkdocs-panzoom-plugin",
-    "mkdocs-pdf",
-    "mike",
-    "pillow",
-    "cairosvg",
-]
-test = [
-    "pytest>=7.0.0",
-    "pytest-mock>=3.10.0",
-]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-mock>=3.10.0",
-    "black==26.1.0",
-    "ruff==0.15.4",
-    "mypy==1.19.1",
-    "pre-commit>=3.6.0",
-]
-
-[project.urls]
-"Homepage" = "https://github.com/msk-access/kreview"
-"Documentation" = "https://msk-access.github.io/kreview/"
-
-[project.scripts]
-kreview = "kreview.cli:app"
-
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "kreview"
+dynamic = ["version"]
+description = "Evaluate cfDNA fragmentomics features for ctDNA detection"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "Ronak Shah", email = "shahr2@mskcc.org"}]
+keywords = ['nbdev', 'jupyter', 'notebook', 'python']
+classifiers = ["Natural Language :: English", "Intended Audience :: Developers", "Development Status :: 3 - Alpha", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3 :: Only"]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/msk-access/kreview"
+Documentation = "https://msk-access.github.io/kreview"
+
+[project.entry-points.nbdev]
+kreview = "kreview._modidx:d"
+
+[tool.setuptools.dynamic]
+version = {attr = "kreview.__version__"}
+
 [tool.setuptools.packages.find]
-include = ["kreview*"]
+include = ["kreview"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests", "nbs"]
-python_files = ["test_*.py"]
-python_functions = ["test_*"]
-markers = [
-    "unit: Fast unit tests with no I/O",
-    "integration: Tests requiring data files",
-    "slow: Tests that take >10s",
-]
-filterwarnings = [
-    "ignore::DeprecationWarning",
-]
-
-[tool.coverage.run]
-source = ["kreview"]
-omit = ["*/tests/*", "*/_proc/*"]
-
-[tool.ruff]
-line-length = 88
-target-version = "py312"
-
-[tool.ruff.lint]
-select = [
-    "E",
-    "F",
-    "I",
-    "UP",
-    "B",
-]
-ignore = ["E501"]
-
-[tool.black]
-line-length = 88
-target-version = ["py312"]
-
-[tool.mypy]
-python_version = "3.12"
-ignore_missing_imports = true
-warn_return_any = true
-warn_unused_configs = true
+[tool.nbdev]
