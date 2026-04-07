@@ -122,6 +122,16 @@ d = {
                 "kreview/eval_engine.py",
             ),
         },
+        "kreview.features.fsc_binlevel": {
+            "kreview.features.fsc_binlevel.FSCBinEvaluator": (
+                "features/fsc_binlevel.html#fscbinevaluator",
+                "kreview/features/fsc_binlevel.py",
+            ),
+            "kreview.features.fsc_binlevel.FSCBinEvaluator.extract": (
+                "features/fsc_binlevel.html#fscbinevaluator.extract",
+                "kreview/features/fsc_binlevel.py",
+            ),
+        },
         "kreview.features.fsc_gene": {
             "kreview.features.fsc_gene.FSCGeneEvaluator": (
                 "features/fsc_gene.html#fscgeneevaluator",
@@ -130,6 +140,36 @@ d = {
             "kreview.features.fsc_gene.FSCGeneEvaluator.extract": (
                 "features/fsc_gene.html#fscgeneevaluator.extract",
                 "kreview/features/fsc_gene.py",
+            ),
+        },
+        "kreview.features.fsc_regions": {
+            "kreview.features.fsc_regions.FSCRegionsEvaluator": (
+                "features/fsc_regions.html#fscregionsevaluator",
+                "kreview/features/fsc_regions.py",
+            ),
+            "kreview.features.fsc_regions.FSCRegionsEvaluator.extract": (
+                "features/fsc_regions.html#fscregionsevaluator.extract",
+                "kreview/features/fsc_regions.py",
+            ),
+        },
+        "kreview.features.fsd": {
+            "kreview.features.fsd.FSDEvaluator": (
+                "features/fsd.html#fsdevaluator",
+                "kreview/features/fsd.py",
+            ),
+            "kreview.features.fsd.FSDEvaluator.extract": (
+                "features/fsd.html#fsdevaluator.extract",
+                "kreview/features/fsd.py",
+            ),
+        },
+        "kreview.features.fsr": {
+            "kreview.features.fsr.FSREvaluator": (
+                "features/fsr.html#fsrevaluator",
+                "kreview/features/fsr.py",
+            ),
+            "kreview.features.fsr.FSREvaluator.extract": (
+                "features/fsr.html#fsrevaluator.extract",
+                "kreview/features/fsr.py",
             ),
         },
         "kreview.labels": {
