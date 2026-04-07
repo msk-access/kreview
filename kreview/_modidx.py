@@ -122,6 +122,16 @@ d = {
                 "kreview/eval_engine.py",
             ),
         },
+        "kreview.features.fsc_gene": {
+            "kreview.features.fsc_gene.FSCGeneEvaluator": (
+                "features/fsc_gene.html#fscgeneevaluator",
+                "kreview/features/fsc_gene.py",
+            ),
+            "kreview.features.fsc_gene.FSCGeneEvaluator.extract": (
+                "features/fsc_gene.html#fscgeneevaluator.extract",
+                "kreview/features/fsc_gene.py",
+            ),
+        },
         "kreview.labels": {
             "kreview.labels.CtDNALabeler": (
                 "labels.html#ctdnalabeler",
