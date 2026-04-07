@@ -1,0 +1,69 @@
+# Git
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.core
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter/nbdev
+.ipynb_checkpoints
+_docs/
+_site/
+_proc/
+.quarto/
+kreview.egg-info/
+docs/site/
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+coverage.xml
+
+# Data/Outputs
+data/
+results/
+*.parquet
+*.csv
+*.tsv
+*.tsv.gz
+*.json
+*.bed.gz
+*.bed.gz.tbi

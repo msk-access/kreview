@@ -1,0 +1,10 @@
+# GitHub Enforced
+* text=auto
+
+# Jupyter Notebooks
+*.ipynb filter=jq lang=json
+*.ipynb merge=jq
+
+# Data Files
+*.parquet filter=lfs diff=lfs merge=lfs -text
+*.gz filter=lfs diff=lfs merge=lfs -text

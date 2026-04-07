@@ -1,0 +1,27 @@
+:root {
+    /* Teal/cyan theme — evaluation/analysis aesthetic */
+    --md-primary-fg-color: #00897b;
+    --md-primary-fg-color--light: #4db6ac;
+    --md-primary-fg-color--dark: #00695c;
+    --md-accent-fg-color: #00897b;
+    --md-accent-fg-color--transparent: rgba(0, 137, 123, 0.1);
+}
+
+[data-md-color-scheme="slate"] {
+    --md-primary-fg-color: #4db6ac;
+    --md-accent-fg-color: #80cbc4;
+}
+
+.mermaid {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    text-align: center;
+}
+
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+    cursor: zoom-in;
+    transition: transform 0.2s ease-in-out;
+}
