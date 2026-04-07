@@ -80,6 +80,48 @@ d = {
                 "kreview/core.py",
             ),
         },
+        "kreview.eval_engine": {
+            "kreview.eval_engine.FeatureEvaluator": (
+                "eval_engine.html#featureevaluator",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.FeatureEvaluator.extract": (
+                "eval_engine.html#featureevaluator.extract",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.evaluate_feature": (
+                "eval_engine.html#evaluate_feature",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.plot_density": (
+                "eval_engine.html#plot_density",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.plot_feature_importance": (
+                "eval_engine.html#plot_feature_importance",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.plot_feature_vs_vaf": (
+                "eval_engine.html#plot_feature_vs_vaf",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.plot_roc_curves": (
+                "eval_engine.html#plot_roc_curves",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.plot_threshold_sensitivity": (
+                "eval_engine.html#plot_threshold_sensitivity",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.plot_violin": (
+                "eval_engine.html#plot_violin",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.single_feature_model": (
+                "eval_engine.html#single_feature_model",
+                "kreview/eval_engine.py",
+            ),
+        },
         "kreview.labels": {
             "kreview.labels.CtDNALabeler": (
                 "labels.html#ctdnalabeler",
