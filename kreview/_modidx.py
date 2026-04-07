@@ -79,6 +79,56 @@ d = {
                 "core.html#make_variant_key",
                 "kreview/core.py",
             ),
-        }
+        },
+        "kreview.labels": {
+            "kreview.labels.CtDNALabeler": (
+                "labels.html#ctdnalabeler",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.CtDNALabeler.__init__": (
+                "labels.html#ctdnalabeler.__init__",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.CtDNALabeler._assign_labels": (
+                "labels.html#ctdnalabeler._assign_labels",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.CtDNALabeler._load_data": (
+                "labels.html#ctdnalabeler._load_data",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.CtDNALabeler.label_all": (
+                "labels.html#ctdnalabeler.label_all",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.CtDNALabeler.relabel": (
+                "labels.html#ctdnalabeler.relabel",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.CtDNALabeler.summary": (
+                "labels.html#ctdnalabeler.summary",
+                "kreview/labels.py",
+            ),
+            "kreview.labels._build_patient_impact_variants": (
+                "labels.html#_build_patient_impact_variants",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.compute_cna_summary": (
+                "labels.html#compute_cna_summary",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.compute_impact_match": (
+                "labels.html#compute_impact_match",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.compute_snv_summary": (
+                "labels.html#compute_snv_summary",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.compute_sv_summary": (
+                "labels.html#compute_sv_summary",
+                "kreview/labels.py",
+            ),
+        },
     },
 }
