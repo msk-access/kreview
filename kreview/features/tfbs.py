@@ -3,21 +3,20 @@
 # %% ../../nbs/features/18_tfbs.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
-import re
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ['log', 'TFBSEvaluator']
+__all__ = ["log", "TFBSEvaluator"]
+
 
 # %% ../../nbs/features/18_tfbs.ipynb 2
 class TFBSEvaluator(FeatureEvaluator):
     """Extracts TFBS footprint metrics."""
-    
+
     name = "TFBS"
     source_file = ".TFBS.ontarget.parquet"
     tier = 2
@@ -31,15 +30,16 @@ class TFBSEvaluator(FeatureEvaluator):
             cols = set(df.columns)
 
             if "label" in cols:
-                metrics = [c for c in ["count", "mean_size", "entropy", "z_score"] if c in cols]
+                metrics = [
+                    c for c in ["count", "mean_size", "entropy", "z_score"] if c in cols
+                ]
                 for _, row in df.iterrows():
-                    lbl = str(row["label"]).replace(" ", "_").replace("-","_")
+                    lbl = str(row["label"]).replace(" ", "_").replace("-", "_")
                     for m in metrics:
                         if pd.notna(row[m]):
                             extracted[f"{lbl}_{m}"] = float(row[m])
-    
+
             return extracted
         except Exception as e:
             log.warning("tfbs_extraction_failed", error=str(e))
             return {}
-

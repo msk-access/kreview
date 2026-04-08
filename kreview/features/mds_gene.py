@@ -3,21 +3,20 @@
 # %% ../../nbs/features/20_mds_gene.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
-import re
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ['log', 'MDSGeneEvaluator']
+__all__ = ["log", "MDSGeneEvaluator"]
+
 
 # %% ../../nbs/features/20_mds_gene.ipynb 2
 class MDSGeneEvaluator(FeatureEvaluator):
     """Gene-specific MDS signatures."""
-    
+
     name = "MDSGene"
     source_file = ".MDS.gene.parquet"
     tier = 2
@@ -31,16 +30,20 @@ class MDSGeneEvaluator(FeatureEvaluator):
             cols = set(df.columns)
 
             if "gene" in cols:
-                metrics = [c for c in ["mds_mean", "mds_e1", "mds_std", "mds_z", "mds_e1_z"] if c in cols]
+                metrics = [
+                    c
+                    for c in ["mds_mean", "mds_e1", "mds_std", "mds_z", "mds_e1_z"]
+                    if c in cols
+                ]
                 for _, row in df.iterrows():
-                    g = str(row["gene"]).replace(" ", "_").replace("-","_")
-                    if g == "NAN": continue
+                    g = str(row["gene"]).replace(" ", "_").replace("-", "_")
+                    if g == "NAN":
+                        continue
                     for m in metrics:
                         if pd.notna(row[m]):
                             extracted[f"{g}_{m}"] = float(row[m])
-    
+
             return extracted
         except Exception as e:
             log.warning("mds_gene_extraction_failed", error=str(e))
             return {}
-

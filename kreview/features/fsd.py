@@ -10,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ['log', 'FSDEvaluator']
+__all__ = ["log", "FSDEvaluator"]
+
 
 # %% ../../nbs/features/13_fsd.ipynb 2
 class FSDEvaluator(FeatureEvaluator):
     """Extracts normalized densities for all fragment size buckets."""
-    
+
     name = "FSD"
     source_file = ".FSD.ontarget.parquet"
     tier = 1
@@ -26,24 +27,24 @@ class FSDEvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
-                
+
             cols = set(df.columns)
-            
+
             if "total" not in cols:
                 log.warning("fsd_missing_total_col")
                 return extracted
-            
+
             # FSD has multiple rows for groups (e.g. per-chromosome or total), we will just aggregate globally first
             total_reads = df["total"].sum()
             if total_reads == 0:
                 return extracted
-                
+
             for c in df.columns:
                 if c not in ["region", "total", "chrom"]:
                     bucket_sum = df[c].sum()
                     extracted[f"fsd_density_{c}"] = float(bucket_sum / total_reads)
-            
-            # Special 143/166 proxy 
+
+            # Special 143/166 proxy
             # 143 falls in "140-144", 166 falls in "165-169"
             if "140-144" in cols and "165-169" in cols:
                 v143 = df["140-144"].sum()
@@ -55,4 +56,3 @@ class FSDEvaluator(FeatureEvaluator):
         except Exception as e:
             log.warning("fsd_extraction_failed", error=str(e))
             return {}
-

@@ -3,30 +3,32 @@
 # %% ../../nbs/features/26_wps_background.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
-import re
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
-        
+
 
 # %% auto 0
-__all__ = ['log', 'WPSBackgroundEvaluator']
+__all__ = ["log", "WPSBackgroundEvaluator"]
+
 
 # %% ../../nbs/features/26_wps_background.ipynb 2
 def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith('['): 
+    if not isinstance(s, str) or not s.startswith("["):
         return []
-    clean = s.replace('[', '').replace(']', '').replace(chr(10), '').replace(chr(13), '')
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
     try:
         return [float(x) for x in clean.split()]
     except:
         return []
 
+
 class WPSBackgroundEvaluator(FeatureEvaluator):
     """Extracts periodicity distances for nucleosomes."""
-    
+
     name = "WPSBackground"
     source_file = ".WPS_background.parquet"
     tier = 2
@@ -40,15 +42,20 @@ class WPSBackgroundEvaluator(FeatureEvaluator):
             cols = set(df.columns)
 
             if "group_id" in cols:
-                metrics = ["nrl_bp", "nrl_deviation_bp", "periodicity_score", "adjusted_score", "fragment_ratio"]
+                metrics = [
+                    "nrl_bp",
+                    "nrl_deviation_bp",
+                    "periodicity_score",
+                    "adjusted_score",
+                    "fragment_ratio",
+                ]
                 for _, row in df.iterrows():
                     gi = str(row["group_id"]).replace(" ", "_")
                     for m in metrics:
                         if m in cols and pd.notna(row[m]):
                             extracted[f"{gi}_{m}"] = float(row[m])
-    
+
             return extracted
         except Exception as e:
             log.warning("wps_background_extraction_failed", error=str(e))
             return {}
-

@@ -3,7 +3,6 @@
 # %% ../../nbs/features/12_fsc_regions.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
 from ..eval_engine import FeatureEvaluator
 
@@ -11,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ['log', 'FSCRegionsEvaluator']
+__all__ = ["log", "FSCRegionsEvaluator"]
+
 
 # %% ../../nbs/features/12_fsc_regions.ipynb 2
 class FSCRegionsEvaluator(FeatureEvaluator):
     """Extracts wide net ratios for targeted panels."""
-    
+
     name = "FSC_regions"
     source_file = ".FSC.regions.parquet"
     tier = 1
@@ -27,26 +27,33 @@ class FSCRegionsEvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
-            
+
             cols = set(df.columns)
-            ratios = ["ultra_short_ratio", "core_short_ratio", "mono_nucl_ratio", "di_nucl_ratio", "long_ratio"]
-            
+            ratios = [
+                "ultra_short_ratio",
+                "core_short_ratio",
+                "mono_nucl_ratio",
+                "di_nucl_ratio",
+                "long_ratio",
+            ]
+
             # Global
             for r in ratios:
                 if r in cols:
                     extracted[f"global_{r}_mean"] = float(df[r].mean())
                     extracted[f"global_{r}_std"] = float(df[r].std())
-            
+
             # Variance across genes
             if "gene" in cols:
                 for r in ratios:
                     if r in cols:
                         gene_means = df.groupby("gene")[r].mean()
                         if len(gene_means) > 1:
-                            extracted[f"{r}_variance_across_genes"] = float(gene_means.std())
+                            extracted[f"{r}_variance_across_genes"] = float(
+                                gene_means.std()
+                            )
 
             return extracted
         except Exception as e:
             log.warning("fsc_regions_extraction_failed", error=str(e))
             return {}
-

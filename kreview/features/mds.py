@@ -3,21 +3,20 @@
 # %% ../../nbs/features/19_mds.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
-import re
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ['log', 'MDSEvaluator']
+__all__ = ["log", "MDSEvaluator"]
+
 
 # %% ../../nbs/features/19_mds.ipynb 2
 class MDSEvaluator(FeatureEvaluator):
     """Global MDS signature."""
-    
+
     name = "MDS"
     source_file = ".MDS.ontarget.parquet"
     tier = 2
@@ -34,9 +33,8 @@ class MDSEvaluator(FeatureEvaluator):
                 extracted["global_mds"] = float(df["MDS"].mean())
             if "mds_z" in cols:
                 extracted["global_mds_z"] = float(df["mds_z"].mean())
-    
+
             return extracted
         except Exception as e:
             log.warning("mds_extraction_failed", error=str(e))
             return {}
-

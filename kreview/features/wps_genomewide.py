@@ -5,28 +5,31 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 import structlog
-import re
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
-        
+
 
 # %% auto 0
-__all__ = ['log', 'WPSGenomeEvaluator']
+__all__ = ["log", "WPSGenomeEvaluator"]
+
 
 # %% ../../nbs/features/25_wps_genomewide.ipynb 2
 def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith('['): 
+    if not isinstance(s, str) or not s.startswith("["):
         return []
-    clean = s.replace('[', '').replace(']', '').replace(chr(10), '').replace(chr(13), '')
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
     try:
         return [float(x) for x in clean.split()]
     except:
         return []
 
+
 class WPSGenomeEvaluator(FeatureEvaluator):
     """Extracts genome-wide WPS metrics."""
-    
+
     name = "WPSGenome"
     source_file = ".WPS.parquet"
     tier = 2
@@ -42,16 +45,20 @@ class WPSGenomeEvaluator(FeatureEvaluator):
             if "region_type" in cols:
                 array_cols = ["wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf"]
                 for _, row in df.iterrows():
-                    rt = str(row["region_type"]).replace(" ", "_").replace("-","_").replace("|","_")
+                    rt = (
+                        str(row["region_type"])
+                        .replace(" ", "_")
+                        .replace("-", "_")
+                        .replace("|", "_")
+                    )
                     for a in array_cols:
                         if a in cols and pd.notna(row[a]):
                             parsed = _parse_array(str(row[a]))
                             if len(parsed) > 0:
                                 extracted[f"{rt}_{a}_mean"] = float(np.mean(parsed))
                                 extracted[f"{rt}_{a}_std"] = float(np.std(parsed))
-    
+
             return extracted
         except Exception as e:
             log.warning("wps_genomewide_extraction_failed", error=str(e))
             return {}
-

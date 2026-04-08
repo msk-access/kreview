@@ -34,11 +34,25 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0"
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0"
+]
 docs = [
     "mkdocs-material>=9.5.0",
     "mkdocstrings[python]>=0.24.0",
     "mkdocs-typer>=0.0.3",
-    "mike>=2.0.0"
+    "mike>=2.0.0",
+    "mkdocs-mermaid2-plugin>=1.2.3",
+    "mkdocs-glightbox>=0.5.2",
+    "mkdocs-git-revision-date-localized-plugin>=1.5.1",
+    "mkdocs-panzoom-plugin>=0.5.2",
+    "mkdocs-pdf>=0.1.2"
 ]
 
 [project.urls]
@@ -57,4 +71,14 @@ version = {attr = "kreview.__version__"}
 [tool.setuptools.packages.find]
 include = ["kreview"]
 
+[tool.ruff.lint]
+ignore = ["E722", "E402", "F401", "F841", "E501", "E712", "E741", "E701"]
+
+[tool.black]
+target-version = ["py310"]
+
 [tool.nbdev]
+
+[tool.mypy]
+ignore_missing_imports = true
+disable_error_code = ["var-annotated", "arg-type", "assignment", "misc", "return-value", "attr-defined", "import-untyped"]

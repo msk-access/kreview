@@ -1,7 +1,7 @@
 window.MathJax = {
   tex: {
-    inlineMath: [["\\(", "\\)"]],
-    displayMath: [["\\[", "\\]"]],
+    inlineMath: [["\\(", "\\)"], ["$", "$"]],
+    displayMath: [["\\[", "\\]"], ["$$", "$$"]],
     processEscapes: true,
     processEnvironments: true
   },
@@ -11,6 +11,6 @@ window.MathJax = {
   }
 };
 
-document.addEventListener("DOMContentLoaded", () => {
-  document$.subscribe(() => MathJax.typesetPromise?.());
+document$.subscribe(() => {
+  MathJax.typesetPromise();
 });

@@ -10,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ['log', 'FSREvaluator']
+__all__ = ["log", "FSREvaluator"]
+
 
 # %% ../../nbs/features/14_fsr.ipynb 2
 class FSREvaluator(FeatureEvaluator):
     """Extracts the short/long fragment size ratio across predefined structural metrics."""
-    
+
     name = "FSR"
     source_file = ".FSR.ontarget.parquet"
     tier = 1
@@ -26,10 +27,15 @@ class FSREvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
-                
+
             cols = set(df.columns)
-            target_metrics = ["short_long_ratio", "short_long_log2", "short_frac", "long_frac"]
-            
+            target_metrics = [
+                "short_long_ratio",
+                "short_long_log2",
+                "short_frac",
+                "long_frac",
+            ]
+
             for m in target_metrics:
                 if m in cols:
                     extracted[f"global_{m}"] = float(df[m].median())
@@ -38,4 +44,3 @@ class FSREvaluator(FeatureEvaluator):
         except Exception as e:
             log.warning("fsr_extraction_failed", error=str(e))
             return {}
-

@@ -3,21 +3,20 @@
 # %% ../../nbs/features/15_ocf_ontarget.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
-import re
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ['log', 'OCFOntargetEvaluator']
+__all__ = ["log", "OCFOntargetEvaluator"]
+
 
 # %% ../../nbs/features/15_ocf_ontarget.ipynb 2
 class OCFOntargetEvaluator(FeatureEvaluator):
     """Extracts on-target OCF metrics per tissue."""
-    
+
     name = "OCFOntarget"
     source_file = ".OCF.ontarget.parquet"
     tier = 2
@@ -33,11 +32,12 @@ class OCFOntargetEvaluator(FeatureEvaluator):
             if "tissue" in cols:
                 for _, row in df.iterrows():
                     t = str(row["tissue"]).replace(" ", "_")
-                    if "OCF" in cols and pd.notna(row["OCF"]): extracted[f"{t}_OCF"] = float(row["OCF"])
-                    if "ocf_z" in cols and pd.notna(row["ocf_z"]): extracted[f"{t}_ocf_z"] = float(row["ocf_z"])
-    
+                    if "OCF" in cols and pd.notna(row["OCF"]):
+                        extracted[f"{t}_OCF"] = float(row["OCF"])
+                    if "ocf_z" in cols and pd.notna(row["ocf_z"]):
+                        extracted[f"{t}_ocf_z"] = float(row["ocf_z"])
+
             return extracted
         except Exception as e:
             log.warning("ocf_ontarget_extraction_failed", error=str(e))
             return {}
-

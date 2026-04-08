@@ -3,30 +3,32 @@
 # %% ../../nbs/features/23_endmotif_1mer.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
-import re
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
-        
+
 
 # %% auto 0
-__all__ = ['log', 'EndMotif1merEvaluator']
+__all__ = ["log", "EndMotif1merEvaluator"]
+
 
 # %% ../../nbs/features/23_endmotif_1mer.ipynb 2
 def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith('['): 
+    if not isinstance(s, str) or not s.startswith("["):
         return []
-    clean = s.replace('[', '').replace(']', '').replace(chr(10), '').replace(chr(13), '')
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
     try:
         return [float(x) for x in clean.split()]
     except:
         return []
 
+
 class EndMotif1merEvaluator(FeatureEvaluator):
     """Extracts 1-mer fragment end frequencies."""
-    
+
     name = "EndMotif1mer"
     source_file = ".EndMotif1mer.parquet"
     tier = 2
@@ -46,9 +48,8 @@ class EndMotif1merEvaluator(FeatureEvaluator):
                     b = str(row["base"])
                     if pd.notna(row["fraction"]):
                         extracted[f"base_1mer_{b}"] = float(row["fraction"])
-    
+
             return extracted
         except Exception as e:
             log.warning("endmotif_1mer_extraction_failed", error=str(e))
             return {}
-
