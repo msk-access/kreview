@@ -12,7 +12,7 @@ We group the sample's generated feature matrices by the 4 established `CtDNALabe
 
 Because we are checking more than two independent samples (the 4 groups) to determine if they originate from the same distribution, we employ the **Kruskal-Wallis H-test** (`stats.kruskal`).
 
-If the omnibus $p$-value returns significant ($p < 0.05$), it proves that the feature is successfully stratifying *at least one* label. We then move to pairwise analysis to figure out which ones.
+If the omnibus \(p\)-value returns significant (\(p < 0.05\)), it proves that the feature is successfully stratifying *at least one* label. We then move to pairwise analysis to figure out which ones.
 
 ## Pairwise Separation (Mann-Whitney U)
 
@@ -22,13 +22,13 @@ We additionally compute a Rank-Biserial correlation dynamically to understand th
 
 ## Effect Size (Cohen's d)
 
-As an accompaniment to strict $p$-values (which easily become inflated by large sample cohorts), we aggressively compute **Cohen's d**. This represents the standardized difference between two means (usually True+ vs Healthy).
+As an accompaniment to strict \(p\)-values (which easily become inflated by large sample cohorts), we aggressively compute **Cohen's d**. This represents the standardized difference between two means (usually True+ vs Healthy).
 
-$$
+```math
 d = \frac{M_{1} - M_{2}}{SD_{pooled}}
-$$
+```
 
-If $d \ge 0.8$, the fragmentomic feature creates a Massive biological separation.
+If \(d \ge 0.8\), the fragmentomic feature creates a Massive biological separation.
 
 ## Confounder Tracking (Spearman Rank)
 

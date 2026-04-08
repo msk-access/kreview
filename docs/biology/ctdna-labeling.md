@@ -12,9 +12,9 @@ Unlike standard genomics which calls somatic variants directly from the blood, *
 
 Because we are evaluating *new* experimental fragmentomic models, we need incontrovertible proof that the patient sample actually *has* ctDNA present. For this, we look at **Variant Allele Frequency (VAF)**.
 
-$$
-VAF = \frac{\text{Alternate Allele Depth (t\_alt\_count)}}{\text{Total Depth (t\_ref\_count + t\_alt\_count)}}
-$$
+```math
+VAF = \frac{\text{Alternate Allele Depth (t_alt_count)}}{\text{Total Depth (t_ref_count + t_alt_count)}}
+```
 
 If a sample contains somatic Single Nucleotide Variants (SNVs) with a high detectable VAF, or massive Copy Number Alterations (CNAs)/Structural Variants (SVs), then the physical tumor footprint in the blood is high.
 
@@ -33,9 +33,9 @@ The gold standard. This label is granted **only** if one of three conditions is 
 ### 2. Possible ctDNA+
 The silver standard. The sample lacks a matched MSK-IMPACT tissue biopsy (or the biopsy was negative), but the global MSK-ACCESS assay still detected generic somatic SNVs passing the configured stringency threshold:
 
-$$
+```math
 VAF \ge 0.01 \quad \text{and} \quad n_{variants} \ge 1
-$$
+```
 *(Configurable via the `--chunk-size` or Python configs)*.
 
 ### 3. Possible ctDNA−
