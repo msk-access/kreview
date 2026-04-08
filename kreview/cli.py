@@ -169,6 +169,7 @@ def run(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     skip_report: bool = typer.Option(False, help="Skip HTML report generation"),
     export_duckdb: bool = typer.Option(False, "--export-duckdb", help="Export a persistent duckdb data lake containing all feature matrices"),
+    chunk_size: int = typer.Option(500, "--chunk-size", help="Batch size for DuckDB file loading over SFTP network mounts"),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig, load_feature_cohort
@@ -223,8 +224,8 @@ def run(
         # ── Step 3: Load + Shard + Extract ──
         _echo(f"Step 3: Loading & extracting '{e.name}'...")
         t1 = time.time()
-        _echo(f"  Loading cohort from DuckDB (single scan)...")
-        df_full = load_feature_cohort(str(e.source_file), str(krewlyzer_dir), set(all_sample_ids))
+        _echo(f"  Loading cohort from DuckDB (chunk_size={chunk_size})...")
+        df_full = load_feature_cohort(str(e.source_file), str(krewlyzer_dir), set(all_sample_ids), chunk_size=chunk_size)
 
         if df_full.empty:
             _echo(f"  WARNING: No data found for {e.name}, skipping")

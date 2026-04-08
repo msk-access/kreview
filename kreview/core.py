@@ -231,6 +231,7 @@ def load_feature_cohort(
     results_dir: str | Path,
     sample_ids: list[str] | set[str] | None = None,
     conn: duckdb.DuckDBPyConnection | None = None,
+    chunk_size: int = 500,
 ) -> pd.DataFrame:
     """Load one feature type across available samples using explicit file list.
     
@@ -303,7 +304,6 @@ def load_feature_cohort(
     conn.execute("SET threads=4;") # Throttle SFTP I/O bursts
     
     df_list = []
-    chunk_size = 500  # Safe limit to bypass SFTP maxfiles connection limits
     for i in range(0, len(file_paths), chunk_size):
         chunk = file_paths[i:i + chunk_size]
         try:
