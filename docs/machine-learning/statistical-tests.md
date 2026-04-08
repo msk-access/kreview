@@ -28,7 +28,7 @@ $$
 d = \frac{M_{1} - M_{2}}{SD_{pooled}}
 $$
 
-If $d > 0.8$, the fragmentomic feature creates a Massive biological separation.
+If $d \ge 0.8$, the fragmentomic feature creates a Massive biological separation.
 
 ## Confounder Tracking (Spearman Rank)
 
