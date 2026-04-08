@@ -1,0 +1,872 @@
+---
+title: "Kreview Intelligence Dashboard"
+jupyter: python3
+execute:
+  cache: false
+  echo: false
+---
+
+```{python}
+#| tags: [parameters]
+#| echo: false
+# Quarto injects -P params here; defaults are for local development only
+matrix_path = "output/FSC_gene_matrix.parquet"
+feature_name = "FSC_gene"
+```
+
+```{python}
+#| echo: false
+#| output: false
+# ── Setup: imports, renderer config, data loading ──────────────────────────
+import pandas as pd
+import numpy as np
+import json
+import joblib
+import warnings
+from pathlib import Path
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.io as pio
+from IPython.display import Markdown, HTML, display
+import itables
+
+from sklearn.preprocessing import StandardScaler
+
+pio.renderers._render_on_display = False
+_plotly_loaded = False
+
+def show_plotly(fig):
+    global _plotly_loaded
+    if isinstance(fig, go.Figure):
+        # Prevent clipping horizontally and vertically, including a heavy bottom padding for bottom-aligned vertical legend
+        fig.update_layout(margin=dict(b=150, t=50, l=10, r=10))
+        html_str = fig.to_html(
+            full_html=False,
+            include_plotlyjs='cdn' if not _plotly_loaded else False,
+            include_mathjax=False,
+            config={"responsive": True}
+        )
+        _plotly_loaded = True
+        display(HTML(html_str))
+    elif isinstance(fig, (str, Markdown)):
+        display(fig)
+    else:
+        display(Markdown(f"> Unexpected output type: {type(fig)}"))
+
+pio.templates.default = "plotly_dark"
+warnings.filterwarnings('ignore')
+
+from kreview.eval_engine import (
+    LABEL_ORDER, plot_violin, plot_density,
+    plot_feature_vs_vaf, plot_feature_importance, plot_roc_curves
+)
+
+MUTED_NEON = {
+    "True ctDNA+": "#E85D75",      
+    "Possible ctDNA+": "#FF9B42",  
+    "Possible ctDNA-": "gray",  
+    "Possible ctDNA−": "gray",  
+    "Healthy Normal": "#8DDA77"    
+}
+
+LAYOUT_DEFAULTS = dict(
+    autosize=True,
+    paper_bgcolor='rgba(0,0,0,0)',
+    font=dict(color='#e0e6ed'),
+    title_x=0.5,
+    legend=dict(
+        orientation="v",
+        yanchor="top",
+        y=-0.15,
+        xanchor="center",
+        x=0.5,
+        font=dict(size=11, color="#c9d1d9")
+    )
+)
+
+df = pd.read_parquet(matrix_path)
+
+meta_cols = {"SAMPLE_ID", "PATIENT_ID", "CANCER_TYPE", "CANCER_TYPE_DETAILED",
+             "ONCOTREE_CODE", "SAMPLE_TYPE", "GENE_PANEL", "access_version",
+             "has_impact_match", "n_impact_confirmed", "has_paired_impact",
+             "has_snv", "n_somatic_snvs", "n_total_somatic_snvs", "max_vaf",
+             "has_sv", "n_somatic_svs", "has_cna", "n_cna_events", "label",
+             "min_vaf_used", "min_variants_used", "min_fragments_used",
+             "sample_id", "filename"}
+numeric_cols = [c for c in df.select_dtypes(include=np.number).columns if c not in meta_cols]
+
+eval_path = Path(matrix_path).parent / f"{feature_name}_eval_stats.parquet"
+if eval_path.exists():
+    eval_df = pd.read_parquet(eval_path)
+    if "cohens_d_true_vs_healthy" in eval_df.columns:
+        best = eval_df.dropna(subset=["cohens_d_true_vs_healthy"]).nlargest(1, "cohens_d_true_vs_healthy")
+        top_col = best["feature_column"].iloc[0] if len(best) > 0 else numeric_cols[0]
+    else:
+        top_col = numeric_cols[0]
+else:
+    eval_df = None
+    top_col = numeric_cols[0] if numeric_cols else None
+
+# ── Load model results ──
+model_path = Path(matrix_path).parent / f"{feature_name}_model_results.json"
+if model_path.exists():
+    with open(model_path) as f:
+        mres = json.load(f)
+    auc_rf = mres.get('auc_rf', 0)
+    auc_lr = mres.get('auc_lr', 0)
+    auc_xgb = mres.get('auc_xgb', 0)
+    
+    top_feats = mres.get("top_features", numeric_cols)[:10]
+else:
+    mres = None
+    auc_rf = auc_lr = auc_xgb = 0
+    top_feats = numeric_cols[:10]
+
+# Load Models
+import shap
+lr_model = None
+rf_model = None
+xgb_model = None
+
+shap_df_sample = None
+X_shap = None
+y_shap = None
+
+# We cache predictions for ROC and Density
+lr_preds = None
+rf_preds = None
+xgb_preds = None
+rf_preds_all = None
+
+if mres is not None and top_feats:
+    rf_joblib = Path(matrix_path).parent / f"{feature_name}_rf_model.joblib"
+    lr_joblib = Path(matrix_path).parent / f"{feature_name}_lr_model.joblib"
+    xgb_joblib = Path(matrix_path).parent / f"{feature_name}_xgb_model.joblib"
+    
+    if lr_joblib.exists(): lr_model = joblib.load(lr_joblib)
+    if rf_joblib.exists(): rf_model = joblib.load(rf_joblib)
+    if xgb_joblib.exists(): xgb_model = joblib.load(xgb_joblib)
+        
+    model_label = df["label"].isin([
+        "True ctDNA+", "Possible ctDNA+", 
+        "Healthy Normal", "Possible ctDNA-", "Possible ctDNA−"
+    ])
+    shap_df = df[model_label].copy()
+    
+    if len(shap_df) > 0:
+        X_shap_raw = shap_df[top_feats].fillna(0)
+        y_shap_raw = shap_df["label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
+        
+        if len(X_shap_raw) > 1000:
+            sample_idx = X_shap_raw.sample(n=1000, random_state=42).index
+            X_shap = X_shap_raw.loc[sample_idx]
+            y_shap = y_shap_raw[X_shap_raw.index.get_indexer(sample_idx)]
+            shap_df_sample = shap_df.loc[sample_idx]
+        else:
+            X_shap = X_shap_raw
+            y_shap = y_shap_raw
+            shap_df_sample = shap_df
+
+        # Calculate Predictions
+        if lr_model is not None:
+            # LR requires scaling
+            try:
+                scaler = StandardScaler().fit(X_shap_raw)
+                lr_preds = lr_model.predict_proba(scaler.transform(X_shap))[:, 1]
+            except: pass
+        if rf_model is not None:
+            rf_preds = rf_model.predict_proba(X_shap)[:, 1]
+            try:
+                rf_preds_all = rf_model.predict_proba(df[top_feats].fillna(0))[:, 1]
+            except:
+                pass
+        if xgb_model is not None:
+            try:
+                xgb_preds = xgb_model.predict_proba(X_shap)[:, 1]
+            except: pass
+```
+
+# Global Glossary {.sidebar}
+
+### ctDNA Biological Label Maps
+
+To interpret the clinical matrices correctly, understand how the machine categorizes liquid biopsy fragmentomics via physical genomic verification patterns.
+
+**Positive Class (ctDNA Detection)**:
+- **`True ctDNA+`**: Sample has 100% verified mutant molecules mapping perfectly to the patient's MSK-IMPACT tissue profiles.
+- **`Possible ctDNA+`**: Sub-threshold mutations mathematically consistent with circulating tumor traces.
+
+**Negative Class (Healthy Baselines)**:
+- **`Healthy Normal`**: Medically confirmed healthy volunteer buffy coat / plasma. Purely white-blood-cell derived circulating DNA. Peak structural size of 167bp.
+- **`Possible ctDNA-`**: Advanced cancer patient where zero mathematical tumor molecules were detectable in plasma, acting as a biological negative pseudo-control.
+
+---
+
+*Because tumor cells undergo massive apoptotic and necrotic stress, their circulating DNA degrades fundamentally differently than healthy leukocytes—creating biologically distinct "fragmentomic signatures" across size distributions, end-motif sequences, and nucleosome positioning footprints mathematically detectable in plasma.*
+
+# Machine Learning Diagnostics {orientation="rows" scrolling="true"}
+
+## Row {height="15%"}
+
+```{python}
+#| content: valuebox
+#| title: "Random Forest AUC"
+dict(value=f"{auc_rf:.3f}" if auc_rf else "N/A", color="success", icon="tree")
+```
+
+```{python}
+#| content: valuebox
+#| title: "XGBoost AUC"
+dict(value=f"{auc_xgb:.3f}" if auc_xgb else "N/A", color="info", icon="lightning")
+```
+
+```{python}
+#| content: valuebox
+#| title: "Logistic Regression"
+dict(value=f"{auc_lr:.3f}" if auc_lr else "N/A", color="warning", icon="graph-up")
+```
+
+## Row {.tabset}
+
+### Multi-Model Performance
+
+::: {.callout-note collapse="true" icon="false"}
+## 📐 Mathematical Interpretation: Evaluation Metrics (Click to Expand)
+This grouped bar chart tests whether the single fragmentomic feature is medically robust enough to identify cancer mathematically using three fundamentally different algorithm classes (Linear, Decision Trees, and Gradient Boosting).
+
+- **Precision (PPV)**: If the model flagged a patient as Cancer, what is the % chance they actually had cancer?
+- **Sensitivity (Recall/TPR)**: Out of all the True ctDNA+ samples, what % did the model successfully catch?
+- **Specificity (TNR)**: Out of all the Healthy Normal / Negative samples, what % did the model successfully clear as Healthy? **(Evaluated using dynamic optimized thresholds)**
+:::
+
+```{python}
+#| echo: false
+metric_records = []
+if mres is not None:
+    for prefix, nice_name in [("lr", "Logistic Regression"), ("rf", "Random Forest"), ("xgb", "XGBoost")]:
+        report = mres.get(f"{prefix}_classification_report", {})
+        if report and "1" in report:
+            metric_records.append({
+                "Model": nice_name,
+                "Metric": "Precision (PPV)",
+                "Score": report["1"]["precision"]
+            })
+            metric_records.append({
+                "Model": nice_name,
+                "Metric": "Sensitivity (Recall)",
+                "Score": report["1"]["recall"]
+            })
+            metric_records.append({
+                "Model": nice_name,
+                "Metric": "F1-Score",
+                "Score": report["1"]["f1-score"]
+            })
+            if "0" in report:
+                metric_records.append({
+                    "Model": nice_name,
+                    "Metric": "Specificity (TNR)",
+                    "Score": report["0"]["recall"]  # Recall of class 0 is specificity
+                })
+            metric_records.append({
+                "Model": nice_name,
+                "Metric": "Accuracy",
+                "Score": report.get("accuracy", 0)
+            })
+
+if metric_records:
+    perf_df = pd.DataFrame(metric_records)
+    fig_perf = px.bar(
+        perf_df, x="Metric", y="Score", color="Model", barmode="group",
+        color_discrete_sequence=["#ff9b42", "#E85D75", "#9C27B0"]
+    )
+    _ = fig_perf.update_layout(
+        **LAYOUT_DEFAULTS,
+        yaxis=dict(range=[0, 1]),
+        title="Cross-Validated Performance Metrics"
+    )
+    show_plotly(fig_perf)
+else:
+    Markdown("> Detailed performance metrics not available in JSON output.")
+```
+
+### ROC Curves
+
+```{python}
+#| echo: false
+y_score_dict = {}
+if lr_preds is not None: y_score_dict["Logistic Regression"] = lr_preds
+if rf_preds is not None: y_score_dict["Random Forest"] = rf_preds
+if xgb_preds is not None: y_score_dict["XGBoost"] = xgb_preds
+
+if y_shap is not None and len(y_score_dict) > 0:
+    y_true_dict = {name: y_shap for name in y_score_dict.keys()}
+    fig_roc = plot_roc_curves(y_true_dict, y_score_dict, title="Multi-Model ROC")
+    _ = fig_roc.update_layout(
+        **LAYOUT_DEFAULTS, 
+        height=600
+    )
+        # Color scheme adjustment
+    colors = ["#ff9b42", "#E85D75", "#9C27B0"]
+    for i, trace in enumerate(fig_roc.data):
+        if trace.name != "Random":
+            trace.line.color = colors[i % len(colors)]
+    show_plotly(fig_roc)
+else:
+    Markdown("> ROC data not available.")
+```
+
+### Probability Densities
+
+::: {.callout-note collapse="true" icon="false"}
+## 🔬 Clinical Interpretation: Probability Densities (Click to Expand)
+This tracks the raw internal structural logic of the Random Forest Model using Kernel Density Estimation (KDE). 
+
+If the model is confused, the **Positive** and **Negative** density curves will aggressively overlap in the middle (near 0.5)—meaning the physical biology of Healthy cfDNA is indistinguishable from this patient's ctDNA fragments. 
+A clinically perfect diagnostic biomarker will natively violently pull all Negative samples towards probability `0.0` and all tumor DNA strictly towards probability `1.0`.
+:::
+
+```{python}
+#| echo: false
+if rf_preds_all is not None:
+    from plotly.figure_factory import create_distplot
+    
+    probs = rf_preds_all
+    hist_data = []
+    group_labels = []
+    colors = []
+    
+    for lbl in LABEL_ORDER:
+        mask = df["label"] == lbl
+        d = probs[mask]
+        if len(d) > 2:
+            hist_data.append(d)
+            group_labels.append(lbl)
+            colors.append(MUTED_NEON.get(lbl, "gray"))
+            
+    if len(hist_data) > 0:
+        fig_kde = create_distplot(hist_data, group_labels, colors=colors,
+                                  show_hist=False, show_rug=False)
+        _ = fig_kde.update_layout(
+            **LAYOUT_DEFAULTS,
+            title="Random Forest Predicted Probability Density",
+            xaxis_title="Predicted Probability (ctDNA+)",
+            yaxis_title="Density",
+            height=600
+        )
+        show_plotly(fig_kde)
+    else:
+        display(Markdown("> Not enough samples per class for density plotting."))
+else:
+    display(Markdown("> Prediction density data not available."))
+```
+
+### Interactive Confusion Matrices
+
+::: {.callout-note collapse="true" icon="false"}
+## 🧩 Methodological Context: 4-Tier Cutoff Validation (Click to Expand)
+Shows exactly how mathematical models partition the True and False subsets physically counting every sample. 
+
+The models categorizing this matrix combine all **4 labeling tiers** naturally (Negative = `Healthy/Possible-`, Positive = `True/Possible+`). To maximize specificity, we do not naively assume 0.5 is the correct boundary. Instead, the models are instantly strictly evaluated exactly at their highest precision optimal clinical threshold mathematically possible using Youden's J statistic.
+:::
+
+```{python}
+#| echo: false
+if mres is not None:
+    # Build 1x3 subplots HEATMAP
+    models = [("lr", "Logistic Regression"), ("rf", "Random Forest"), ("xgb", "XGBoost")]
+    titles = []
+    cms = []
+    
+    for pfx, name in models:
+        cm = mres.get(f"{pfx}_confusion_matrix")
+        if cm:
+            opt = mres.get(f"{pfx}_optimal_threshold")
+            title_text = f"{name}<br><sub>(Opt Cutoff: {opt:.3f})</sub>" if opt is not None else name
+            titles.append(title_text)
+            cms.append(np.array(cm))
+            
+    if cms:
+        import io
+        from contextlib import redirect_stdout
+        
+        with redirect_stdout(io.StringIO()):
+            fig_cm = make_subplots(rows=1, cols=len(cms), subplot_titles=titles)
+            labels = ["Negative (0)", "Positive (1)"]
+            
+            for i, cm in enumerate(cms):
+                # Annotations matrix
+                z_text = [[str(y) for y in x] for x in cm]
+
+                trace = go.Heatmap(
+                    z=cm, x=labels, y=labels,
+                    text=z_text, texttemplate="%{text}",
+                    colorscale="Blues" if i==0 else ("Reds" if i==1 else "Oranges"),
+                    showscale=False
+                )
+                _ = fig_cm.add_trace(trace, row=1, col=i+1)
+                
+            _ = fig_cm.update_layout(
+                **LAYOUT_DEFAULTS,
+                title="Cross-Validated Confusion Matrices (Absolute Counts)",
+                height=400
+            )
+            for i in range(len(cms)):
+                _ = fig_cm.update_xaxes(title_text="Predicted Label", row=1, col=i+1)
+                _ = fig_cm.update_yaxes(title_text="True Label", row=1, col=i+1, autorange="reversed")
+            
+        show_plotly(fig_cm)
+    else:
+        Markdown("> Confusion matrices not found in JSON output.")
+```
+
+### Cancer Type Yield
+
+::: {.callout-note collapse="true" icon="false"}
+## 🧬 Generalization Analysis: Tissue Isolation (Click to Expand)
+Certain fragment sizes shed completely uniquely across distinct metastatic origins safely. 
+This strictly scopes the top 10 most frequent cancer types in your cohort, graphing independent Sensitivity metrics across Random Forest isolated validation subsets. 
+Use this to identify whether this specific biomarker generalized broadly across all solid tumors universally, or if it acts specifically as a targeted marker solely for specific cancer tissues (e.g. solely Breast or Colorectal).
+:::
+
+```{python}
+#| echo: false
+if mres is not None and "cancer_type_stats" in mres:
+    ct_stats = mres["cancer_type_stats"]
+    if ct_stats:
+        ct_df = pd.DataFrame(ct_stats)
+        if "rf_sensitivity" in ct_df.columns:
+            # Drop purely None
+            ct_df = ct_df.dropna(subset=["rf_sensitivity"])
+            if not ct_df.empty:
+                ct_df = ct_df.sort_values(by="rf_sensitivity", ascending=True)
+                fig_ct = px.bar(
+                    ct_df, x="rf_sensitivity", y="cancer_type", orientation="h",
+                    color="rf_sensitivity",
+                    hover_data=["n_positives", "n_samples"],
+                    color_continuous_scale="Viridis",
+                    title="Sensitivity by Cancer Subgroup (RF)"
+                )
+                _ = fig_ct.update_layout(
+                    **LAYOUT_DEFAULTS,
+                    xaxis_title="Random Forest Sensitivity (Recall)",
+                    yaxis_title="",
+                    height=600
+                )
+                show_plotly(fig_ct)
+            else:
+                display(Markdown("> No valid sensitivity calculable per subgroup."))
+        else:
+             display(Markdown("> Subgroup missing RF sensitivity."))
+    else:
+        display(Markdown("> Cancer Yield array is empty."))
+```
+
+### Classification Report
+
+```{python}
+#| echo: false
+import itables
+
+if mres is not None:
+    rep_dfs = []
+    for prefix, name in [("lr", "Logistic Regression"), ("rf", "Random Forest"), ("xgb", "XGBoost")]:
+        d = mres.get(f"{prefix}_classification_report")
+        if d:
+            t = pd.DataFrame(d).transpose()
+            t["Model"] = name
+            t.index.name = "Class/Metric"
+            t = t.reset_index()
+            rep_dfs.append(t)
+            
+    if rep_dfs:
+        combined = pd.concat(rep_dfs, ignore_index=True)
+        # Reorder columns
+        cols = ["Model", "Class/Metric", "precision", "recall", "f1-score", "support"]
+        combined = combined[[c for c in cols if c in combined.columns]]
+        combined.replace({"0": "Healthy Normal", "1": "True ctDNA+"}, inplace=True)
+        itables.show(combined.round(3), classes="display nowrap", maxBytes=0)
+    else:
+        Markdown("> Detailed classification reports unavailable.")
+```
+
+### Top Predictive Features
+
+```{python}
+#| echo: false
+feat_list = "\n".join([f"- `{f}`" for f in top_feats])
+Markdown(f"Features mapped across Models:\n\n{feat_list}")
+```
+
+
+# Feature Explainer UI (SHAP) {orientation="rows" scrolling="false"}
+
+::: {.callout-info collapse="true" icon="false"}
+## 🤖 Deep Learning Explainability: SHAP Interactions
+**Shapley Additive Explanations (SHAP)** physically unboxes algorithmic black-box models. These plots prove exactly *why* the mathematical architecture labeled a specific genomic sequence as 'Cancer'. They reveal raw underlying molecular biological interactions happening within human fragment distributions. (Powered by RF TreeExplainer implementations).
+:::
+
+## Row {.tabset}
+
+### Biomarker Thresholds (Beeswarm)
+
+```{python}
+#| echo: false
+if rf_model is not None and shap_df_sample is not None:
+    import plotly.express as px
+    explainer = shap.Explainer(rf_model)
+    shap_values = explainer(X_shap)
+    sv = shap_values[..., 1] if len(shap_values.shape) > 2 else shap_values
+
+    feature_names = X_shap.columns.tolist()
+    vals = np.abs(sv.values).mean(axis=0)
+    top_10_idx = np.argsort(vals)[-10:]
+    top_features = [feature_names[i] for i in top_10_idx]
+    
+    sample_labels = shap_df_sample["label"].values
+    sample_ids = shap_df_sample["sample_id"].values if "sample_id" in shap_df_sample.columns else shap_df_sample.index.values
+    
+    records = []
+    for rank, i in enumerate(top_10_idx):
+        feature = feature_names[i]
+        for j in range(len(sv.values)):
+            records.append({
+                'Feature': feature,
+                'Feature_Idx': rank,
+                'SHAP Impact': float(sv.values[j, i]),
+                'Biomarker Value': float(sv.data[j, i]) if sv.data is not None else 0.0,
+                'True Label': sample_labels[j],
+                'Sample ID': sample_ids[j]
+            })
+    
+    df_sv = pd.DataFrame(records)
+    df_sv['Feature Value'] = df_sv.groupby('Feature')['Biomarker Value'].transform(
+        lambda x: (x - x.min()) / (x.max() - x.min() + 1e-8)
+    )
+    df_sv['Y'] = df_sv['Feature_Idx'] + np.random.uniform(-0.25, 0.25, size=len(df_sv))
+
+    fig_shap = px.scatter(df_sv, x='SHAP Impact', y='Y', color='Feature Value', 
+                   hover_data=['Sample ID', 'True Label', 'Feature', 'Biomarker Value'],
+                   color_continuous_scale=[[0, '#1E88E5'], [0.5, '#9C27B0'], [1, '#E53935']])
+
+    _ = fig_shap.update_traces(marker=dict(size=5, opacity=0.8, line=dict(width=0)))
+    _ = fig_shap.update_layout(
+        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23',
+        font_color='#e0e6ed',
+        height=500,
+        xaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
+        yaxis=dict(showgrid=False, title='', tickmode='array', 
+                   tickvals=list(range(len(top_features))), ticktext=top_features),
+        coloraxis_colorbar=dict(title="Feature Value<br>(High/Low)", tickvals=[0, 1], ticktext=["Low", "High"]),
+        margin=dict(l=10, r=10, t=30, b=20)
+    )
+    show_plotly(fig_shap)
+else:
+    Markdown("> SHAP model objects not found. Run `kreview run`.")
+```
+
+### Top Feature Dependence
+
+```{python}
+#| echo: false
+if rf_model is not None and shap_df_sample is not None and top_feats:
+    import plotly.express as px
+    
+    feat1 = feature_names[top_10_idx[-1]]
+    top_2_idx = top_10_idx[-2] if len(top_10_idx) > 1 else top_10_idx[-1]
+    feat2 = feature_names[top_2_idx]
+    
+    df_dep = pd.DataFrame({
+        feat1: sv.data[:, top_10_idx[-1]],
+        'SHAP Impact': sv.values[:, top_10_idx[-1]],
+        feat2: sv.data[:, top_2_idx],
+        'True Label': sample_labels,
+        'Sample ID': sample_ids
+    })
+    
+    fig_dep = px.scatter(df_dep, x=feat1, y='SHAP Impact', color=feat2,
+                         hover_data=['Sample ID', 'True Label'],
+                         color_continuous_scale=[[0, '#1E88E5'], [0.5, '#9C27B0'], [1, '#E53935']],
+                         title=f"Interaction Effect: {feat1} vs {feat2}")
+    
+    _ = fig_dep.update_traces(marker=dict(size=6, opacity=0.8, line=dict(width=0)))
+    _ = fig_dep.update_layout(
+        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=500,
+        xaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
+        yaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
+        margin=dict(l=20, r=20, t=60, b=40)
+    )
+    show_plotly(fig_dep)
+```
+
+### Error Post-Mortem (Waterfalls)
+
+```{python}
+#| echo: false
+if rf_model is not None and shap_df_sample is not None:
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    
+    probs = rf_preds
+        
+    df_waterfall_tracker = pd.DataFrame({
+        'True Label': sample_labels,
+        'Probability': probs
+    })
+    
+    tp_mask = df_waterfall_tracker['True Label'] == "True ctDNA+"
+    best_tp_idx = df_waterfall_tracker[tp_mask]['Probability'].idxmax() if tp_mask.sum() > 0 else 0
+        
+    fp_mask = df_waterfall_tracker['True Label'] == "Healthy Normal"
+    worst_fp_idx = df_waterfall_tracker[fp_mask]['Probability'].idxmax() if fp_mask.sum() > 0 else 0
+
+    base_val = sv.base_values[0]
+
+    fig_waterfall = make_subplots(rows=1, cols=2, subplot_titles=(
+        f"Highest Conf. True Positive (Prob: {probs[best_tp_idx]:.2f})", 
+        f"Highest Conf. False Positive (Prob: {probs[worst_fp_idx]:.2f})"
+    ))
+
+    for col_idx, s_idx in enumerate([best_tp_idx, worst_fp_idx]):
+        shap_vals = sv.values[s_idx]
+        order = np.argsort(np.abs(shap_vals))[-10:] 
+        
+        x = ["Baseline"] + [feature_names[i] for i in order] + ["Final"]
+        y = [base_val] + [shap_vals[i] for i in order] + [base_val + np.sum(shap_vals)]
+        
+        hover_text = [f"Baseline Impact: {base_val:.2f}"]
+        for i in order:
+            feat_val = sv.data[s_idx, i] if sv.data is not None else 0
+            hover_text.append(f"Patient Value: {feat_val:.3f}<br>SHAP Push: {shap_vals[i]:+.3f}")
+        hover_text.append(f"Final Value: {y[-1]:.2f}")
+
+        measure = ["absolute"] + ["relative"] * len(order) + ["total"]
+        
+        waterfall_trace = go.Waterfall(
+            orientation = "v",
+            measure = measure,
+            x = x, y = y,
+            textposition = "none",
+            hovertext = hover_text,
+            hoverinfo = "x+text",
+            decreasing = {"marker":{"color":"#1E88E5"}},
+            increasing = {"marker":{"color":"#E53935"}},
+            totals = {"marker":{"color":"#9C27B0"}}
+        )
+        _ = fig_waterfall.add_trace(waterfall_trace, row=1, col=col_idx+1)
+
+    _ = fig_waterfall.update_layout(
+        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=600,
+        showlegend=False, margin=dict(l=10, r=10, t=60, b=20)
+    )
+    _ = fig_waterfall.update_xaxes(showgrid=False, tickangle=-45)
+    _ = fig_waterfall.update_yaxes(showgrid=True, gridcolor='#2e3440')
+
+    show_plotly(fig_waterfall)
+```
+
+
+# Global Biomarker Yield {orientation="columns" scrolling="true"}
+
+## Column {width="60%"}
+
+```{python}
+#| title: "Metric Significance (Volcano Effect Landscape)"
+if eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
+    eval_volcano = eval_df.copy()
+    if "kw_pvalue" in eval_volcano.columns:
+        eval_volcano["-log10(p)"] = -np.log10(eval_volcano["kw_pvalue"].replace(0, 1e-300))
+        eval_volcano["is_top"] = eval_volcano["feature_column"] == top_col
+
+        eval_volcano["hover_text"] = eval_volcano.apply(
+            lambda row: (f"<b>{row['feature_column']}</b><br>"
+                         f"Cohen's D: {row['cohens_d_true_vs_healthy']:.2f}<br>"
+                         f"K-W p-value: {row['kw_pvalue']:.3e}"), axis=1
+        )
+
+        fig_vol = px.scatter(
+            eval_volcano, x="cohens_d_true_vs_healthy", y="-log10(p)",
+            hover_name="hover_text", color="is_top",
+            color_discrete_map={True: MUTED_NEON["True ctDNA+"], False: "#515865"}
+        )
+        # Reference lines: p=0.01 significance + Cohen's D=0.8 large effect
+        _ = fig_vol.add_hline(y=-np.log10(0.01), line_dash="dash", line_color="#8DDA77", opacity=0.5)
+        _ = fig_vol.add_vline(x=0.8, line_dash="dash", line_color="#8DDA77", opacity=0.5)
+
+        _ = fig_vol.update_layout(
+            **LAYOUT_DEFAULTS,
+            showlegend=False,
+            margin=dict(l=10, r=10, t=30, b=10),
+            xaxis_title="Cohen's D Effect Size (Larger is better)",
+            yaxis_title="-Log10(Kruskal-Wallis P-Value)"
+        )
+        show_plotly(fig_vol)
+    else:
+        Markdown("> Kruskal-Wallis p-values not available in evaluation stats.")
+else:
+    Markdown("> Evaluation statistics not found.")
+```
+
+## Column {width="40%"}
+
+```{python}
+#| title: "Top 20 Features by Predictive Separation"
+if eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
+    top_20_df = eval_df.sort_values(by="cohens_d_true_vs_healthy", ascending=False).head(20)
+    top_20_df = top_20_df.iloc[::-1]
+
+    fig_bar = px.bar(
+        top_20_df, x="cohens_d_true_vs_healthy", y="feature_column",
+        orientation='h',
+        color="cohens_d_true_vs_healthy",
+        color_continuous_scale="Purpor"
+    )
+    _ = fig_bar.update_layout(
+        **LAYOUT_DEFAULTS,
+        showlegend=False,
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_title="Cohen's D", yaxis_title=""
+    )
+    show_plotly(fig_bar)
+```
+
+::: {.callout-note collapse="true"}
+## Extracted Feature Statistical Ledger (Click to Expand)
+```{python}
+#| echo: false
+if eval_df is not None:
+    display_cols = ["feature_column", "cohens_d_true_vs_healthy", "kw_pvalue",
+                    "mwu_True_ctDNA_pos_vs_Healthy_Normal_effect_size", "spearman_vaf_r"]
+    avail = [c for c in display_cols if c in eval_df.columns]
+    eval_sorted = eval_df.sort_values(by="cohens_d_true_vs_healthy", ascending=False)
+    itables.show(eval_sorted[avail].round(4), classes="display nowrap dataTable", maxBytes=0)
+```
+:::
+
+# Feature #1 Diagnostic Validation
+
+```{python}
+#| echo: false
+#| output: false
+d_val = best['cohens_d_true_vs_healthy'].iloc[0] if eval_df is not None and len(best) > 0 else 0
+```
+
+## Row {height="15%"}
+```{python}
+#| content: valuebox
+#| title: "Highest Statistically Separating Feature"
+dict(value=top_col, color="primary")
+```
+
+## Row {height="45%"}
+
+### Column
+```{python}
+#| title: "Metric Stratification Model (Violin)"
+if top_col:
+    fig_v = px.violin(
+        df, x="label", y=top_col, color="label",
+        box=True, points="outliers",
+        category_orders={"label": LABEL_ORDER},
+        color_discrete_map=MUTED_NEON
+    )
+    _ = fig_v.update_layout(
+        **LAYOUT_DEFAULTS,
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_title="", yaxis_title=""
+    )
+    show_plotly(fig_v)
+```
+
+### Column
+```{python}
+#| title: "Density Distribution Array"
+if top_col:
+    fig_dn = go.Figure()
+    for label in LABEL_ORDER:
+        if label not in df["label"].values:
+            continue
+        subset = df[df["label"] == label][top_col].dropna()
+        if len(subset) > 5:
+            _ = fig_dn.add_trace(go.Violin(
+                y=subset, name=label, side="positive",
+                line_color=MUTED_NEON.get(label, "gray"),
+                meanline_visible=True, width=1.2, opacity=0.8
+            ))
+    _ = fig_dn.update_layout(
+        **LAYOUT_DEFAULTS,
+        violinmode="overlay",
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_title="", yaxis_title=""
+    )
+    show_plotly(fig_dn)
+```
+
+## Row {height="40%"}
+
+```{python}
+#| title: "Independence from Tumor Burden Confounding (VAF Scatter)"
+if top_col and "max_vaf" in df.columns:
+    cancer = df[df["max_vaf"] > 0]
+    if len(cancer) > 0:
+        fig_vaf = px.scatter(
+            cancer, x="max_vaf", y=top_col, color="label",
+            color_discrete_map=MUTED_NEON, opacity=0.6,
+            trendline="lowess", log_x=True
+        )
+        _ = fig_vaf.update_layout(
+            **LAYOUT_DEFAULTS,
+            margin=dict(l=10, r=10, t=10, b=10)
+        )
+        show_plotly(fig_vaf)
+```
+
+# Cohort Summary Log
+
+## Row
+### Column {width="30%"}
+
+```{python}
+#| content: valuebox
+#| title: "Analyzed Cohort Size"
+dict(value=f"{len(df):,}", color="primary", icon="people")
+```
+
+```{python}
+#| content: valuebox
+#| title: "Molecular Sub-Metrics Gathered"
+dict(value=f"{len(numeric_cols)}", color="info", icon="activity")
+```
+
+```{python}
+#| content: valuebox
+#| title: "CTDNA-Positive Determinations"
+positive = sum(df["label"].isin(["True ctDNA+", "Possible ctDNA+"]))
+dict(value=f"{positive:,}", color="warning", icon="heart-pulse")
+```
+
+### Column {width="70%"}
+```{python}
+#| title: "Cancer Type Breakdown Directory"
+if "CANCER_TYPE" in df.columns:
+    c_counts = df["CANCER_TYPE"].value_counts().nlargest(15)
+
+    fig_dc = px.bar(
+        x=c_counts.values, y=c_counts.index, orientation='h',
+        color=c_counts.values, color_continuous_scale="Teal"
+    )
+    _ = fig_dc.update_layout(
+        **LAYOUT_DEFAULTS,
+        showlegend=False,
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_title="Patient Samples", yaxis_title="",
+        yaxis=dict(autorange="reversed")
+    )
+    show_plotly(fig_dc)
+```
+
+## Row
+```{python}
+#| title: "Multi-dimensional Catalog Matrix"
+itables.show(df.head(500), classes="display nowrap", scrollX=True, scrollY="800px")
+```

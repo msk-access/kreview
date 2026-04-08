@@ -58,6 +58,7 @@ htmlcov/
 coverage.xml
 
 # Data/Outputs
+output/
 data/
 results/
 *.parquet

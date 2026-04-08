@@ -1,0 +1,60 @@
+/*-- scss:defaults --*/
+
+// Typography — modern, clean sans-serif
+$font-family-sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !default;
+$font-size-root: 0.9rem !default;
+$headings-font-weight: 600 !default;
+$h2-font-size: 1.4rem !default;
+
+// Colors — refined dark palette
+$primary: #ff9b42 !default;
+$body-bg: #060606 !default;
+$body-color: #e0e6ed !default;
+$card-bg: #121418 !default;
+$link-color: #ff9b42 !default;
+$card-border-color: rgba(255, 155, 66, 0.15) !default;
+
+/*-- scss:rules --*/
+
+// Card header styling — subtle, uppercase labels
+.card-header {
+  background-color: rgba(255, 155, 66, 0.08) !important;
+  border-bottom: 1px solid rgba(255, 155, 66, 0.15);
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aeb8c4;
+}
+
+// Value box refinements
+.valuebox .value {
+  font-weight: 700;
+}
+
+// Plotly container — prevent overflow and ensure proper sizing
+.card-body .js-plotly-plot {
+  width: 100% !important;
+  overflow: hidden;
+}
+
+// itables / DataTables dark mode compatibility
+table.dataTable {
+  color: #e0e6ed !important;
+  background-color: #121418 !important;
+}
+table.dataTable thead th {
+  color: #8b949e !important;
+  border-bottom-color: rgba(255, 155, 66, 0.2) !important;
+}
+table.dataTable tbody tr:hover {
+  background-color: rgba(255, 155, 66, 0.06) !important;
+}
+
+// Callout boxes — match muted palette
+.callout-note {
+  border-left-color: #ff9b42 !important;
+}
+.callout-warning {
+  border-left-color: #FF9B42 !important;
+}

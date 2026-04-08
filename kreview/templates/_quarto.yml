@@ -1,0 +1,30 @@
+project:
+  type: default
+
+format:
+  dashboard:
+    theme:
+      - cyborg
+      - custom.scss
+    nav-buttons:
+      - icon: github
+        href: https://github.com/msk-access/kreview
+    expandable: true
+    embed-resources: true
+    scrolling: true
+    orientation: columns
+    html-math-method: katex
+    include-after-body: footer.html
+    include-before-body: 
+      text: |
+        <style>
+          .legend .scrollbox {
+            clip-path: none !important;
+            }
+          g.legend rect.bg {fill-opacity: 0 !important;}
+        </style>
+
+execute:
+  echo: false
+  warning: false
+  error: false
