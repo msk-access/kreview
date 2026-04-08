@@ -301,11 +301,19 @@ def load_feature_cohort(
     """
     
     conn.execute("SET threads=4;") # Throttle SFTP I/O bursts
-    try:
-        df = conn.execute(query, [file_paths]).df()
-    except Exception as e:
-        log.error("feature_cohort_load_failed", feature=feature_suffix, error=str(e))
-        return pd.DataFrame()
+    
+    df_list = []
+    chunk_size = 500  # Safe limit to bypass SFTP maxfiles connection limits
+    for i in range(0, len(file_paths), chunk_size):
+        chunk = file_paths[i:i + chunk_size]
+        try:
+            df_chunk = conn.execute(query, [chunk]).df()
+            df_list.append(df_chunk)
+        except Exception as e:
+            log.error("feature_cohort_load_failed", feature=feature_suffix, error=str(e), chunk_start=i)
+            return pd.DataFrame() # Fail gracefully if any chunk drops
+            
+    df = pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
         
     elapsed = time.time() - start_time
     if df.empty:
