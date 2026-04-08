@@ -44,7 +44,7 @@ class EndMotif1merEvaluator(FeatureEvaluator):
             self.tier = 3
             self.category = "motifs"
             if "base" in cols and "fraction" in cols:
-                for _, row in df.iterrows():
+                for row in df.to_dict("records"):
                     b = str(row["base"])
                     if pd.notna(row["fraction"]):
                         extracted[f"base_1mer_{b}"] = float(row["fraction"])

@@ -49,7 +49,7 @@ class WPSBackgroundEvaluator(FeatureEvaluator):
                     "adjusted_score",
                     "fragment_ratio",
                 ]
-                for _, row in df.iterrows():
+                for row in df.to_dict("records"):
                     gi = str(row["group_id"]).replace(" ", "_")
                     for m in metrics:
                         if m in cols and pd.notna(row[m]):

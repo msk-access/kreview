@@ -76,6 +76,10 @@ d = {
                 "kreview/core.py",
             ),
             "kreview.core.load_maf": ("core.html#load_maf", "kreview/core.py"),
+            "kreview.core.load_metadata_cohort": (
+                "core.html#load_metadata_cohort",
+                "kreview/core.py",
+            ),
             "kreview.core.load_sample_feature": (
                 "core.html#load_sample_feature",
                 "kreview/core.py",

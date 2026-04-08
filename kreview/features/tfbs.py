@@ -33,7 +33,7 @@ class TFBSEvaluator(FeatureEvaluator):
                 metrics = [
                     c for c in ["count", "mean_size", "entropy", "z_score"] if c in cols
                 ]
-                for _, row in df.iterrows():
+                for row in df.to_dict("records"):
                     lbl = str(row["label"]).replace(" ", "_").replace("-", "_")
                     for m in metrics:
                         if pd.notna(row[m]):

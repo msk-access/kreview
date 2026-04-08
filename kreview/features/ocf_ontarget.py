@@ -30,7 +30,7 @@ class OCFOntargetEvaluator(FeatureEvaluator):
             cols = set(df.columns)
 
             if "tissue" in cols:
-                for _, row in df.iterrows():
+                for row in df.to_dict("records"):
                     t = str(row["tissue"]).replace(" ", "_")
                     if "OCF" in cols and pd.notna(row["OCF"]):
                         extracted[f"{t}_OCF"] = float(row["OCF"])

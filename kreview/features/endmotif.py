@@ -44,7 +44,7 @@ class EndMotifEvaluator(FeatureEvaluator):
             self.tier = 3
             self.category = "motifs"
             if "Motif" in cols and "Frequency" in cols:
-                for _, row in df.iterrows():
+                for row in df.to_dict("records"):
                     m = str(row["Motif"])
                     if pd.notna(row["Frequency"]):
                         extracted[f"endmotif_{m}"] = float(row["Frequency"])

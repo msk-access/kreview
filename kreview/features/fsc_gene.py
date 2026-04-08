@@ -53,7 +53,7 @@ class FSCGeneEvaluator(FeatureEvaluator):
 
             # Per-gene extraction
             if "gene" in cols:
-                for _, row in df.iterrows():
+                for row in df.to_dict("records"):
                     g = str(row["gene"]).upper().replace(" ", "_").replace("-", "_")
                     if g == "NAN":
                         continue

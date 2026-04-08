@@ -362,10 +362,10 @@ class CtDNALabeler:
         self._load_data()
 
     def _load_data(self):
-        if self.paths.results_dir and self.paths.results_dir.exists():
+        if self.paths.krewlyzer_dirs:
             from kreview.core import load_metadata_cohort
 
-            self.metadata_df = load_metadata_cohort(self.paths.results_dir)
+            self.metadata_df = load_metadata_cohort(self.paths.krewlyzer_dirs)
         else:
             self.metadata_df = pd.DataFrame(columns=["sample_id", "total_fragments_pf"])
         log.info("loading_labeler_data", config=repr(self.config))

@@ -34,6 +34,7 @@ __all__ = [
     "get_duckdb_conn",
     "discover_available_samples",
     "load_feature_cohort",
+    "load_metadata_cohort",
     "load_sample_feature",
     "load_sample_metadata",
     "make_variant_key",
@@ -93,7 +94,7 @@ class Paths:
     healthy_xs1_samplesheet: Path
     healthy_xs2_samplesheet: Path
     cbioportal_dir: Path  # directory containing all 5 cBioPortal files
-    results_dir: Path | None = None
+    krewlyzer_dirs: list[Path] = field(default_factory=list)
 
     def __post_init__(self):
         """Coerce all path fields from str to Path for safe / operations."""
@@ -101,8 +102,24 @@ class Paths:
         self.healthy_xs1_samplesheet = Path(self.healthy_xs1_samplesheet)
         self.healthy_xs2_samplesheet = Path(self.healthy_xs2_samplesheet)
         self.cbioportal_dir = Path(self.cbioportal_dir)
-        if self.results_dir is not None:
-            self.results_dir = Path(self.results_dir)
+
+        expanded = []
+        for d in self.krewlyzer_dirs:
+            p = Path(str(d).strip().strip('"').strip("'"))
+            if p.is_file() and p.suffix == ".txt":
+                with open(p) as f:
+                    for line in f:
+                        line = line.strip().strip('"').strip("'")
+                        if line:
+                            path_obj = Path(line)
+                            if not path_obj.exists():
+                                log.warning("manifest_path_missing", path=str(path_obj))
+                            expanded.append(path_obj)
+            else:
+                if not p.exists():
+                    log.warning("krewlyzer_dir_missing", path=str(p))
+                expanded.append(p)
+        self.krewlyzer_dirs = expanded
 
     @property
     def maf(self) -> Path:
@@ -257,32 +274,36 @@ def get_duckdb_conn() -> duckdb.DuckDBPyConnection:
 
 
 def discover_available_samples(
-    results_dir: str | Path,
+    results_dirs: list[Path],
     required_suffix: str = ".metadata.parquet",
-) -> set[str]:
-    """Discover which samples have completed krewlyzer processing."""
-    results_path = Path(results_dir)
-    if not results_path.exists():
-        log.error("results_dir_missing", path=str(results_dir))
-        raise FileNotFoundError(f"Results directory not found: {results_dir}")
+) -> dict[str, Path]:
+    """Discover which samples have completed krewlyzer processing across multiple input directories."""
+    available = {}
+    for r_dir in results_dirs:
+        results_path = Path(r_dir)
+        if not results_path.exists():
+            log.warning("results_dir_missing", path=str(results_path))
+            continue
 
-    available = set()
-    for sample_dir in results_path.iterdir():
-        if sample_dir.is_dir():
-            marker = sample_dir / f"{sample_dir.name}{required_suffix}"
-            if marker.exists():
-                available.add(sample_dir.name)
+        # Auto-detect pipeline wrappers (Nextflow output dirs)
+        scan_path = results_path
+        if (results_path / "results").is_dir():
+            scan_path = results_path / "results"
 
-    log.info(
-        "sample_discovery", n_available=len(available), results_dir=str(results_dir)
-    )
+        for sample_dir in scan_path.iterdir():
+            if sample_dir.is_dir():
+                marker = sample_dir / f"{sample_dir.name}{required_suffix}"
+                if marker.exists():
+                    available[sample_dir.name] = scan_path
+
+    log.info("sample_discovery", n_available=len(available), num_dirs=len(results_dirs))
     return available
 
 
 # %% ../nbs/00_core.ipynb 6
 def load_feature_cohort(
     feature_suffix: str,
-    results_dir: str | Path,
+    results_dirs: list[Path],
     sample_ids: list[str] | set[str] | None = None,
     conn: duckdb.DuckDBPyConnection | None = None,
     chunk_size: int = 500,
@@ -293,24 +314,26 @@ def load_feature_cohort(
     instead of using a glob pattern. This avoids DuckDB scanning thousands of
     directories over network mounts (SFTP/NFS), which causes multi-minute stalls.
     """
-
     start_time = time.time()
 
-    if not Path(results_dir).exists():
-        log.error("results_dir_missing_cohort_load", path=str(results_dir))
-        raise FileNotFoundError(f"Results dir missing: {results_dir}")
+    if not results_dirs:
+        log.error("results_dirs_empty")
+        raise ValueError("Must provide at least one krewlyzer results directory")
 
     if conn is None:
         conn = get_duckdb_conn()
 
     # Step 1: Discover valid samples (fast filesystem ls, no parquet reads)
-    print(f"  [load] Discovering samples in {results_dir}...", flush=True)
+    print(
+        f"  [load] Discovering samples across {len(results_dirs)} directories...",
+        flush=True,
+    )
     available_samples = discover_available_samples(
-        results_dir, required_suffix=".metadata.parquet"
+        results_dirs, required_suffix=".metadata.parquet"
     )
 
     if sample_ids is not None:
-        final_samples = sorted(set(sample_ids).intersection(available_samples))
+        final_samples = sorted(set(sample_ids).intersection(available_samples.keys()))
         if len(final_samples) < len(set(sample_ids)):
             log.warning(
                 "samples_missing_krewlyzer_output",
@@ -318,7 +341,7 @@ def load_feature_cohort(
                 found=len(final_samples),
             )
     else:
-        final_samples = sorted(available_samples)
+        final_samples = sorted(available_samples.keys())
 
     if not final_samples:
         log.warning("no_samples_available_for_cohort", feature=feature_suffix)
@@ -329,11 +352,11 @@ def load_feature_cohort(
     )
 
     # Step 2: Build explicit file paths (no glob needed)
-    results_path = Path(results_dir)
     file_paths = []
     missing_files = 0
     for sid in final_samples:
-        fp = results_path / sid / f"{sid}{feature_suffix}"
+        r_dir = available_samples[sid]
+        fp = r_dir / sid / f"{sid}{feature_suffix}"
         if fp.exists():
             file_paths.append(str(fp))
         else:
@@ -402,6 +425,10 @@ def load_feature_cohort(
             flush=True,
         )
     return df
+
+
+def load_metadata_cohort(results_dirs: list[Path], sample_ids=None):
+    return load_feature_cohort(".metadata.parquet", results_dirs, sample_ids)
 
 
 # %% ../nbs/00_core.ipynb 7

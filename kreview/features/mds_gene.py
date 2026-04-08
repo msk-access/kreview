@@ -35,7 +35,7 @@ class MDSGeneEvaluator(FeatureEvaluator):
                     for c in ["mds_mean", "mds_e1", "mds_std", "mds_z", "mds_e1_z"]
                     if c in cols
                 ]
-                for _, row in df.iterrows():
+                for row in df.to_dict("records"):
                     g = str(row["gene"]).replace(" ", "_").replace("-", "_")
                     if g == "NAN":
                         continue

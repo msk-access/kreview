@@ -44,7 +44,7 @@ class WPSGenomeEvaluator(FeatureEvaluator):
 
             if "region_type" in cols:
                 array_cols = ["wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf"]
-                for _, row in df.iterrows():
+                for row in df.to_dict("records"):
                     rt = (
                         str(row["region_type"])
                         .replace(" ", "_")

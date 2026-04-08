@@ -42,6 +42,7 @@ def label(
         str(healthy_xs1_samplesheet),
         str(healthy_xs2_samplesheet),
         str(cbioportal_dir),
+        list(krewlyzer_dir),
     )
     config = LabelConfig(min_vaf=min_vaf, min_variants=min_variants)
 
@@ -193,7 +194,7 @@ def run(
     healthy_xs1_samplesheet: Path = typer.Option(...),
     healthy_xs2_samplesheet: Path = typer.Option(...),
     cbioportal_dir: Path = typer.Option(...),
-    krewlyzer_dir: Path = typer.Option(..., help="krewlyzer output directory"),
+    krewlyzer_dir: list[str] = typer.Option(..., help="krewlyzer output directory"),
     output: Path = typer.Option("output/", help="Output directory"),
     min_vaf: float = typer.Option(0.01),
     min_fragments: int = typer.Option(2000),
@@ -240,6 +241,7 @@ def run(
         str(healthy_xs1_samplesheet),
         str(healthy_xs2_samplesheet),
         str(cbioportal_dir),
+        list(krewlyzer_dir),
     )
     config = LabelConfig(min_vaf=min_vaf, min_variants=min_variants)
     labeler = CtDNALabeler(paths, config)
@@ -278,7 +280,7 @@ def run(
         _echo(f"  Loading cohort from DuckDB (chunk_size={chunk_size})...")
         df_full = load_feature_cohort(
             str(e.source_file),
-            str(krewlyzer_dir),
+            paths.krewlyzer_dirs,
             set(all_sample_ids),
             chunk_size=chunk_size,
         )
