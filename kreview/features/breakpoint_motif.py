@@ -3,30 +3,32 @@
 # %% ../../nbs/features/22_breakpoint_motif.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
-import re
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
-        
+
 
 # %% auto 0
-__all__ = ['log', 'BreakPointMotifEvaluator']
+__all__ = ["log", "BreakPointMotifEvaluator"]
+
 
 # %% ../../nbs/features/22_breakpoint_motif.ipynb 2
 def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith('['): 
+    if not isinstance(s, str) or not s.startswith("["):
         return []
-    clean = s.replace('[', '').replace(']', '').replace(chr(10), '').replace(chr(13), '')
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
     try:
         return [float(x) for x in clean.split()]
     except:
         return []
 
+
 class BreakPointMotifEvaluator(FeatureEvaluator):
     """Extracts 4-mer adjacent breakpoint motifs."""
-    
+
     name = "BreakPointMotif"
     source_file = ".BreakPointMotif.ontarget.parquet"
     tier = 2
@@ -46,9 +48,8 @@ class BreakPointMotifEvaluator(FeatureEvaluator):
                     m = str(row["Motif"])
                     if pd.notna(row["Frequency"]):
                         extracted[f"bpmotif_{m}"] = float(row["Frequency"])
-    
+
             return extracted
         except Exception as e:
             log.warning("breakpoint_motif_extraction_failed", error=str(e))
             return {}
-

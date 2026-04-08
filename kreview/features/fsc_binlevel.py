@@ -3,7 +3,6 @@
 # %% ../../nbs/features/11_fsc_binlevel.ipynb 1
 from __future__ import annotations
 import pandas as pd
-import numpy as np
 import structlog
 from ..eval_engine import FeatureEvaluator
 
@@ -11,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ['log', 'FSCBinEvaluator']
+__all__ = ["log", "FSCBinEvaluator"]
+
 
 # %% ../../nbs/features/11_fsc_binlevel.ipynb 2
 class FSCBinEvaluator(FeatureEvaluator):
     """Extracts GC-corrected GC log2 signals from genomic bins."""
-    
+
     name = "FSC_binlevel"
     source_file = ".FSC.ontarget.parquet"
     tier = 1
@@ -27,10 +27,10 @@ class FSCBinEvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
-            
+
             cols = set(df.columns)
             log2_cols = [c for c in cols if c.endswith("_log2")]
-            
+
             # Global median over all bins
             for l in log2_cols:
                 extracted[f"global_{l}_median"] = float(df[l].median())
@@ -49,4 +49,3 @@ class FSCBinEvaluator(FeatureEvaluator):
         except Exception as e:
             log.warning("fsc_binlevel_extraction_failed", error=str(e))
             return {}
-

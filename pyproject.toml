@@ -71,4 +71,10 @@ version = {attr = "kreview.__version__"}
 [tool.setuptools.packages.find]
 include = ["kreview"]
 
+[tool.ruff.lint]
+ignore = ["E722", "E402", "F401", "F841", "E501"]
+
+[tool.black]
+target-version = ["py310"]
+
 [tool.nbdev]
