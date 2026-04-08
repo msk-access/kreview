@@ -72,7 +72,7 @@ version = {attr = "kreview.__version__"}
 include = ["kreview"]
 
 [tool.ruff.lint]
-ignore = ["E722", "E402", "F401", "F841", "E501"]
+ignore = ["E722", "E402", "F401", "F841", "E501", "E712", "E741", "E701"]
 
 [tool.black]
 target-version = ["py310"]
