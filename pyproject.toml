@@ -33,6 +33,14 @@ dependencies = [
     "xgboost>=2.0.0"
 ]
 
+[project.optional-dependencies]
+docs = [
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.24.0",
+    "mkdocs-typer>=0.0.3",
+    "mike>=2.0.0"
+]
+
 [project.urls]
 Repository = "https://github.com/msk-access/kreview"
 Documentation = "https://msk-access.github.io/kreview"

@@ -29,7 +29,6 @@ theme:
     - navigation.top
     - navigation.indexes
     - navigation.path
-    - navigation.tabs
     - toc.follow
     - content.code.copy
     - content.code.annotate
@@ -51,19 +50,41 @@ plugins:
   - git-revision-date-localized:
       enable_creation_date: true
       type: timeago
-  - social:
-      cards_layout: default
   - panzoom:
       full_screen: True
       always_show_hint: false
       key: "none"
   - mkdocs-pdf
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
 
 nav:
   - Home: index.md
-
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Configuration: getting-started/configuration.md
+      - Running Pipeline: getting-started/pipeline-cli.md
+  - Biological Framework:
+      - ctDNA Labeling: biology/ctdna-labeling.md
+      - Fragmentomics Features: biology/fragmentomics-features.md
+  - Machine Learning & Statistics:
+      - Statistical Tests: machine-learning/statistical-tests.md
+      - Models & Metrics: machine-learning/models-and-metrics.md
+  - Developer Guide:
+      - nbdev Workflow: developer/nbdev-workflow.md
+      - Adding a Feature: developer/adding-a-feature.md
+      - DuckDB Architecture: developer/duckdb-architecture.md
+  - API Reference:
+      - CLI: api-reference/cli.md
+      - Core Operations: api-reference/core.md
+      - Evaluator Registry: api-reference/features.md
 markdown_extensions:
   - admonition
+  - mkdocs-typer
   - pymdownx.details
   - pymdownx.superfences:
       custom_fences:

@@ -1,17 +1,19 @@
 :root {
-    /* Teal/cyan theme — evaluation/analysis aesthetic */
-    --md-primary-fg-color: #00897b;
-    --md-primary-fg-color--light: #4db6ac;
-    --md-primary-fg-color--dark: #00695c;
-    --md-accent-fg-color: #00897b;
-    --md-accent-fg-color--transparent: rgba(0, 137, 123, 0.1);
+    /* Muted Neon Orange theme - Ported directly from Quarto Reports (#FF9B42) */
+    --md-primary-fg-color: #ff9b42;
+    --md-primary-fg-color--light: #ffb773;
+    --md-primary-fg-color--dark: #e88631;
+    --md-accent-fg-color: #ff9b42;
+    --md-accent-fg-color--transparent: rgba(255, 155, 66, 0.1);
 }
 
+/* Dark mode adjustments */
 [data-md-color-scheme="slate"] {
-    --md-primary-fg-color: #4db6ac;
-    --md-accent-fg-color: #80cbc4;
+    --md-primary-fg-color: #ff9b42;
+    --md-accent-fg-color: #ffb773;
 }
 
+/* Krewlyzer-style Mermaid diagram layout improvements for large/complex flowcharts */
 .mermaid {
     width: 100%;
     overflow-x: auto;
@@ -19,9 +21,35 @@
     text-align: center;
 }
 
+/* Make mermaid diagrams expand on hover for better readability */
 .mermaid svg {
     max-width: 100%;
     height: auto;
     cursor: zoom-in;
     transition: transform 0.2s ease-in-out;
+}
+
+.mermaid:hover svg {
+    transform: scale(1.02);
+}
+
+/* For very tall diagrams, add a max-height with scroll */
+.mermaid-tall {
+    max-height: 600px;
+    overflow-y: auto;
+    border: 1px solid var(--md-default-fg-color--lightest);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+/* For wide diagrams, ensure horizontal scroll works well */
+.mermaid-wide {
+    min-width: 100%;
+    overflow-x: scroll;
+    padding-bottom: 12px;
+}
+
+/* Improve flowchart node text legibility */
+.mermaid .nodeLabel {
+    font-size: 0.9em !important;
 }

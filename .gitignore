@@ -47,6 +47,7 @@ _proc/
 .quarto/
 kreview.egg-info/
 docs/site/
+site/
 
 # Test
 .pytest_cache/
