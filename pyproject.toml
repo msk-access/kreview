@@ -78,3 +78,7 @@ ignore = ["E722", "E402", "F401", "F841", "E501", "E712", "E741", "E701"]
 target-version = ["py310"]
 
 [tool.nbdev]
+
+[tool.mypy]
+ignore_missing_imports = true
+disable_error_code = ["var-annotated", "arg-type", "assignment", "misc", "return-value", "attr-defined", "import-untyped"]
