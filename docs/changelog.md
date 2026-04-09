@@ -34,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 - Initial project scaffold using nbdev
-- 4-tier ctDNA labeling engine (`CtDNALabeler`)
+- 5-tier ctDNA labeling engine (including Insufficient Data) (`CtDNALabeler`)
 - DuckDB-backed parquet loading with chunked I/O
 - 18 feature evaluators (Tier 1: FSC, FSD; Tier 2: WPS, EndMotif, OCF, etc.)
 - Random Forest and Logistic Regression evaluation with Stratified K-Fold CV

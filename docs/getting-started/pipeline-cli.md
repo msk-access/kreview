@@ -32,12 +32,14 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       --cbioportal-dir "/path/to/msk_solid_heme_cbioportal" \
       --krewlyzer-dir "/path/to/feature_parquets" \
       --output output/ \
-      --workers 4
+      --workers 4 \
+      --export-duckdb
     ```
+    *Note: `--export-duckdb` automatically writes a persistent SQL-queryable `kreview_lake.duckdb` after processing.*
 
 === "Using a Manifest File"
 
-    If your Krewlyzer results span multiple directories, create a `manifest.txt` listing one directory per line, then pass it directly:
+    If your Krewlyzer results span multiple directories, create a `manifest.txt` listing one directory per line, then pass it down:
 
     ```bash
     kreview run \
@@ -45,6 +47,19 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       --krewlyzer-dir manifest.txt \
       --output output/
     ```
+
+=== "Machine Learning Tuning"
+
+    Control statistical parameters and cross-validation natively:
+
+    ```bash
+    kreview run \
+      --cancer-samplesheet ... \
+      --krewlyzer-dir ... \
+      --cv-folds 5 \
+      --impute-strategy median
+    ```
+    *Options for imputation: `median`, `mean`, `zero`. Folds must be `3-20`.*
 
 === "Safe Load Mode (I/O Constraints)"
 
@@ -90,6 +105,7 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       ...
       --skip-report
     ```
+    *Note: When `--skip-report` is omitted, `kreview` natively generates both interactive Plotly `output/reports/*.html` dashboards and a `static_plots/` subdirectory containing 2x-scaled `.png` versions of every chart for clinical PDF insertion.*
 
 ---
 

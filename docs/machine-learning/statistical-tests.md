@@ -38,6 +38,9 @@ We run five independent 2-sample **Mann-Whitney U** rank-sum tests:
 
 We additionally compute a **Rank-Biserial correlation** to understand the direction and magnitude of separation.
 
+### Benjamini-Hochberg FDR Correction
+Because `kreview` executes five independent pair-wise checks simultaneously, it introduces a significant multiple-testing problem. To prevent artificially inflated False Positive rates (p-hacking), the engine natively applies the **Benjamini-Hochberg Method** to wrap all 5 raw $p$-values. The generated `fdr_pvalue` arrays are what you should evaluate for true significance.
+
 ## Effect Size (Cohen's d)
 
 As an accompaniment to strict \(p\)-values (which easily become inflated by large sample cohorts), we compute **Cohen's d**. This represents the standardized difference between two means (True+ vs Healthy):

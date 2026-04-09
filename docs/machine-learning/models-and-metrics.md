@@ -12,8 +12,13 @@ We run three distinctly bounded classification models against every feature:
 
 ```python
 # 1. Linear Baseline (Logistic Regression)
-lr = LogisticRegression(max_iter=1000, random_state=42)
-X_scaled = scaler.fit_transform(X)  # Standardized L2 Regression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+lr = Pipeline([
+    ('scaler', StandardScaler()),
+    ('clf', LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced"))
+])
 
 # 2. Decision Tree Bounds (Random Forest)
 rf = RandomForestClassifier(
@@ -53,19 +58,14 @@ The number of folds is dynamically bounded by the minimum class size to prevent 
 
 ## 📈 Metric Outputs
 
-### 1. ROC-AUC 
+### 1. ROC-AUC & Bootstrap CIs
 
-The core scoring mechanism is the Area Under the ROC Curve:
+The core scoring mechanism is the Area Under the ROC Curve. To properly gauge stability, `kreview` calculates rigorous **Bootstrap 95% Confidence Intervals** across `n_resamples=1000` for every generated AUC score. You will see `.auc_lr`, `.auc_rf`, as well as `.auc_rf_ci_lower`/`upper`.
 
-$$ \text{AUC} \rightarrow 1.0 \text{ (Perfect Diagnostics)} $$
-$$ \text{AUC} \rightarrow 0.5 \text{ (Random Coin Flip)} $$
+### 2. Probability Calibration
+Because tree-based models (like RandomForest) are notorious for pushing probabilities away from 0 and 1, `kreview` natively calculates `sklearn` Calibration Curves `(prob_true, prob_pred)` spanning 10 uniform bins. This allows you to verify if a feature model is over-confident before deploying it clinically.
 
-We calculate `.auc_lr`, `.auc_rf`, and `.auc_xgb`, then compute deltas:
-
-- `auc_delta_rf_lr` — Did nonlinear tree splitting help over the linear baseline?
-- `auc_delta_xgb_rf` — Did gradient boosting improve over bagging?
-
-### 2. Optimal Thresholding (Youden's J)
+### 3. Optimal Thresholding (Youden's J)
 
 A continuous probability threshold doesn't help an oncologist. We dynamically calculate the binary cutoff that maximizes the separation between True Positive Rate and False Positive Rate:
 
@@ -80,7 +80,7 @@ optimal_threshold = float(thresholds[optimal_idx])
 
 This threshold is then used to generate the `classification_report` and `confusion_matrix`.
 
-### 3. SHAP Explainability
+### 4. SHAP Explainability
 
 For both RF and XGB, `kreview` generates **SHAP (SHapley Additive exPlanations)** visualizations:
 
@@ -88,13 +88,15 @@ For both RF and XGB, `kreview` generates **SHAP (SHapley Additive exPlanations)*
 - **Dependence Scatter:** Shows how a single feature interacts with color-coded label groups.
 - **Waterfall Plots:** Side-by-side visualization of the highest True Positive and highest False Positive patients, revealing exactly which sub-metrics drove the model's decision.
 
-The dashboard renders RF and XGB in sequential full-width rows for maximum readability.
+!!! tip "Okabe-Ito CVD-Safe Palette"
+    Because these dashboards often hit clinical tumor boards, every Quarto output utilizes the Okabe-Ito Color-Vision-Deficiency (CVD) safe palette (e.g. vibrant orange, sky blue, vermillion) ensuring accessibility for red-green colorblindness.
 
-### 4. Subgroup Analysis
+### 5. Subgroup Analysis (Out-Of-Fold)
 
-After training, the pipeline evaluates model sensitivity across biological subgroups:
+After training, the pipeline evaluates model sensitivity across biological subgroups (Cancer Type, Assay Panels). 
+Crucially, `kreview` strictly uses **Out-Of-Fold (OOF)** CV predictions for these subgroups. Doing this prevents optimistic sampling bias where a model accidentally trains on a sub-population before predicting its sensitivity.
 
-- **Cancer Type Stats:** Sensitivity per cancer type (top 10 by sample count), for both RF and XGB.
+- **Cancer Type Stats:** Sensitivity per cancer type (top 10 by sample count).
 - **Assay Stats:** Sensitivity stratified by ACCESS panel version (e.g., ACCESS129 vs ACCESS146).
 
 These are serialized into the `stats.json` output under `cancer_type_stats` and `assay_stats`.
