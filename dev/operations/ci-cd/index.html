@@ -1,12 +1,12 @@
 <!DOCTYPE html><html class="no-js" lang="en"><head>
 <meta charset="utf-8">
 <meta content="width=device-width,initial-scale=1" name="viewport">
-<link href="https://msk-access.github.io/kreview/dev/biology/ctdna-labeling/" rel="canonical">
-<link href="../../getting-started/pipeline-cli/" rel="prev">
-<link href="../fragmentomics-features/" rel="next">
+<link href="https://msk-access.github.io/kreview/dev/operations/ci-cd/" rel="canonical">
+<link href="../../developer/release-guide/" rel="prev">
+<link href="../docker/" rel="next">
 <link href="../../assets/images/favicon.png" rel="icon">
 <meta content="mkdocs-1.6.1, mkdocs-material-9.7.6" name="generator">
-<title>ctDNA Labeling - Kreview</title>
+<title>CI/CD Pipelines - Kreview</title>
 <link href="../../assets/stylesheets/main.484c7ddc.min.css" rel="stylesheet">
 <link href="../../assets/stylesheets/palette.ab4e12ef.min.css" rel="stylesheet">
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
@@ -34,7 +34,7 @@
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
 <label class="md-overlay" for="__drawer"></label>
 <div data-md-component="skip">
-<a class="md-skip" href="#ctdna-labeling-engine">
+<a class="md-skip" href="#cicd-pipelines">
           Skip to content
         </a>
 </div>
@@ -60,7 +60,7 @@
 <div class="md-header__topic" data-md-component="header-topic">
 <span class="md-ellipsis">
             
-              ctDNA Labeling
+              CI/CD Pipelines
             
           </span>
 </div>
@@ -218,8 +218,8 @@
 </ul>
 </nav>
 </li>
-<li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
-<input checked="" class="md-nav__toggle md-toggle" id="__nav_3" type="checkbox">
+<li class="md-nav__item md-nav__item--section md-nav__item--nested">
+<input class="md-nav__toggle md-toggle md-toggle--indeterminate" id="__nav_3" type="checkbox">
 <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
 <span class="md-ellipsis">
     
@@ -231,7 +231,7 @@
   </span>
 <span class="md-nav__icon md-icon"></span>
 </label>
-<nav aria-expanded="true" aria-labelledby="__nav_3_label" class="md-nav" data-md-level="1">
+<nav aria-expanded="false" aria-labelledby="__nav_3_label" class="md-nav" data-md-level="1">
 <label class="md-nav__title" for="__nav_3">
 <span class="md-nav__icon md-icon"></span>
             
@@ -241,20 +241,8 @@
 
           </label>
 <ul class="md-nav__list" data-md-scrollfix="">
-<li class="md-nav__item md-nav__item--active">
-<input class="md-nav__toggle md-toggle" id="__toc" type="checkbox">
-<label class="md-nav__link md-nav__link--active" for="__toc">
-<span class="md-ellipsis">
-    
-  
-    ctDNA Labeling
-  
-
-    
-  </span>
-<span class="md-nav__icon md-icon"></span>
-</label>
-<a class="md-nav__link md-nav__link--active" href="./">
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../biology/ctdna-labeling/">
 <span class="md-ellipsis">
     
   
@@ -264,93 +252,9 @@
     
   </span>
 </a>
-<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
-<label class="md-nav__title" for="__toc">
-<span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
-<li class="md-nav__item">
-<a class="md-nav__link" href="#the-biological-assumption">
-<span class="md-ellipsis">
-      
-        🔬 The Biological Assumption
-      
-    </span>
-</a>
 </li>
 <li class="md-nav__item">
-<a class="md-nav__link" href="#the-5-tier-labeling-hierarchy">
-<span class="md-ellipsis">
-      
-        🏷️ The 5-Tier Labeling Hierarchy
-      
-    </span>
-</a>
-<nav aria-label="🏷️ The 5-Tier Labeling Hierarchy" class="md-nav">
-<ul class="md-nav__list">
-<li class="md-nav__item">
-<a class="md-nav__link" href="#1-true-ctdna">
-<span class="md-ellipsis">
-      
-        1. True ctDNA+
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#2-possible-ctdna">
-<span class="md-ellipsis">
-      
-        2. Possible ctDNA+
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#3-possible-ctdna">
-<span class="md-ellipsis">
-      
-        3. Possible ctDNA−
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#4-healthy-normal">
-<span class="md-ellipsis">
-      
-        4. Healthy Normal
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#5-insufficient-data">
-<span class="md-ellipsis">
-      
-        5. Insufficient Data
-      
-    </span>
-</a>
-</li>
-</ul>
-</nav>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#label-distribution">
-<span class="md-ellipsis">
-      
-        Label Distribution
-      
-    </span>
-</a>
-</li>
-</ul>
-</nav>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="../fragmentomics-features/">
+<a class="md-nav__link" href="../../biology/fragmentomics-features/">
 <span class="md-ellipsis">
     
   
@@ -500,8 +404,8 @@
 </ul>
 </nav>
 </li>
-<li class="md-nav__item md-nav__item--section md-nav__item--nested">
-<input class="md-nav__toggle md-toggle md-toggle--indeterminate" id="__nav_6" type="checkbox">
+<li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+<input checked="" class="md-nav__toggle md-toggle" id="__nav_6" type="checkbox">
 <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
 <span class="md-ellipsis">
     
@@ -513,7 +417,7 @@
   </span>
 <span class="md-nav__icon md-icon"></span>
 </label>
-<nav aria-expanded="false" aria-labelledby="__nav_6_label" class="md-nav" data-md-level="1">
+<nav aria-expanded="true" aria-labelledby="__nav_6_label" class="md-nav" data-md-level="1">
 <label class="md-nav__title" for="__nav_6">
 <span class="md-nav__icon md-icon"></span>
             
@@ -523,8 +427,20 @@
 
           </label>
 <ul class="md-nav__list" data-md-scrollfix="">
-<li class="md-nav__item">
-<a class="md-nav__link" href="../../operations/ci-cd/">
+<li class="md-nav__item md-nav__item--active">
+<input class="md-nav__toggle md-toggle" id="__toc" type="checkbox">
+<label class="md-nav__link md-nav__link--active" for="__toc">
+<span class="md-ellipsis">
+    
+  
+    CI/CD Pipelines
+  
+
+    
+  </span>
+<span class="md-nav__icon md-icon"></span>
+</label>
+<a class="md-nav__link md-nav__link--active" href="./">
 <span class="md-ellipsis">
     
   
@@ -534,9 +450,44 @@
     
   </span>
 </a>
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#pipeline-overview">
+<span class="md-ellipsis">
+      
+        Pipeline Overview
+      
+    </span>
+</a>
 </li>
 <li class="md-nav__item">
-<a class="md-nav__link" href="../../operations/docker/">
+<a class="md-nav__link" href="#workflows">
+<span class="md-ellipsis">
+      
+        Workflows
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#required-permissions">
+<span class="md-ellipsis">
+      
+        Required Permissions
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../docker/">
 <span class="md-ellipsis">
     
   
@@ -548,7 +499,7 @@
 </a>
 </li>
 <li class="md-nav__item">
-<a class="md-nav__link" href="../../operations/nextflow/">
+<a class="md-nav__link" href="../nextflow/">
 <span class="md-ellipsis">
     
   
@@ -560,7 +511,7 @@
 </a>
 </li>
 <li class="md-nav__item">
-<a class="md-nav__link" href="../../operations/troubleshooting/">
+<a class="md-nav__link" href="../troubleshooting/">
 <span class="md-ellipsis">
     
   
@@ -687,77 +638,28 @@
     </label>
 <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
 <li class="md-nav__item">
-<a class="md-nav__link" href="#the-biological-assumption">
+<a class="md-nav__link" href="#pipeline-overview">
 <span class="md-ellipsis">
       
-        🔬 The Biological Assumption
+        Pipeline Overview
       
     </span>
 </a>
 </li>
 <li class="md-nav__item">
-<a class="md-nav__link" href="#the-5-tier-labeling-hierarchy">
+<a class="md-nav__link" href="#workflows">
 <span class="md-ellipsis">
       
-        🏷️ The 5-Tier Labeling Hierarchy
-      
-    </span>
-</a>
-<nav aria-label="🏷️ The 5-Tier Labeling Hierarchy" class="md-nav">
-<ul class="md-nav__list">
-<li class="md-nav__item">
-<a class="md-nav__link" href="#1-true-ctdna">
-<span class="md-ellipsis">
-      
-        1. True ctDNA+
+        Workflows
       
     </span>
 </a>
 </li>
 <li class="md-nav__item">
-<a class="md-nav__link" href="#2-possible-ctdna">
+<a class="md-nav__link" href="#required-permissions">
 <span class="md-ellipsis">
       
-        2. Possible ctDNA+
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#3-possible-ctdna">
-<span class="md-ellipsis">
-      
-        3. Possible ctDNA−
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#4-healthy-normal">
-<span class="md-ellipsis">
-      
-        4. Healthy Normal
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#5-insufficient-data">
-<span class="md-ellipsis">
-      
-        5. Insufficient Data
-      
-    </span>
-</a>
-</li>
-</ul>
-</nav>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#label-distribution">
-<span class="md-ellipsis">
-      
-        Label Distribution
+        Required Permissions
       
     </span>
 </a>
@@ -780,25 +682,17 @@
 <li class="md-path__item">
 <a class="md-path__link" href="./">
 <span class="md-ellipsis">
-    Biological Framework
+    Operations
   </span>
 </a>
 </li>
 </ol>
 </nav>
 <article class="md-content__inner md-typeset">
-<h1 id="ctdna-labeling-engine"><abbr title="Circulating Tumor DNA">ctDNA</abbr> Labeling Engine</h1>
-<p><code>kreview</code> evaluates computational fragmentomic features by measuring how accurately they distinguish tumor-derived circulating tumor DNA (<abbr title="Circulating Tumor DNA">ctDNA</abbr>) from normal apoptotic background DNA.</p>
-<p>To do this, it first establishes a rigid "Ground Truth" label matrix utilizing the <code>CtDNALabeler</code> engine (<code>kreview.labels</code>), relying strictly on MSK-IMPACT orthogonal tissue assays.</p>
+<h1 id="cicd-pipelines"><abbr title="Continuous Integration">CI</abbr>/<abbr title="Continuous Deployment">CD</abbr> Pipelines</h1>
+<p><code>kreview</code> uses four GitHub Actions workflows to automate testing, linting, documentation, and releases.</p>
 <hr>
-<h2 id="the-biological-assumption">🔬 The Biological Assumption</h2>
-<p>Unlike standard genomics which calls somatic variants directly from the blood, <strong>Fragmentomics</strong> relies on subtle physical signatures—like fragment sizes, nucleosome imprints, and cleavage end-motifs—measured broadly across the entire epigenome.</p>
-<p>Because we are evaluating <em>new</em> experimental fragmentomic models, we need incontrovertible proof that the patient sample actually <em>has</em> <abbr title="Circulating Tumor DNA">ctDNA</abbr> present. For this, we look at <strong>Variant Allele Frequency (<abbr title="Variant Allele Frequency">VAF</abbr>)</strong>:</p>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-0-1" id="__codelineno-0-1" name="__codelineno-0-1"></a>VAF = \frac{\text{Alternate Allele Depth (t\_alt\_count)}}{\text{Total Depth (t\_ref\_count + t\_alt\_count)}}
-</code></pre></div>
-<p>If a sample contains somatic Single Nucleotide Variants (SNVs) with a high detectable <abbr title="Variant Allele Frequency">VAF</abbr>, or massive Copy Number Alterations (CNAs) / Structural Variants (SVs), then the physical tumor footprint in the blood is high.</p>
-<hr>
-<h2 id="the-5-tier-labeling-hierarchy">🏷️ The 5-Tier Labeling Hierarchy</h2>
+<h2 id="pipeline-overview">Pipeline Overview</h2>
 <div class="panzoom-box" data-key="none" id="panzoom0" oncontextmenu="return false;">
 <nav class="panzoom-nav">
 <button class="panzoom-info panzoom-button">
@@ -820,97 +714,166 @@
 </button>
 </nav>
 <pre class="mermaid"><code>flowchart TD
-    classDef pos fill:#e63946,stroke:#b71c1c,color:#fff;
-    classDef ppos fill:#f4a261,stroke:#e76f51,color:#fff;
-    classDef pneg fill:#a8dadc,stroke:#457b9d,color:#000;
-    classDef healthy fill:#2a9d8f,stroke:#264653,color:#fff;
-    classDef insuf fill:#6c757d,stroke:#495057,color:#fff;
+    classDef test fill:#10b981,stroke:#047857,color:#fff;
+    classDef lint fill:#3b82f6,stroke:#1e40af,color:#fff;
+    classDef docs fill:#8b5cf6,stroke:#5b21b6,color:#fff;
+    classDef release fill:#f59e0b,stroke:#b45309,color:#fff;
 
-    S["ACCESS cfDNA Sample"] --&gt; IMPACT{"IMPACT tissue\nsomatic match?"}
-    IMPACT --&gt;|Yes| TRUE["True ctDNA+"]:::pos
-    IMPACT --&gt;|No| SV_CNA{"SV or CNA\ndetected?"}
-    SV_CNA --&gt;|Yes| TRUE
-    SV_CNA --&gt;|No| SNV{"Somatic SNVs\n≥ VAF threshold?"}
-    SNV --&gt;|Yes| POSS_POS["Possible ctDNA+"]:::ppos
-    SNV --&gt;|No| DEPTH{"Total fragments\n≥ 2,000?"}
-    DEPTH --&gt;|Yes| POSS_NEG["Possible ctDNA−"]:::pneg
-    DEPTH --&gt;|No| INSUF["Insufficient Data"]:::insuf
-
-    HEALTHY["Healthy Volunteer\n(XS1 / XS2)"] --&gt; HN["Healthy Normal"]:::healthy
+    PR["Push / PR to\nmain or develop"] --&gt; T["test.yml"]:::test
+    PR --&gt; L["lint.yml"]:::lint
+    MAIN["Push to main"] --&gt; D["docs.yml"]:::docs
+    TAG["Push tag v*.*.*"] --&gt; R["release.yml"]:::release
 </code></pre>
 <div class="panzoom-info-box panzoom-info-box-bottom panzoom-hidden">
 Use mouse to pan and zoom
 </div>
 </div>
-<p><code>kreview</code> assigns every sample one of five labels:</p>
-<h3 id="1-true-ctdna">1. True <abbr title="Circulating Tumor DNA">ctDNA</abbr>+</h3>
-<p>The gold standard. This label is granted <strong>only</strong> if one of three conditions is met:</p>
-<ul>
-<li>An <abbr title="Single Nucleotide Variant">SNV</abbr> mutation detected in the blood <abbr title="Cell-Free DNA">cfDNA</abbr> perfectly matches a somatic mutation detected in the patient's matched solid-tissue MSK-IMPACT biopsy.</li>
-<li>A macroscopic structural variant (<abbr title="Structural Variant">SV</abbr>) is positively called.</li>
-<li>Wide-scale somatic Copy Number Alterations (CNAs) are detected.</li>
-</ul>
-<h3 id="2-possible-ctdna">2. Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>+</h3>
-<p>The silver standard. The sample lacks a matched MSK-IMPACT tissue biopsy (or the biopsy was negative), but the ACCESS assay still detected somatic SNVs passing the configured stringency threshold:</p>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-1-1" id="__codelineno-1-1" name="__codelineno-1-1"></a>VAF \ge 0.01 \quad \text{and} \quad n_{variants} \ge 1
-</code></pre></div>
-<div class="admonition info">
-<p class="admonition-title">Configurable Thresholds</p>
-<p>These defaults are configurable via the CLI flags <code>--min-vaf</code> and <code>--min-variants</code>, or directly through the <code>LabelConfig</code> dataclass.</p>
-</div>
-<h3 id="3-possible-ctdna">3. Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>−</h3>
-<p>Symptomatic cancer patients whose blood <abbr title="Cell-Free DNA">cfDNA</abbr> draws generated zero signal: <strong>No SNVs, No SVs, No CNAs</strong>. While they have cancer, their systemic shedding rate is too low for traditional orthogonal validation.</p>
-<h3 id="4-healthy-normal">4. Healthy Normal</h3>
-<p>True negative controls. Drawn entirely from the MSK <code>XS1</code> and <code>XS2</code> healthy volunteer sequencing runs. Their data establishes the baseline apoptotic fragmentation profile.</p>
-<h3 id="5-insufficient-data">5. Insufficient Data</h3>
-<div class="admonition warning">
-<p class="admonition-title"><abbr title="Quality Control">QC</abbr> Gate</p>
-<p>If a cancer sample shows absolutely <strong>no</strong> positive signal (no SNVs, no SVs, no CNAs), <strong>AND</strong> their sequencing coverage yielded fewer than <code>min_fragments</code> total fragments (default: 2,000), the pipeline assigns them to this bucket instead of <code>Possible ctDNA−</code>.</p>
-<p>These samples are entirely excluded from the ML algorithms so low-depth noise doesn't corrupt the models.</p>
-</div>
 <hr>
-<h2 id="label-distribution">Label Distribution</h2>
-<p>A typical production cohort produces a distribution like:</p>
+<h2 id="workflows">Workflows</h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:4"><input checked="" id="__tabbed_1_1" name="__tabbed_1" type="radio"><input id="__tabbed_1_2" name="__tabbed_1" type="radio"><input id="__tabbed_1_3" name="__tabbed_1" type="radio"><input id="__tabbed_1_4" name="__tabbed_1" type="radio"><div class="tabbed-labels"><label for="__tabbed_1_1">test.yml</label><label for="__tabbed_1_2">lint.yml</label><label for="__tabbed_1_3">docs.yml</label><label for="__tabbed_1_4">release.yml</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p><strong>Trigger:</strong> Push or PR to <code>main</code> / <code>develop</code></p>
 <table>
 <thead>
 <tr>
-<th>Label</th>
-<th>Typical %</th>
-<th>ML Role</th>
+<th>Step</th>
+<th>What it does</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>True <abbr title="Circulating Tumor DNA">ctDNA</abbr>+</td>
-<td>~25%</td>
-<td>Positive class (highest confidence)</td>
+<td>Setup Python 3.12</td>
+<td>Caches pip dependencies</td>
 </tr>
 <tr>
-<td>Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>+</td>
-<td>~35%</td>
-<td>Positive class (medium confidence)</td>
+<td>Install dependencies</td>
+<td><code>pip install -e .[test]</code></td>
 </tr>
 <tr>
-<td>Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>−</td>
-<td>~15%</td>
-<td>Excluded or negative class</td>
+<td>Run pytest</td>
+<td><code>pytest --cov=kreview --cov-report=xml</code></td>
 </tr>
 <tr>
-<td>Healthy Normal</td>
-<td>~20%</td>
-<td>Negative class (control baseline)</td>
+<td>Test package build</td>
+<td><code>python -m build</code> (dry-run, no publish)</td>
 </tr>
 <tr>
-<td>Insufficient Data</td>
-<td>~5%</td>
-<td>Excluded from ML</td>
+<td>Test Docker build</td>
+<td>Builds image with <code>push: false</code></td>
 </tr>
 </tbody>
 </table>
-<div class="admonition tip">
-<p class="admonition-title">Binary Classification</p>
-<p>For the ML pipeline, <code>True ctDNA+</code> and <code>Possible ctDNA+</code> are merged into a single binary positive class. <code>Healthy Normal</code> serves as the negative class. <code>Possible ctDNA−</code> and <code>Insufficient Data</code> are excluded.</p>
+<div class="admonition info">
+<p class="admonition-title">Why test the build?</p>
+<p>By validating both the Python wheel and Docker image on every PR, we catch packaging issues <em>before</em> they reach the release pipeline.</p>
 </div>
+</div>
+<div class="tabbed-block">
+<p><strong>Trigger:</strong> Push or PR to <code>main</code> / <code>develop</code></p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Tool</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Formatting</td>
+<td><code>black --check .</code></td>
+</tr>
+<tr>
+<td>Linting</td>
+<td><code>ruff check .</code></td>
+</tr>
+<tr>
+<td>Type checking</td>
+<td><code>mypy kreview</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="tabbed-block">
+<p><strong>Trigger:</strong> Push to <code>main</code> only</p>
+<p>Builds the MkDocs Material site and deploys it to GitHub Pages using <code>mike</code> for versioned documentation. The <code>dev</code> alias always points to the latest <code>main</code> build.</p>
+</div>
+<div class="tabbed-block">
+<p><strong>Trigger:</strong> Push of a <code>v*.*.*</code> tag</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Build package</td>
+<td><code>python -m build</code></td>
+</tr>
+<tr>
+<td>GitHub Release</td>
+<td>Uploads <code>.whl</code> + auto-generated release notes</td>
+</tr>
+<tr>
+<td><strong>Publish to PyPI</strong></td>
+<td>Uses <abbr title="OpenID Connect">OIDC</abbr> Trusted Publishing (no API tokens)</td>
+</tr>
+<tr>
+<td><strong>Build Docker image</strong></td>
+<td>Multi-stage build with Quarto</td>
+</tr>
+<tr>
+<td><strong>Push to <abbr title="GitHub Container Registry">GHCR</abbr></strong></td>
+<td>Tags: <code>kreview:v*.*.*</code> and <code>kreview:latest</code></td>
+</tr>
+<tr>
+<td>Deploy docs</td>
+<td><code>mike deploy --push --update-aliases $VERSION stable</code></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title"><abbr title="OpenID Connect">OIDC</abbr> Requirement</p>
+<p>PyPI Trusted Publishing requires the repository to be registered as a <a href="https://docs.pypi.org/trusted-publishers/">Trusted Publisher</a> on pypi.org. This is a one-time setup.</p>
+</div>
+</div>
+</div>
+</div>
+<hr>
+<h2 id="required-permissions">Required Permissions</h2>
+<table>
+<thead>
+<tr>
+<th>Workflow</th>
+<th>Permission</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>release.yml</code></td>
+<td><code>id-token: write</code></td>
+<td>PyPI <abbr title="OpenID Connect">OIDC</abbr> authentication</td>
+</tr>
+<tr>
+<td><code>release.yml</code></td>
+<td><code>packages: write</code></td>
+<td>Push Docker images to <abbr title="GitHub Container Registry">GHCR</abbr></td>
+</tr>
+<tr>
+<td><code>release.yml</code></td>
+<td><code>contents: write</code></td>
+<td>Create GitHub Releases</td>
+</tr>
+<tr>
+<td><code>docs.yml</code></td>
+<td><code>contents: write</code></td>
+<td>Push to <code>gh-pages</code> branch</td>
+</tr>
+</tbody>
+</table>
 <aside class="md-source-file">
 <span class="md-source-file__fact">
 <span class="md-icon" title="Last update">
@@ -922,7 +885,7 @@ Use mouse to pan and zoom
 <span class="md-icon" title="Created">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 8, 2026 16:27:54 UTC"><span class="timeago" datetime="2026-04-08T16:27:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 8, 2026 16:27:54 UTC">2026-04-08</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 02:58:05 UTC"><span class="timeago" datetime="2026-04-09T02:58:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 02:58:05 UTC">2026-04-09</span>
 </span>
 </aside>
 </article>

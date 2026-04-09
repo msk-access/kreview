@@ -5,13 +5,13 @@
       
       
       
-        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/getting-started/pipeline-cli/">
+        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/operations/nextflow/">
       
       
-        <link rel="prev" href="../configuration/">
+        <link rel="prev" href="../docker/">
       
       
-        <link rel="next" href="../../biology/ctdna-labeling/">
+        <link rel="next" href="../troubleshooting/">
       
       
         
@@ -22,7 +22,7 @@
     
     
       
-        <title>Running Pipeline - Kreview</title>
+        <title>Nextflow - Kreview</title>
       
     
     
@@ -92,7 +92,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#running-the-pipeline" class="md-skip">
+        <a href="#nextflow-integration" class="md-skip">
           Skip to content
         </a>
       
@@ -132,7 +132,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Running Pipeline
+              Nextflow
             
           </span>
         </div>
@@ -304,10 +304,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -326,11 +324,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked="">
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2">
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
@@ -351,7 +351,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -369,7 +369,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -397,7 +397,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/" class="md-nav__link">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
         
   
   
@@ -422,37 +422,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Running Pipeline
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../getting-started/pipeline-cli/" class="md-nav__link">
         
   
   
@@ -468,92 +441,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
-      
-        <li class="md-nav__item">
-  <a href="#available-commands" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Available Commands
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#basic-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Basic Execution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#targeted-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Targeted Execution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#labels-only" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Labels Only
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#data-lake-integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Data Lake Integration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#re-generating-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Re-generating Reports
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1029,8 +916,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -1051,13 +940,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6">
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked="">
         
           
           <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
@@ -1078,7 +965,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1096,7 +983,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/ci-cd/" class="md-nav__link">
+      <a href="../ci-cd/" class="md-nav__link">
         
   
   
@@ -1124,7 +1011,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/docker/" class="md-nav__link">
+      <a href="../docker/" class="md-nav__link">
         
   
   
@@ -1149,10 +1036,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../operations/nextflow/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nextflow
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1168,6 +1082,98 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+      
+        <li class="md-nav__item">
+  <a href="#architecture-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline Execution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#profiling-scaling-slurm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Profiling &amp; Scaling (SLURM)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Profiling &amp; Scaling (SLURM)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-local-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Local (Docker)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-high-performance-computing-slurm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. High-Performance Computing (SLURM)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#averting-path-staging-collapse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Averting Path-Staging Collapse
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1180,7 +1186,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/troubleshooting/" class="md-nav__link">
+      <a href="../troubleshooting/" class="md-nav__link">
         
   
   
@@ -1475,10 +1481,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
       
         <li class="md-nav__item">
-  <a href="#available-commands" class="md-nav__link">
+  <a href="#architecture-overview" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Available Commands
+        Architecture Overview
       
     </span>
   </a>
@@ -1486,10 +1492,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#basic-execution" class="md-nav__link">
+  <a href="#pipeline-execution" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Basic Execution
+        Pipeline Execution
       
     </span>
   </a>
@@ -1497,43 +1503,49 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#targeted-execution" class="md-nav__link">
+  <a href="#profiling-scaling-slurm" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Targeted Execution
+        Profiling &amp; Scaling (SLURM)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Profiling &amp; Scaling (SLURM)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-local-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Local (Docker)
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#labels-only" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#2-high-performance-computing-slurm" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Labels Only
+        2. High-Performance Computing (SLURM)
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#data-lake-integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Data Lake Integration
-      
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#re-generating-reports" class="md-nav__link">
+  <a href="#averting-path-staging-collapse" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Re-generating Reports
+        Averting Path-Staging Collapse
       
     </span>
   </a>
@@ -1583,10 +1595,10 @@
     
     
       <li class="md-path__item">
-        <a href="../installation/" class="md-path__link">
+        <a href="../ci-cd/" class="md-path__link">
           
   <span class="md-ellipsis">
-    Getting Started
+    Operations
   </span>
 
         </a>
@@ -1608,140 +1620,54 @@
   
 
 
-<h1 id="running-the-pipeline">Running the Pipeline</h1>
-<p>The backbone of <code>kreview</code> is run through a highly modular <code>typer</code> CLI. It connects all independent elements of the pipeline dynamically.</p>
+<h1 id="nextflow-integration">Nextflow Integration</h1>
+<p>While <code>kreview</code> provides a robust, fully-featured CLI orchestrator, executing large-scale fragmentomics evaluation directly on local Posix systems (e.g. your laptop) can become a bottleneck when navigating tens of thousands of network parquet files.</p>
+<p>For enterprise environments, <code>kreview</code> natively ships a standardized <strong>nf-core DSL2 Nextflow pipeline wrapper</strong>. This ensures <code>kreview</code> can securely attach to the execution tail of High-Performance Computing (<abbr title="High-Performance Computing">HPC</abbr>) workflows (like the MSK <code>krewlyzer</code> fragmentomics caller).</p>
 <hr>
-<h2 id="available-commands">Available Commands</h2>
-<p><code>kreview</code> exposes four subcommands:</p>
-<table>
-<thead>
-<tr>
-<th>Command</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>kreview run</code></td>
-<td>Full pipeline: label → extract → evaluate → report</td>
-</tr>
-<tr>
-<td><code>kreview label</code></td>
-<td>Generate <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels only (no feature evaluation)</td>
-</tr>
-<tr>
-<td><code>kreview features-list</code></td>
-<td>List all registered feature evaluators</td>
-</tr>
-<tr>
-<td><code>kreview report</code></td>
-<td>Re-generate HTML dashboard from existing results</td>
-</tr>
-</tbody>
-</table>
-<hr>
-<h2 id="basic-execution">Basic Execution</h2>
-<div class="admonition warning">
-<p class="admonition-title">Disable Python Buffering</p>
-<p>When running over terminal orchestrators (like <code>nohup</code>, standard piping, or SLURM), it is critical to run Python with <code>PYTHONUNBUFFERED=1</code> so that the <code>structlog</code> progress output streams in real-time.</p>
-</div>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:4"><input checked="" id="__tabbed_1_1" name="__tabbed_1" type="radio"><input id="__tabbed_1_2" name="__tabbed_1" type="radio"><input id="__tabbed_1_3" name="__tabbed_1" type="radio"><input id="__tabbed_1_4" name="__tabbed_1" type="radio"><div class="tabbed-labels"><label for="__tabbed_1_1">Standard Run (All Features)</label><label for="__tabbed_1_2">Using a Manifest File</label><label for="__tabbed_1_3">Machine Learning Tuning</label><label for="__tabbed_1_4">Safe Load Mode (I/O Constraints)</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">PYTHONUNBUFFERED</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span><span class="s2">"/path/to/samplesheet.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>--healthy-xs1-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy1.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>--healthy-xs2-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy2.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>--cbioportal-dir<span class="w"> </span><span class="s2">"/path/to/msk_solid_heme_cbioportal"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span><span class="s2">"/path/to/feature_parquets"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>--output<span class="w"> </span>output/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span>--workers<span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span>--export-duckdb
+<h2 id="architecture-overview">Architecture Overview</h2>
+<p>All Nextflow pipeline logic resides statically within the <code>nextflow/</code> directory:</p>
+<ul>
+<li><code>nextflow/main.nf</code> (Entrypoint)</li>
+<li><code>nextflow/nextflow.config</code> (Execution profiles, defaults)</li>
+<li><code>nextflow/modules/local/kreview/run.nf</code> (Core python engine execution)</li>
+</ul>
+<p>The workflow transparently wraps the <code>kreview run</code> Typer CLI, binding the computation natively to the <code>ghcr.io/msk-access/kreview:latest</code> container.</p>
+<h2 id="pipeline-execution">Pipeline Execution</h2>
+<p>To trigger the <code>kreview</code> evaluation over a massive cohort using your standard Nextflow runner, use the <code>main.nf</code> script:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>nextflow<span class="w"> </span>run<span class="w"> </span>/path/to/kreview/nextflow/main.nf<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>--cancer_samplesheet<span class="w"> </span>/data/cancer.csv<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>--healthy_xs1_samplesheet<span class="w"> </span>/data/healthy1.csv<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>--healthy_xs2_samplesheet<span class="w"> </span>/data/healthy2.csv<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>--cbioportal_dir<span class="w"> </span>/data/msk_solid_heme/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--krewlyzer_dir<span class="w"> </span>/data/krewlyzer_parquets/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>-profile<span class="w"> </span>docker
 </code></pre></div>
-<em>Note: <code>--export-duckdb</code> automatically writes a persistent SQL-queryable <code>kreview_lake.duckdb</code> after processing.</em><p></p>
-</div>
-<div class="tabbed-block">
-<p>If your Krewlyzer results span multiple directories, create a <code>manifest.txt</code> listing one directory per line, then pass it down:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>manifest.txt<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>--output<span class="w"> </span>output/
-</code></pre></div>
-</div>
-<div class="tabbed-block">
-<p>Control statistical parameters and cross-validation natively:</p>
-<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--cv-folds<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--impute-strategy<span class="w"> </span>median
-</code></pre></div>
-<em>Options for imputation: <code>median</code>, <code>mean</code>, <code>zero</code>. Folds must be <code>3-20</code>.</em><p></p>
-</div>
-<div class="tabbed-block">
-<p>If you see <code>PermissionError</code> during large cohort loading, reduce the parquet chunk-size:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--chunk-size<span class="w"> </span><span class="m">100</span>
-</code></pre></div>
-</div>
-</div>
+<div class="admonition tip">
+<p class="admonition-title">Targeted Nextflow Execution</p>
+<p>Just like the vanilla CLI, you can limit the Nextflow computation to specific features! You are allowed to pass the <code>--features</code> or <code>--tier</code> parameters dynamically through Nextflow:
+</p><div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>nextflow<span class="w"> </span>run<span class="w"> </span>nextflow/main.nf<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>...
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--features<span class="w"> </span><span class="s2">"AtacOnTarget,FSCOnTarget"</span>
+</code></pre></div><p></p>
 </div>
 <hr>
-<h2 id="targeted-execution">Targeted Execution</h2>
-<div class="tabbed-set tabbed-alternate" data-tabs="2:3"><input checked="" id="__tabbed_2_1" name="__tabbed_2" type="radio"><input id="__tabbed_2_2" name="__tabbed_2" type="radio"><input id="__tabbed_2_3" name="__tabbed_2" type="radio"><div class="tabbed-labels"><label for="__tabbed_2_1">Isolating Features</label><label for="__tabbed_2_2">Running by Tier</label><label for="__tabbed_2_3">Skipping Reports</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<p>Use the <code>--features</code> flag with a comma-separated list to run only specific evaluators:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>...
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--features<span class="w"> </span><span class="s2">"BreakPointMotifOnTarget,EndMotifOnTarget"</span>
-</code></pre></div>
-</div>
-<div class="tabbed-block">
-<p>Run only Tier 1 (fragment size) or Tier 2 (nucleosome/motif) features:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>...
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--tier<span class="w"> </span><span class="m">1</span>
-</code></pre></div>
-</div>
-<div class="tabbed-block">
-<p>If you are running in headless <abbr title="Continuous Integration">CI</abbr> environments and don't need HTML dashboards:</p>
-<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>...
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--skip-report
-</code></pre></div>
-<em>Note: When <code>--skip-report</code> is omitted, <code>kreview</code> natively generates both interactive Plotly <code>output/reports/*.html</code> dashboards and a <code>static_plots/</code> subdirectory containing 2x-scaled <code>.png</code> versions of every chart for clinical PDF insertion.</em><p></p>
-</div>
-</div>
-</div>
+<h2 id="profiling-scaling-slurm">Profiling &amp; Scaling (SLURM)</h2>
+<p>Because <code>kreview</code> accesses thousands of files aggressively using DuckDB, network filesystem socket limits (<code>Ulimit N</code>) behave entirely differently between a desktop Mac and a remote <abbr title="High-Performance Computing">HPC</abbr> SLURM cluster.</p>
+<h3 id="1-local-docker">1. Local (Docker)</h3>
+<p><code>nextflow run ... -profile docker</code> </p>
+<p>When operating locally, <code>nextflow.config</code> strictly maps <code>docker.runOptions = '-v /:/'</code> to guarantee absolute URI paths don't break the container's volume map. It safely hardcaps <code>--chunk-size</code> at <code>50</code> to defend local Posix max-file limits.</p>
+<h3 id="2-high-performance-computing-slurm">2. High-Performance Computing (SLURM)</h3>
+<p><code>nextflow run ... -profile slurm</code></p>
+<p>If analyzing clinical trials against <abbr title="High-Performance Computing">HPC</abbr> hardware (like MSK's <code>cmobic_cpu</code> queues on <code>IRIS</code>), the pipeline invokes <code>Singularity</code> (via <code>autoMounts = true</code>) and overrides the fallback logic. 
+The configuration aggressively sets <code>--chunk-size 500</code> to maximize network ingestion speeds on hardware that naturally supports <code>102400</code> open network sockets.</p>
 <hr>
-<h2 id="labels-only">Labels Only</h2>
-<p>If you only need to generate the <abbr title="Circulating Tumor DNA">ctDNA</abbr> truth labels without running feature evaluation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview<span class="w"> </span>label<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span><span class="s2">"/path/to/samplesheet.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--healthy-xs1-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy1.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--healthy-xs2-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy2.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--cbioportal-dir<span class="w"> </span><span class="s2">"/path/to/cBioPortal/"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span>--output<span class="w"> </span>labels.parquet
-</code></pre></div>
-<p>This produces a single Parquet file with sample IDs, clinical metadata, and the assigned 5-tier labels.</p>
-<hr>
-<h2 id="data-lake-integration">Data Lake Integration</h2>
-<p>Every time <code>kreview run</code> executes, feature matrices are loaded into memory, evaluated, and then destroyed. If you want a <strong>persistent output</strong> for downstream analysis:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>...
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>--export-duckdb
-</code></pre></div>
-<p>This creates or merges an immutable <code>kreview_lake.duckdb</code> file in your <code>output/</code> directory. Downstream researchers can then query it directly with DuckDB or Pandas without re-running the pipeline!</p>
-<hr>
-<h2 id="re-generating-reports">Re-generating Reports</h2>
-<p>If you have existing evaluation results (<code>stats.json</code>, <code>*_matrix.parquet</code>) and want to regenerate the HTML dashboard:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kreview<span class="w"> </span>report<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--results-dir<span class="w"> </span>output/BreakPointMotifOnTarget/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--output-dir<span class="w"> </span>output/reports/
-</code></pre></div>
+<h2 id="averting-path-staging-collapse">Averting Path-Staging Collapse</h2>
+<p>If Nextflow were allowed to behave natively, it would attempt to symlink all <code>14,000</code> Krewlyzer <code>.parquet</code> target output files independently into the isolated <code>.work/</code> module directory. This mathematically guarantees a localized freeze or file-limit crash on practically all operating systems.</p>
+<p>To fundamentally solve this problem: </p>
+<blockquote>
+<p>The <code>kreview</code> Nextflow module (<code>run.nf</code>) completely bypasses standard <code>path</code> file orchestration for the target Krewlyzer output. It captures <code>--krewlyzer_dir</code> exactly as an absolute Native <code>val</code> String, sending it securely inside the Python container.</p>
+</blockquote>
+<p>You can safely drop either an absolute directory path or the explicit path to a <code>manifest.txt</code> file directly into the <code>--krewlyzer_dir</code> mechanism!</p>
 
 
 
@@ -1764,7 +1690,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 15:47:51 UTC"><span class="timeago" datetime="2026-04-09T15:47:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 15:47:51 UTC">2026-04-09</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 16:25:06 UTC"><span class="timeago" datetime="2026-04-09T16:25:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 16:25:06 UTC">2026-04-09</span>
   </span>
 
     
@@ -1774,7 +1700,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 8, 2026 16:27:54 UTC"><span class="timeago" datetime="2026-04-08T16:27:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 8, 2026 16:27:54 UTC">2026-04-08</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 16:25:06 UTC"><span class="timeago" datetime="2026-04-09T16:25:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 16:25:06 UTC">2026-04-09</span>
   </span>
 
     

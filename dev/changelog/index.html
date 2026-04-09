@@ -5,31 +5,29 @@
       
       
       
-        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/getting-started/pipeline-cli/">
+        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/changelog/">
       
       
-        <link rel="prev" href="../configuration/">
+        <link rel="prev" href="../api-reference/features/">
       
-      
-        <link rel="next" href="../../biology/ctdna-labeling/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Running Pipeline - Kreview</title>
+        <title>Changelog - Kreview</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -48,21 +46,21 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../css/timeago.css">
+      <link rel="stylesheet" href="../css/timeago.css">
     
-      <link rel="stylesheet" href="../../stylesheets/extra.css">
+      <link rel="stylesheet" href="../stylesheets/extra.css">
     
-      <link rel="stylesheet" href="../../assets/stylesheets/panzoom.css">
+      <link rel="stylesheet" href="../assets/stylesheets/panzoom.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
     
     
-  <link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
+  <link href="../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
             html.glightbox-open { overflow: initial; height: 100%; }
             .gslide-title { margin-top: 0px; user-select: text; }
             .gslide-desc { color: #666; user-select: text; }
@@ -92,7 +90,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#running-the-pipeline" class="md-skip">
+        <a href="#changelog" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +110,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Kreview" class="md-header__button md-logo" aria-label="Kreview" data-md-component="logo">
+    <a href=".." title="Kreview" class="md-header__button md-logo" aria-label="Kreview" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
@@ -132,7 +130,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Running Pipeline
+              Changelog
             
           </span>
         </div>
@@ -250,7 +248,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Kreview" class="md-nav__button md-logo" aria-label="Kreview" data-md-component="logo">
+    <a href=".." title="Kreview" class="md-nav__button md-logo" aria-label="Kreview" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
@@ -280,7 +278,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -304,10 +302,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -326,11 +322,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked="">
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2">
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
@@ -351,7 +349,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -369,7 +367,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../installation/" class="md-nav__link">
+      <a href="../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -397,7 +395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/" class="md-nav__link">
+      <a href="../getting-started/configuration/" class="md-nav__link">
         
   
   
@@ -422,37 +420,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Running Pipeline
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../getting-started/pipeline-cli/" class="md-nav__link">
         
   
   
@@ -468,92 +439,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
-      
-        <li class="md-nav__item">
-  <a href="#available-commands" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Available Commands
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#basic-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Basic Execution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#targeted-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Targeted Execution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#labels-only" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Labels Only
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#data-lake-integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Data Lake Integration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#re-generating-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Re-generating Reports
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -633,7 +518,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../biology/ctdna-labeling/" class="md-nav__link">
+      <a href="../biology/ctdna-labeling/" class="md-nav__link">
         
   
   
@@ -661,7 +546,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../biology/fragmentomics-features/" class="md-nav__link">
+      <a href="../biology/fragmentomics-features/" class="md-nav__link">
         
   
   
@@ -756,7 +641,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../machine-learning/statistical-tests/" class="md-nav__link">
+      <a href="../machine-learning/statistical-tests/" class="md-nav__link">
         
   
   
@@ -784,7 +669,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../machine-learning/models-and-metrics/" class="md-nav__link">
+      <a href="../machine-learning/models-and-metrics/" class="md-nav__link">
         
   
   
@@ -885,7 +770,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../developer/nbdev-workflow/" class="md-nav__link">
+      <a href="../developer/nbdev-workflow/" class="md-nav__link">
         
   
   
@@ -913,7 +798,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../developer/adding-a-feature/" class="md-nav__link">
+      <a href="../developer/adding-a-feature/" class="md-nav__link">
         
   
   
@@ -941,7 +826,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../developer/duckdb-architecture/" class="md-nav__link">
+      <a href="../developer/duckdb-architecture/" class="md-nav__link">
         
   
   
@@ -969,7 +854,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../developer/contributing/" class="md-nav__link">
+      <a href="../developer/contributing/" class="md-nav__link">
         
   
   
@@ -997,7 +882,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../developer/release-guide/" class="md-nav__link">
+      <a href="../developer/release-guide/" class="md-nav__link">
         
   
   
@@ -1096,7 +981,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/ci-cd/" class="md-nav__link">
+      <a href="../operations/ci-cd/" class="md-nav__link">
         
   
   
@@ -1124,7 +1009,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/docker/" class="md-nav__link">
+      <a href="../operations/docker/" class="md-nav__link">
         
   
   
@@ -1152,7 +1037,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/nextflow/" class="md-nav__link">
+      <a href="../operations/nextflow/" class="md-nav__link">
         
   
   
@@ -1180,7 +1065,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/troubleshooting/" class="md-nav__link">
+      <a href="../operations/troubleshooting/" class="md-nav__link">
         
   
   
@@ -1281,7 +1166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/cli/" class="md-nav__link">
+      <a href="../api-reference/cli/" class="md-nav__link">
         
   
   
@@ -1309,7 +1194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/core/" class="md-nav__link">
+      <a href="../api-reference/core/" class="md-nav__link">
         
   
   
@@ -1337,7 +1222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/labels/" class="md-nav__link">
+      <a href="../api-reference/labels/" class="md-nav__link">
         
   
   
@@ -1365,7 +1250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/eval-engine/" class="md-nav__link">
+      <a href="../api-reference/eval-engine/" class="md-nav__link">
         
   
   
@@ -1393,7 +1278,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/features/" class="md-nav__link">
+      <a href="../api-reference/features/" class="md-nav__link">
         
   
   
@@ -1425,10 +1310,37 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../changelog/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1444,6 +1356,104 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [Unreleased]
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[Unreleased]">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#001-2026-04-06" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.0.1] - 2026-04-06
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.0.1] - 2026-04-06">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1475,68 +1485,80 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
       
         <li class="md-nav__item">
-  <a href="#available-commands" class="md-nav__link">
+  <a href="#unreleased" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Available Commands
+        [Unreleased]
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[Unreleased]">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#basic-execution" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Basic Execution
+        Changed
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#targeted-execution" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Targeted Execution
+        Fixed
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#labels-only" class="md-nav__link">
+  <a href="#001-2026-04-06" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Labels Only
+        [0.0.1] - 2026-04-06
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.0.1] - 2026-04-06">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#data-lake-integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Data Lake Integration
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#re-generating-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Re-generating Reports
-      
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1558,46 +1580,6 @@
   
 
 
-  <nav class="md-path" aria-label="Navigation">
-    <ol class="md-path__list">
-      
-        
-  
-  
-    <li class="md-path__item">
-      <a href="../.." class="md-path__link">
-        
-  <span class="md-ellipsis">
-    Home
-  </span>
-
-      </a>
-    </li>
-  
-
-      
-      
-        
-  
-  
-    
-    
-      <li class="md-path__item">
-        <a href="../installation/" class="md-path__link">
-          
-  <span class="md-ellipsis">
-    Getting Started
-  </span>
-
-        </a>
-      </li>
-    
-  
-
-      
-    </ol>
-  </nav>
-
               
               <article class="md-content__inner md-typeset">
                 
@@ -1608,140 +1590,48 @@
   
 
 
-<h1 id="running-the-pipeline">Running the Pipeline</h1>
-<p>The backbone of <code>kreview</code> is run through a highly modular <code>typer</code> CLI. It connects all independent elements of the pipeline dynamically.</p>
+<h1 id="changelog">Changelog</h1>
+<p>All notable changes to this project will be documented in this file.</p>
+<p>The format is based on <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a>, and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
 <hr>
-<h2 id="available-commands">Available Commands</h2>
-<p><code>kreview</code> exposes four subcommands:</p>
-<table>
-<thead>
-<tr>
-<th>Command</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>kreview run</code></td>
-<td>Full pipeline: label → extract → evaluate → report</td>
-</tr>
-<tr>
-<td><code>kreview label</code></td>
-<td>Generate <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels only (no feature evaluation)</td>
-</tr>
-<tr>
-<td><code>kreview features-list</code></td>
-<td>List all registered feature evaluators</td>
-</tr>
-<tr>
-<td><code>kreview report</code></td>
-<td>Re-generate HTML dashboard from existing results</td>
-</tr>
-</tbody>
-</table>
-<hr>
-<h2 id="basic-execution">Basic Execution</h2>
-<div class="admonition warning">
-<p class="admonition-title">Disable Python Buffering</p>
-<p>When running over terminal orchestrators (like <code>nohup</code>, standard piping, or SLURM), it is critical to run Python with <code>PYTHONUNBUFFERED=1</code> so that the <code>structlog</code> progress output streams in real-time.</p>
-</div>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:4"><input checked="" id="__tabbed_1_1" name="__tabbed_1" type="radio"><input id="__tabbed_1_2" name="__tabbed_1" type="radio"><input id="__tabbed_1_3" name="__tabbed_1" type="radio"><input id="__tabbed_1_4" name="__tabbed_1" type="radio"><div class="tabbed-labels"><label for="__tabbed_1_1">Standard Run (All Features)</label><label for="__tabbed_1_2">Using a Manifest File</label><label for="__tabbed_1_3">Machine Learning Tuning</label><label for="__tabbed_1_4">Safe Load Mode (I/O Constraints)</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">PYTHONUNBUFFERED</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span><span class="s2">"/path/to/samplesheet.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>--healthy-xs1-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy1.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>--healthy-xs2-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy2.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>--cbioportal-dir<span class="w"> </span><span class="s2">"/path/to/msk_solid_heme_cbioportal"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span><span class="s2">"/path/to/feature_parquets"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>--output<span class="w"> </span>output/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span>--workers<span class="w"> </span><span class="m">4</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span>--export-duckdb
-</code></pre></div>
-<em>Note: <code>--export-duckdb</code> automatically writes a persistent SQL-queryable <code>kreview_lake.duckdb</code> after processing.</em><p></p>
-</div>
-<div class="tabbed-block">
-<p>If your Krewlyzer results span multiple directories, create a <code>manifest.txt</code> listing one directory per line, then pass it down:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>manifest.txt<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>--output<span class="w"> </span>output/
-</code></pre></div>
-</div>
-<div class="tabbed-block">
-<p>Control statistical parameters and cross-validation natively:</p>
-<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--cv-folds<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--impute-strategy<span class="w"> </span>median
-</code></pre></div>
-<em>Options for imputation: <code>median</code>, <code>mean</code>, <code>zero</code>. Folds must be <code>3-20</code>.</em><p></p>
-</div>
-<div class="tabbed-block">
-<p>If you see <code>PermissionError</code> during large cohort loading, reduce the parquet chunk-size:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--chunk-size<span class="w"> </span><span class="m">100</span>
-</code></pre></div>
-</div>
-</div>
-</div>
-<hr>
-<h2 id="targeted-execution">Targeted Execution</h2>
-<div class="tabbed-set tabbed-alternate" data-tabs="2:3"><input checked="" id="__tabbed_2_1" name="__tabbed_2" type="radio"><input id="__tabbed_2_2" name="__tabbed_2" type="radio"><input id="__tabbed_2_3" name="__tabbed_2" type="radio"><div class="tabbed-labels"><label for="__tabbed_2_1">Isolating Features</label><label for="__tabbed_2_2">Running by Tier</label><label for="__tabbed_2_3">Skipping Reports</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<p>Use the <code>--features</code> flag with a comma-separated list to run only specific evaluators:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>...
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--features<span class="w"> </span><span class="s2">"BreakPointMotifOnTarget,EndMotifOnTarget"</span>
-</code></pre></div>
-</div>
-<div class="tabbed-block">
-<p>Run only Tier 1 (fragment size) or Tier 2 (nucleosome/motif) features:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>...
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--tier<span class="w"> </span><span class="m">1</span>
-</code></pre></div>
-</div>
-<div class="tabbed-block">
-<p>If you are running in headless <abbr title="Continuous Integration">CI</abbr> environments and don't need HTML dashboards:</p>
-<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>...
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--skip-report
-</code></pre></div>
-<em>Note: When <code>--skip-report</code> is omitted, <code>kreview</code> natively generates both interactive Plotly <code>output/reports/*.html</code> dashboards and a <code>static_plots/</code> subdirectory containing 2x-scaled <code>.png</code> versions of every chart for clinical PDF insertion.</em><p></p>
-</div>
-</div>
-</div>
-<hr>
-<h2 id="labels-only">Labels Only</h2>
-<p>If you only need to generate the <abbr title="Circulating Tumor DNA">ctDNA</abbr> truth labels without running feature evaluation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview<span class="w"> </span>label<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span><span class="s2">"/path/to/samplesheet.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--healthy-xs1-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy1.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--healthy-xs2-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy2.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--cbioportal-dir<span class="w"> </span><span class="s2">"/path/to/cBioPortal/"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span>--output<span class="w"> </span>labels.parquet
-</code></pre></div>
-<p>This produces a single Parquet file with sample IDs, clinical metadata, and the assigned 5-tier labels.</p>
-<hr>
-<h2 id="data-lake-integration">Data Lake Integration</h2>
-<p>Every time <code>kreview run</code> executes, feature matrices are loaded into memory, evaluated, and then destroyed. If you want a <strong>persistent output</strong> for downstream analysis:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>...
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>--export-duckdb
-</code></pre></div>
-<p>This creates or merges an immutable <code>kreview_lake.duckdb</code> file in your <code>output/</code> directory. Downstream researchers can then query it directly with DuckDB or Pandas without re-running the pipeline!</p>
-<hr>
-<h2 id="re-generating-reports">Re-generating Reports</h2>
-<p>If you have existing evaluation results (<code>stats.json</code>, <code>*_matrix.parquet</code>) and want to regenerate the HTML dashboard:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kreview<span class="w"> </span>report<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--results-dir<span class="w"> </span>output/BreakPointMotifOnTarget/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--output-dir<span class="w"> </span>output/reports/
-</code></pre></div>
+<h2 id="unreleased">[Unreleased]</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li><strong>Multi-model evaluation:</strong> XGBoost alongside Random Forest and Logistic Regression</li>
+<li><strong><abbr title="SHapley Additive exPlanations">SHAP</abbr> explainability:</strong> Beeswarm, dependence, and waterfall plots for <abbr title="Random Forest">RF</abbr> and <abbr title="XGBoost">XGB</abbr></li>
+<li><strong>Subgroup analysis:</strong> Sensitivity metrics stratified by cancer type and assay version</li>
+<li><strong>Exponential backoff retry:</strong> DuckDB file loading with automatic retry on transient I/O failures</li>
+<li><strong>8 genomewide evaluators:</strong> <abbr title="Assay for Transposase-Accessible Chromatin">ATAC</abbr>, BreakPointMotif, EndMotif, <abbr title="Fragment Size Coverage">FSC</abbr>, <abbr title="Fragment Size Distribution">FSD</abbr>, <abbr title="Fragment Size Ratio">FSR</abbr>, <abbr title="Motif Divergence Score">MDS</abbr>, <abbr title="Transcription Factor Binding Site">TFBS</abbr></li>
+<li><strong><abbr title="Continuous Integration">CI</abbr>/<abbr title="Continuous Deployment">CD</abbr>:</strong> PyPI publishing via <abbr title="OpenID Connect">OIDC</abbr>, <abbr title="GitHub Container Registry">GHCR</abbr> Docker image publishing, Docker build dry-run in tests</li>
+<li><strong>Documentation:</strong> MkDocs Material site with 15+ pages, Mermaid diagrams, MathJax, auto-generated API reference</li>
+<li><strong>Docker support:</strong> Multi-stage Dockerfile with Quarto for standalone report generation</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>Feature count expanded from 18 to 26 evaluators</li>
+<li>CLI <code>--features</code> now accepts comma-separated values</li>
+<li><code>Paths.krewlyzer_dirs</code> accepts manifest <code>.txt</code> files</li>
+<li>Dashboard layout changed from dual-column to sequential full-width rows</li>
+<li>nbdev upgraded from 2.x to 3.0.12 (hyphenated CLI commands)</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><code>PermissionError</code> during large-cohort loading via chunked I/O + retry</li>
+<li>Silent failures in subgroup analysis now logged explicitly</li>
+<li><code>FSCBinEvaluator</code> test typo in notebook unit tests</li>
+</ul>
+<h2 id="001-2026-04-06">[0.0.1] - 2026-04-06</h2>
+<h3 id="added_1">Added</h3>
+<ul>
+<li>Initial project scaffold using nbdev</li>
+<li>5-tier <abbr title="Circulating Tumor DNA">ctDNA</abbr> labeling engine (including Insufficient Data) (<code>CtDNALabeler</code>)</li>
+<li>DuckDB-backed parquet loading with chunked I/O</li>
+<li>18 feature evaluators (Tier 1: <abbr title="Fragment Size Coverage">FSC</abbr>, <abbr title="Fragment Size Distribution">FSD</abbr>; Tier 2: <abbr title="Window Protection Score">WPS</abbr>, EndMotif, <abbr title="Orientation-aware cfDNA Fragmentation">OCF</abbr>, etc.)</li>
+<li>Random Forest and Logistic Regression evaluation with Stratified K-Fold <abbr title="Cross-Validation">CV</abbr></li>
+<li>Quarto HTML dashboard generation</li>
+<li>CLI via Typer (<code>kreview run</code>, <code>kreview label</code>)</li>
+<li>pytest test suite with coverage reporting</li>
+</ul>
 
 
 
@@ -1774,7 +1664,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 8, 2026 16:27:54 UTC"><span class="timeago" datetime="2026-04-08T16:27:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 8, 2026 16:27:54 UTC">2026-04-08</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 02:58:05 UTC"><span class="timeago" datetime="2026-04-09T02:58:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 02:58:05 UTC">2026-04-09</span>
   </span>
 
     
@@ -1850,22 +1740,22 @@ Built with <a href="https://antigravity.google/">Antigravity</a> |
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "navigation.indexes", "navigation.path", "toc.follow", "content.code.copy", "content.code.annotate", "content.tabs.link", "search.highlight", "search.suggest"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "navigation.indexes", "navigation.path", "toc.follow", "content.code.copy", "content.code.annotate", "content.tabs.link", "search.highlight", "search.suggest"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../js/timeago.min.js"></script>
+        <script src="../js/timeago.min.js"></script>
       
-        <script src="../../js/timeago_mkdocs_material.js"></script>
+        <script src="../js/timeago_mkdocs_material.js"></script>
       
-        <script src="../../javascripts/mathjax.js"></script>
+        <script src="../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
-        <script src="../../assets/javascripts/panzoom.min.js"></script>
+        <script src="../assets/javascripts/panzoom.min.js"></script>
       
-        <script src="../../assets/javascripts/zoompan.js"></script>
+        <script src="../assets/javascripts/zoompan.js"></script>
       
     
   
