@@ -58,6 +58,13 @@ htmlcov/
 .hypothesis/
 coverage.xml
 
+# M-15: krewlyzer data ignore
+test_output/
+*.parquet
+manifest.txt
+
+# L-03: Ignore specific runner script
+scripts/runner.sh
 # Data/Outputs
 output/
 data/

@@ -16,16 +16,33 @@ jobs:
         python-version: ["3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
+          
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip build
           pip install -e .[test]
+          
       - name: Run tests with pytest
         run: |
           pytest --cov=kreview --cov-report=xml
+          
+      - name: Test Python Package Build
+        run: python -m build
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test Docker Image Build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false # Crucially set to false so it builds but does NOT publish
+          tags: kreview:test
+          platforms: linux/amd64

@@ -1,50 +1,80 @@
 # DuckDB Network Architecture
 
-`kreview` aggregates tens of millions of rows of heavily nested fragmentomics data gracefully on a consumer Macbook, utilizing **DuckDB** as the high-velocity backing query engine.
+`kreview` aggregates tens of millions of rows of heavily nested fragmentomics data on a consumer MacBook, utilizing **DuckDB** as the high-velocity backing query engine.
 
-However, processing large-scale cohorts physically located on an enterprise-cluster requires significant logic tuning to prevent total systemic failures over remote-mounted drives (like Cyberduck FUSE).
+Processing large-scale cohorts located on remote network-mounted directories requires significant logic tuning to prevent systemic failures from concurrent file handle exhaustion.
 
 ---
 
 ## The Unix `maxfiles` Limit 
 
 When loading a massive cohort (e.g., 4,600 samples), a naive query using glob-scanning:
+
 ```sql
-SELECT * FROM read_parquet('/mount/islogin01/share/krewlyzer/0.8.2/access_12_245/*/*_matrix.parquet')
+SELECT * FROM read_parquet('/data/krewlyzer/v0.8.2/*/*_matrix.parquet')
 ```
 
-Will cause DuckDB to aggressively initiate parallel filesystem thread expansion. It attempts to open all 4,600 `file-handles` simultaneously. Over high-latency SFTP mounts on Mac, this trips the macOS underlying POSIX `ulimit` for concurrent open files (usually hardcapped at 256 or 1024 Unix sockets).
+will cause DuckDB to aggressively initiate parallel filesystem thread expansion, attempting to open all 4,600 file handles simultaneously. This trips the macOS POSIX `ulimit` for concurrent open files (usually hardcapped at 256 or 1024):
 
-The error you will see is a seemingly random system-side IO failure:
-```python
-PermissionError: [Errno 1] Operation not permitted (or Permission denied)
+```
+PermissionError: [Errno 1] Operation not permitted
 ```
 
 ## I/O Thread Throttling
 
-To fix this natively internally inside Python, we override DuckDBs default architecture config map when initializing an SQL connection (`get_duckdb_conn`).
+To fix this natively inside Python, we override DuckDB's default configuration:
 
-We strictly constrain it mathematically from exhausting cluster queues:
 ```python
-conn.execute("SET threads = 4")
-conn.execute("SET memory_limit = '4GB'")
+conn.execute("SET threads = 4")       # (1)!
+conn.execute("SET memory_limit = '4GB'")  # (2)!
 ```
+
+1. Limits DuckDB to 4 concurrent I/O threads instead of `os.cpu_count()`
+2. Prevents DuckDB from consuming all available memory during large joins
 
 ## Feature Batching (`chunk_size`)
 
-Inside our `load_feature_cohort` function, we completely abandoned `read_parquet(*/*)` glob functionality.
+Inside `load_feature_cohort`, we completely abandoned `read_parquet(*/*)` glob functionality.
 
-Instead, we generate an explicit python structural `list` of strings by discovering files manually using `Path.iterdir()`. 
+Instead, we generate an explicit Python `list` of file paths by discovering files manually using `Path.iterdir()`, then chunk that list:
 
-We then chunk that explicit python list and query them individually recursively through DuckDB array slicing:
 ```python
 chunk_size = 500
 
 for i in range(0, len(file_paths), chunk_size):
     chunk = file_paths[i:i + chunk_size]
-    
-    # Send strict array to DuckDB, meaning only max 500 files are requested
-    df_chunk = conn.execute("SELECT * FROM read_parquet(?, union_by_name=true)", [chunk]).df()
+    df_chunk = conn.execute(
+        "SELECT * FROM read_parquet(?, union_by_name=true)",
+        [chunk]
+    ).df()
 ```
 
-By default, the `chunk_size` is tuned to `500` to sit comfortably underneath the default 1024 OSX limits. You can tune this further downward if operating on heavily congested Wifi systems using the CLI `--chunk-size` flag!
+By default, `chunk_size` is tuned to `500` to sit comfortably underneath the default 1024 macOS limits. You can tune this further downward using the CLI `--chunk-size` flag.
+
+## Exponential Backoff Retry
+
+Even with chunking, transient I/O failures can occur when reading parquet files from network-mounted directories. To handle this gracefully, `kreview` implements automatic retry logic with exponential backoff:
+
+```python
+max_retries = 3
+
+for attempt in range(max_retries):
+    try:
+        df_chunk = conn.execute(query, [chunk]).df()
+        df_list.append(df_chunk)
+        break
+    except Exception as e:
+        if attempt < max_retries - 1:
+            log.warning("duckdb_retry", attempt=attempt+1, error=str(e))
+            time.sleep(2 ** attempt)  # 1s, 2s, 4s backoff
+        else:
+            log.error("chunk_load_failed", error=str(e))
+            return pd.DataFrame()  # Permanent failure
+```
+
+!!! tip "When to Use `--chunk-size`"
+    If you see `PermissionError` or `IO Error` during large cohort loading:
+
+    - First retry: the backoff mechanism will handle transient failures automatically
+    - Persistent failures: reduce `--chunk-size` to `100` or `50`
+    - Very congested networks: also try `--workers 1` to serialize I/O completely

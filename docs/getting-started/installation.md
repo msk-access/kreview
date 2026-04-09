@@ -1,47 +1,91 @@
 # Installation Guide
 
-`kreview` is built to be a high-performance evaluation environment. Because of heavy dependencies like DuckDB, XGBoost, and scientific libraries, we highly recommend using `mamba` to resolve the environment quickly.
+`kreview` is built to be a high-performance evaluation environment. It depends on DuckDB, XGBoost, SHAP, and scientific Python libraries.
 
 ## Requirements
-- `mamba` or `conda`
-- Storage space locally for intermediate caches (Mac FUSE or equivalent for network mounts).
+
+- Python ≥ 3.10
+- `pip` (latest)
+
+---
 
 ## Environment Setup
 
-### 1. Clone the Source
-First, pull down the repository. `kreview` is developed entirely using `nbdev`, so the source notebooks (`nbs/`) act as the active execution environment.
+> [!IMPORTANT]
+> **Quarto is strictly required** for programmatic dashboard generation. Because `quarto-cli` wrapper packages are unreliable across Python environments, `kreview` assumes the Quarto executable is installed dynamically on your OS or container.
+
+### Option 1: Docker (Recommended "Batteries-Included" Method)
+The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker container (hosted on GHCR). It natively ships with `Python 3.12`, all ML libraries, and the underlying `quarto` linux binaries configured flawlessly:
+```bash
+docker pull ghcr.io/msk-access/kreview:latest
+docker run -v /your/data:/data ghcr.io/msk-access/kreview:latest \
+  kreview run --cancer-samplesheet /data/cancer.csv ...
+```
+For more complex execution commands (e.g., binding multiple access paths), see the [Docker Operations Guide](../operations/docker.md).
+
+### Option 2: Local Install (Pip)
+
+First, you **must separately install Quarto** via your OS manager:
+Follow the [official Quarto Installation Guide](https://quarto.org/docs/get-started/) (e.g. `brew install quarto` on macOS).
+
+Then clone the repository. `kreview` is developed entirely using `nbdev`, so the source notebooks (`nbs/`) act as the active execution environment.
 
 ```bash
 git clone https://github.com/msk-access/kreview.git
 cd kreview
 ```
 
-### 2. Scaffold the Mamba Environment
-Use the provided `environment.yml` to build the `kreview-eval` isolated environment.
+### 2. Install the Package
 
-```bash
-mamba env create -f environment.yml
-conda activate kreview-eval
-```
+=== "User Install"
 
-### 3. Install the Library
-Install the `kreview` Python module itself, along with the optional documentation dependencies so you can build exactly what you see here.
+    Install the core package with all runtime dependencies:
 
-```bash
-python -m pip install -e '.[docs]'
-```
+    ```bash
+    pip install -e .
+    ```
+
+=== "Developer Install"
+
+    Install with linting, testing, and documentation tools:
+
+    ```bash
+    pip install -e '.[dev,test,docs]'
+    ```
+
+=== "Docs Only"
+
+    If you only want to build or preview the documentation:
+
+    ```bash
+    pip install -e '.[docs]'
+    mkdocs serve
+    ```
+
+### 3. Install Git Hooks
 
 !!! tip "Development Hook"
-    If you are planning to write code or commit to the repo, we highly suggest running `nbdev_install_hooks` right now! This prevents massive diffs in Jupyter notebooks from blowing up the git commit history.
+    If you are contributing code, install the pre-commit hooks to automatically strip Jupyter notebook metadata and run linters before each commit:
+
+    ```bash
+    nbdev-install-hooks
+    pre-commit install
+    ```
 
 ---
 
 ## 4. Verification Check
 
-To quickly verify that the Command Line Interface (CLI) was successfully mapped to `typer`:
+To quickly verify that the CLI was successfully mapped:
 
 ```bash
 kreview --help
 ```
 
-You should see an output tree listing `run` and `export`. If so, you're clear to proceed to [Configuration](configuration.md)!
+You should see an output tree listing `run`, `label`, `features-list`, and `report`. If so, you're clear to proceed to [Configuration](configuration.md)!
+
+!!! info "Listing Registered Features"
+    You can immediately verify all 26 feature evaluators are discoverable:
+    ```bash
+    kreview features-list
+    ```
