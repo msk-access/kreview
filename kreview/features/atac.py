@@ -10,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'ATACEvaluator']
+__all__ = ["log", "ATACEvaluator"]
+
 
 # %% ../../nbs/features/17_atac.ipynb #874d8529
 class ATACEvaluator(FeatureEvaluator):
     """Extracts ATAC footprint metrics per feature set."""
-    
+
     name = "AtacOnTarget"
     source_file = ".ATAC.ontarget.parquet"
     tier = 2
@@ -29,15 +30,16 @@ class ATACEvaluator(FeatureEvaluator):
             cols = set(df.columns)
 
             if "label" in cols:
-                metrics = [c for c in ["count", "mean_size", "entropy", "z_score"] if c in cols]
-                for row in df.to_dict('records'):
-                    lbl = str(row["label"]).replace(" ", "_").replace("-","_")
+                metrics = [
+                    c for c in ["count", "mean_size", "entropy", "z_score"] if c in cols
+                ]
+                for row in df.to_dict("records"):
+                    lbl = str(row["label"]).replace(" ", "_").replace("-", "_")
                     for m in metrics:
                         if pd.notna(row[m]):
                             extracted[f"{lbl}_{m}"] = float(row[m])
-    
+
             return extracted
         except Exception as e:
             log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
-

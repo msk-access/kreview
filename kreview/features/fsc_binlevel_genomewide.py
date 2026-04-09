@@ -10,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'FSCGenomewideEvaluator']
+__all__ = ["log", "FSCGenomewideEvaluator"]
+
 
 # %% ../../nbs/features/11b_fsc_genomewide.ipynb #e0ade985
 class FSCGenomewideEvaluator(FeatureEvaluator):
     """Extracts GC-corrected GC log2 signals from genomic bins."""
-    
+
     name = "FSCGenomewide"
     source_file = ".FSC.parquet"
     tier = 1
@@ -26,10 +27,10 @@ class FSCGenomewideEvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
-            
+
             cols = set(df.columns)
             log2_cols = [c for c in cols if c.endswith("_log2")]
-            
+
             # Global median over all bins
             for l in log2_cols:
                 extracted[f"global_{l}_median"] = float(df[l].median())
@@ -48,4 +49,3 @@ class FSCGenomewideEvaluator(FeatureEvaluator):
         except Exception as e:
             log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
-

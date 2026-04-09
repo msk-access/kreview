@@ -7,24 +7,28 @@ import structlog
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
-        
+
 
 # %% auto #0
-__all__ = ['log', 'BreakPointMotifGenomewideEvaluator']
+__all__ = ["log", "BreakPointMotifGenomewideEvaluator"]
+
 
 # %% ../../nbs/features/22b_breakpoint_motif_genomewide.ipynb #0b410faf
 def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith('['): 
+    if not isinstance(s, str) or not s.startswith("["):
         return []
-    clean = s.replace('[', '').replace(']', '').replace(chr(10), '').replace(chr(13), '')
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
     try:
         return [float(x) for x in clean.split()]
     except (ValueError, TypeError):
         return []
 
+
 class BreakPointMotifGenomewideEvaluator(FeatureEvaluator):
     """Extracts 4-mer adjacent breakpoint motifs."""
-    
+
     name = "BreakPointMotifGenomewide"
     source_file = ".BreakPointMotif.parquet"
     tier = 2
@@ -40,13 +44,12 @@ class BreakPointMotifGenomewideEvaluator(FeatureEvaluator):
             self.tier = 3
             self.category = "motifs"
             if "Motif" in cols and "Frequency" in cols:
-                for row in df.to_dict('records'):
+                for row in df.to_dict("records"):
                     m = str(row["Motif"])
                     if pd.notna(row["Frequency"]):
                         extracted[f"bpmotif_gw_{m}"] = float(row["Frequency"])
-    
+
             return extracted
         except Exception as e:
             log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
-

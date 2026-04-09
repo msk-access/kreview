@@ -10,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'FSCGeneEvaluator']
+__all__ = ["log", "FSCGeneEvaluator"]
+
 
 # %% ../../nbs/features/10_fsc_gene.ipynb #4f42d260
 class FSCGeneEvaluator(FeatureEvaluator):
     """Extracts all gene-level fragment size characteristics."""
-    
+
     name = "FSC_gene"
     source_file = ".FSC.gene.parquet"
     tier = 1
@@ -26,25 +27,33 @@ class FSCGeneEvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
-                
+
             cols = set(df.columns)
-            ratios = ["ultra_short_ratio", "core_short_ratio", "mono_nucl_ratio", "di_nucl_ratio", "long_ratio"]
-            
+            ratios = [
+                "ultra_short_ratio",
+                "core_short_ratio",
+                "mono_nucl_ratio",
+                "di_nucl_ratio",
+                "long_ratio",
+            ]
+
             # Global aggregates
             for r in ratios:
                 if r in cols:
                     extracted[f"global_{r}_mean"] = float(df[r].mean())
-                    
+
             if "normalized_depth" in cols:
                 m_depth = df["normalized_depth"].mean()
                 if pd.notna(m_depth) and m_depth > 0:
-                    extracted["global_normalized_depth_cv"] = float(df["normalized_depth"].std() / m_depth)
+                    extracted["global_normalized_depth_cv"] = float(
+                        df["normalized_depth"].std() / m_depth
+                    )
                 else:
                     extracted["global_normalized_depth_cv"] = 0.0
 
             # Per-gene extraction
             if "gene" in cols:
-                for row in df.to_dict('records'):
+                for row in df.to_dict("records"):
                     g = str(row["gene"]).upper().replace(" ", "_").replace("-", "_")
                     if g == "NAN":
                         continue
@@ -52,10 +61,11 @@ class FSCGeneEvaluator(FeatureEvaluator):
                         if r in cols and pd.notna(row[r]):
                             extracted[f"{g}_{r}"] = float(row[r])
                     if "normalized_depth" in cols and pd.notna(row["normalized_depth"]):
-                        extracted[f"{g}_normalized_depth"] = float(row["normalized_depth"])
-                        
+                        extracted[f"{g}_normalized_depth"] = float(
+                            row["normalized_depth"]
+                        )
+
             return extracted
         except Exception as e:
             log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
-

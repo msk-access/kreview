@@ -10,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'MDSExonEvaluator']
+__all__ = ["log", "MDSExonEvaluator"]
+
 
 # %% ../../nbs/features/20b_mds_exon.ipynb #d368744f
 class MDSExonEvaluator(FeatureEvaluator):
     """Exon-level MDS distributions."""
-    
+
     name = "MDSExon"
     source_file = ".MDS.exon.parquet"
     tier = 2
@@ -31,14 +32,14 @@ class MDSExonEvaluator(FeatureEvaluator):
             if "gene" in cols and "mds" in cols:
                 gene_grouped = df.groupby("gene")["mds"]
                 for gene, vals in gene_grouped:
-                    if str(gene) == "NAN": continue
-                    g = str(gene).replace(" ", "_").replace("-","_")
+                    if str(gene) == "NAN":
+                        continue
+                    g = str(gene).replace(" ", "_").replace("-", "_")
                     extracted[f"{g}_mds_exon_mean"] = float(vals.mean())
                     if len(vals) > 1:
                         extracted[f"{g}_mds_exon_std"] = float(vals.std())
-    
+
             return extracted
         except Exception as e:
             log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
-

@@ -7,6 +7,7 @@ Covers:
   - Manifest file expansion
   - IMPACT_PANELS and ACCESS_PANELS constants
 """
+
 import kreview
 import pytest
 

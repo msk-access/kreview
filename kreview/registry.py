@@ -13,7 +13,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'get_all_evaluators']
+__all__ = ["log", "get_all_evaluators"]
+
 
 # %% ../nbs/03_registry.ipynb #74dfa558
 def get_all_evaluators() -> list[FeatureEvaluator]:
@@ -24,9 +25,10 @@ def get_all_evaluators() -> list[FeatureEvaluator]:
             mod = importlib.import_module(f"kreview.features.{module_name}")
             for name, obj in inspect.getmembers(mod, inspect.isclass):
                 if issubclass(obj, FeatureEvaluator) and obj != FeatureEvaluator:
-                    if not any(isinstance(e, obj) for e in evaluators): # prevent duplicates
+                    if not any(
+                        isinstance(e, obj) for e in evaluators
+                    ):  # prevent duplicates
                         evaluators.append(obj())
         except Exception as e:
             log.warning("evaluator_import_failed", module=module_name, error=str(e))
     return evaluators
-

@@ -6,6 +6,7 @@ Covers:
   - Healthy volunteers always get Healthy Normal
   - 5-tier docstring accuracy
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -38,6 +39,6 @@ class TestLabelTierConstants:
     def test_docstring_says_five_tier(self):
         """Docstring should reference 5-tier, not 4-tier (M-05)."""
         doc = CtDNALabeler.__doc__
-        assert "5-tier" in doc or "five" in doc.lower(), (
-            f"Docstring should mention 5-tier: got '{doc}'"
-        )
+        assert (
+            "5-tier" in doc or "five" in doc.lower()
+        ), f"Docstring should mention 5-tier: got '{doc}'"

@@ -9,14 +9,15 @@ Covers:
   - Bootstrap CI bounds
   - OOF subgroup metrics present
 """
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from kreview.eval_engine import evaluate_feature, single_feature_model, LABEL_ORDER
 
-
 # ── Fixtures ────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def synthetic_labels():
@@ -54,6 +55,7 @@ def binary_Xy():
 
 # ── evaluate_feature tests ──────────────────────────────────────────────────────
 
+
 class TestEvaluateFeature:
 
     def test_output_has_expected_keys(self, synthetic_feature, synthetic_labels):
@@ -82,7 +84,9 @@ class TestEvaluateFeature:
         assert "cohens_d_true_vs_healthy" in result
         assert "cohens_d_possible_vs_healthy" in result
         # True+ has stronger signal, so its Cohen's d should be larger
-        assert result["cohens_d_true_vs_healthy"] > result["cohens_d_possible_vs_healthy"]
+        assert (
+            result["cohens_d_true_vs_healthy"] > result["cohens_d_possible_vs_healthy"]
+        )
 
     def test_fdr_correction_applied(self, synthetic_feature, synthetic_labels):
         """FDR-corrected p-values should exist and be >= raw p-values."""
@@ -96,14 +100,16 @@ class TestEvaluateFeature:
 
         # FDR corrected should be >= raw (BH correction inflates them)
         for fdr_k, raw_k in zip(fdr_keys, raw_keys):
-            assert result[fdr_k] >= result[raw_k] - 1e-10, (
-                f"{fdr_k}={result[fdr_k]} < {raw_k}={result[raw_k]}"
-            )
+            assert (
+                result[fdr_k] >= result[raw_k] - 1e-10
+            ), f"{fdr_k}={result[fdr_k]} < {raw_k}={result[raw_k]}"
 
     def test_pairwise_mwu_keys(self, synthetic_feature, synthetic_labels):
         """All 5 pairwise MWU tests should produce p-values and effect sizes."""
         result = evaluate_feature(synthetic_feature, synthetic_labels)
-        mwu_pvals = [k for k in result if k.startswith("mwu_") and k.endswith("_pvalue")]
+        mwu_pvals = [
+            k for k in result if k.startswith("mwu_") and k.endswith("_pvalue")
+        ]
         assert len(mwu_pvals) == 5
 
     def test_no_error_key_on_valid_input(self, synthetic_feature, synthetic_labels):
@@ -114,9 +120,7 @@ class TestEvaluateFeature:
     def test_spearman_vaf_correlation(self, synthetic_feature, synthetic_labels):
         """Spearman VAF correlation should be present when max_vaf is provided."""
         max_vaf = pd.Series(np.random.uniform(0.01, 0.5, len(synthetic_labels)))
-        result = evaluate_feature(
-            synthetic_feature, synthetic_labels, max_vaf=max_vaf
-        )
+        result = evaluate_feature(synthetic_feature, synthetic_labels, max_vaf=max_vaf)
         assert "spearman_vaf_r" in result
         assert "spearman_vaf_p" in result
 
@@ -131,6 +135,7 @@ class TestEvaluateFeature:
 
 
 # ── single_feature_model tests ──────────────────────────────────────────────────
+
 
 class TestSingleFeatureModel:
 
@@ -155,6 +160,7 @@ class TestSingleFeatureModel:
         X, y = binary_Xy
         results, lr_pipe, rf, xgb = single_feature_model(X, y)
         from sklearn.pipeline import Pipeline
+
         assert isinstance(lr_pipe, Pipeline), "LR model should be a Pipeline"
         assert "scaler" in lr_pipe.named_steps
         assert "lr" in lr_pipe.named_steps
