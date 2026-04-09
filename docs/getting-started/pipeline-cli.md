@@ -4,12 +4,23 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 
 ---
 
+## Available Commands
+
+`kreview` exposes four subcommands:
+
+| Command | Purpose |
+|---------|---------|
+| `kreview run` | Full pipeline: label → extract → evaluate → report |
+| `kreview label` | Generate ctDNA labels only (no feature evaluation) |
+| `kreview features-list` | List all registered feature evaluators |
+| `kreview report` | Re-generate HTML dashboard from existing results |
+
+---
+
 ## Basic Execution
 
-To launch a standard execution across all available features, define all your parameters directly from the terminal. 
-
 !!! warning "Disable Python Buffering"
-    When running over terminal orchestrators (like `nohup`, standard piping, or `slurm`), it is critical to run Python with `PYTHONUNBUFFERED=1` so that the `structlog` progress bars output asynchronously instead of stalling and hiding in memory!
+    When running over terminal orchestrators (like `nohup`, standard piping, or SLURM), it is critical to run Python with `PYTHONUNBUFFERED=1` so that the `structlog` progress output streams in real-time.
 
 === "Standard Run (All Features)"
 
@@ -24,12 +35,23 @@ To launch a standard execution across all available features, define all your pa
       --workers 4
     ```
 
-=== "Safe Load Mode (I/O Constraints)"
+=== "Using a Manifest File"
 
-    If you see **PermissionError Code 5** over your network mounts, dynamically drop the parquet chunk-size down to 100 handles per burst:
+    If your Krewlyzer results span multiple directories, create a `manifest.txt` listing one directory per line, then pass it directly:
 
     ```bash
-    PYTHONUNBUFFERED=1 kreview run \
+    kreview run \
+      --cancer-samplesheet ... \
+      --krewlyzer-dir manifest.txt \
+      --output output/
+    ```
+
+=== "Safe Load Mode (I/O Constraints)"
+
+    If you see `PermissionError` during large cohort loading, reduce the parquet chunk-size:
+
+    ```bash
+    kreview run \
       --cancer-samplesheet ... \
       --krewlyzer-dir ... \
       --chunk-size 100
@@ -39,22 +61,29 @@ To launch a standard execution across all available features, define all your pa
 
 ## Targeted Execution
 
-If you are just developing a new feature—or just want to target an existing one without having DuckDB load 22 multi-gigabyte queries—you can easily specify exact features to run!
-
 === "Isolating Features"
 
-    Use the `--features` flag (which can be repeated!) to isolate exactly what you want the ML models to evaluate.
+    Use the `--features` flag with a comma-separated list to run only specific evaluators:
 
     ```bash
     kreview run \
       ...
-      --features BreakPointMotif \
-      --features EndMotif
+      --features "BreakPointMotifOnTarget,EndMotifOnTarget"
+    ```
+
+=== "Running by Tier"
+
+    Run only Tier 1 (fragment size) or Tier 2 (nucleosome/motif) features:
+
+    ```bash
+    kreview run \
+      ...
+      --tier 1
     ```
 
 === "Skipping Reports"
 
-    If you are running in headless CI environments and don't want Quarto HTML Plotly dashboards spitting out, you can run in silent ML mode:
+    If you are running in headless CI environments and don't need HTML dashboards:
 
     ```bash
     kreview run \
@@ -64,17 +93,43 @@ If you are just developing a new feature—or just want to target an existing on
 
 ---
 
-## Data Lakes integration
+## Labels Only
 
-Every time `kreview run` is successfully executed, the features are queried in DuckDB, extracted through our matrix reducers, evaluated through Sklearn ML models, and eventually destroyed in memory.
+If you only need to generate the ctDNA truth labels without running feature evaluation:
 
-However, if you want a **persistent output** of the analytical matricies—so that downstream researchers can bypass the `krewlyzer` SFTP drive entirely and just run Pandas against the raw features—just add `--export-duckdb`!
+```bash
+kreview label \
+  --cancer-samplesheet "/path/to/samplesheet.csv" \
+  --healthy-xs1-samplesheet "/path/to/healthy1.csv" \
+  --healthy-xs2-samplesheet "/path/to/healthy2.csv" \
+  --cbioportal-dir "/path/to/cBioPortal/" \
+  --output labels.parquet
+```
+
+This produces a single Parquet file with sample IDs, clinical metadata, and the assigned 5-tier labels.
+
+---
+
+## Data Lake Integration
+
+Every time `kreview run` executes, feature matrices are loaded into memory, evaluated, and then destroyed. If you want a **persistent output** for downstream analysis:
 
 ```bash
 kreview run \
   ...
-  --features FSC_gene \
   --export-duckdb
 ```
 
-This will automatically create or merge an immutable `kreview_lake.duckdb` file directly into your `output/` directory!
+This creates or merges an immutable `kreview_lake.duckdb` file in your `output/` directory. Downstream researchers can then query it directly with DuckDB or Pandas without re-running the pipeline!
+
+---
+
+## Re-generating Reports
+
+If you have existing evaluation results (`stats.json`, `*_matrix.parquet`) and want to regenerate the HTML dashboard:
+
+```bash
+kreview report \
+  --results-dir output/BreakPointMotifOnTarget/ \
+  --output-dir output/reports/
+```

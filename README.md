@@ -12,35 +12,35 @@
 
 ## 🧬 Overview
 
-`kreview` is a production-grade, notebook-first (`nbdev`) evaluation engine designed strictly for high-throughput cancer liquid biopsy fragmentomics feature analysis. Designed at Memorial Sloan Kettering (MSKCC), it securely processes enormous arrays containing tens of thousands of samples using an embedded DuckDB multi-threaded memory lake.
+`kreview` is a production-grade, notebook-first (`nbdev`) evaluation engine designed for high-throughput cancer liquid biopsy fragmentomics feature analysis. Developed at Memorial Sloan Kettering (MSKCC), it processes cohorts containing tens of thousands of samples using an embedded DuckDB query engine with chunked I/O and automatic retry logic.
+
+📖 **[Full Documentation](https://msk-access.github.io/kreview/)**
 
 ## 🚀 Features
 
-- **Biological 4-Tier ctDNA Taxonomy**: Mathematical MSK-IMPACT paired-inference to securely label `True ctDNA+`, `Possible ctDNA+`, `Possible ctDNA-`, and `Healthy Normal` baselines. 
-- **DuckDB Dynamic Data Lake**: In-memory `read_parquet` bindings mapped directly to SFTP network mounts to bypass file I/O limitations. Automatically builds a merged SQL-queryable `kreview_lake.duckdb` file when finished.
-- **Cyber-Aesthetic Dashboards**: Programmatic Quarto generation! Constructs deeply educational, Plotly-native visual diagnostic layouts (Themes: Cyborg/Neon Amber). 
-- **Scalable Multiprocessing**: Dispatches features sequentially globally but aggressively parallelizes patient data locally to map matrices rapidly without disk locking.
-- **20+ Built-In Modular Evaluators**: Contains fully independent mathematical extractors out-of-the-box (MDS, FSD, WPS, Motif Densities, ATAC Coverage, etc.).
+- **5-Tier ctDNA Taxonomy**: MSK-IMPACT paired-inference to label `True ctDNA+`, `Possible ctDNA+`, `Possible ctDNA−`, `Healthy Normal`, and `Insufficient Data`.
+- **DuckDB Dynamic Data Lake**: In-memory `read_parquet` bindings with chunked I/O and exponential backoff retry. Builds a merged SQL-queryable `kreview_lake.duckdb` on demand.
+- **Multi-Model Evaluation**: Random Forest, XGBoost, and Logistic Regression with Stratified K-Fold CV, SHAP explainability, and subgroup analysis.
+- **Interactive Dashboards**: Plotly-native HTML reports with ROC curves, violin plots, SHAP beeswarm/waterfall, and per-cancer-type sensitivity tables.
+- **26 Built-In Evaluators**: Modular extractors covering fragment sizes (FSC, FSD, FSR), nucleosome protection (WPS, TFBS), cleavage motifs (EndMotif, BreakPointMotif), chromatin accessibility (ATAC), motif divergence (MDS), and orientation (OCF).
 
 ## ⚙️ Quick Start
 
 ### Installation
-The environment is strictly controlled using `mamba` to securely resolve the Quarto, DuckDB, plotting, and algorithmic ML backends:
 
 ```bash
 git clone https://github.com/msk-access/kreview.git
 cd kreview
-mamba env create -f environment.yml
-mamba activate kreview-eval
+pip install -e .
 ```
 
-### Running the Global Engine
-To aggressively scan an SFTP network data mount across 4 parallel instances and produce the absolute matrix evaluations:
+### Running the Pipeline
 
 ```bash
 PYTHONUNBUFFERED=1 kreview run \
   --cancer-samplesheet "/path/to/cancer/samplesheet.csv" \
   --healthy-xs1-samplesheet "/path/to/healthy/xs1/samplesheet.csv" \
+  --healthy-xs2-samplesheet "/path/to/healthy/xs2/samplesheet.csv" \
   --cbioportal-dir "/path/to/cBioPortal_MAF_CNA_SV/" \
   --krewlyzer-dir "/path/to/unified_krewlyzer_results" \
   --output output/ \
@@ -49,19 +49,21 @@ PYTHONUNBUFFERED=1 kreview run \
 ```
 
 ### Dashboard Access
-Once finished natively parsing all ~22 analytical features, Quarto recursively spins up visual `.html` reports locally across all evaluated feature sets:
+
+Once finished, open the generated HTML reports:
 ```bash
 open output/reports/ATAC_dashboard.html
 ```
 
 ## 🏗️ nbdev Architecture
-This project proudly operates fundamentally as an `nbdev` repo!
-Do **not** edit `.py` scripts manually in `/kreview`. Build natively inside Jupyter notebooks within `nbs/` and trigger:
+
+This project operates as an `nbdev` repo. Do **not** edit `.py` scripts manually in `kreview/`. Build natively inside Jupyter notebooks within `nbs/` and trigger:
 ```bash
-nbdev_export
+nbdev-export
 ```
 
-**Developer Workflows Built-in:**
-- `/run-eval`
-- `/add-feature`
-- `/release`
+## 📚 Resources
+
+- **[Documentation](https://msk-access.github.io/kreview/)** — Full user and developer guide
+- **[Contributing](CONTRIBUTING.md)** — How to contribute
+- **[Changelog](https://msk-access.github.io/kreview/changelog/)** — Version history

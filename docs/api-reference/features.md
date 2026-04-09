@@ -1,12 +1,15 @@
 # Evaluator Feature Registry
 
-This documentation is directly synthesized from the `nbs/features/*.ipynb` Jupyter notebooks. These notebooks act as the active execution environment for each specific biological feature. During the CI compilation step, they are automatically transcoded into the python classes below.
+This documentation is directly synthesized from the `nbs/features/*.ipynb` Jupyter notebooks. These notebooks act as the active execution environment for each specific biological feature. During the `nbdev-export` step, they are automatically compiled into the Python classes below.
 
-The `registry.py` module loops through all of these exported classes and automatically registers them into the `kreview` execution engine!
+The `registry.py` module dynamically discovers all `FeatureEvaluator` subclasses and registers them into the `kreview` execution engine.
+
+For the biological rationale behind each feature, see the [Fragmentomics Feature Glossary](../biology/fragmentomics-features.md).
 
 ---
 
 ## 📏 Fragment Size Coverage & Distributions
+
 These features measure length distortions in circulating blood DNA caused by necrotic tumor shedding biases.
 
 ::: kreview.features.fsc_gene
@@ -14,6 +17,10 @@ These features measure length distortions in circulating blood DNA caused by nec
       show_root_heading: true
       show_source: false
 ::: kreview.features.fsc_binlevel
+    options:
+      show_root_heading: true
+      show_source: false
+::: kreview.features.fsc_binlevel_genomewide
     options:
       show_root_heading: true
       show_source: false
@@ -25,7 +32,15 @@ These features measure length distortions in circulating blood DNA caused by nec
     options:
       show_root_heading: true
       show_source: false
+::: kreview.features.fsd_genomewide
+    options:
+      show_root_heading: true
+      show_source: false
 ::: kreview.features.fsr
+    options:
+      show_root_heading: true
+      show_source: false
+::: kreview.features.fsr_genomewide
     options:
       show_root_heading: true
       show_source: false
@@ -33,7 +48,8 @@ These features measure length distortions in circulating blood DNA caused by nec
 ---
 
 ## ✂️ Nucleosome Protection (WPS & TFBS)
-Measures the physical blockade signatures left by transcription factors and wrapped DNA Histones before DNAse nuclease shedding.
+
+Measures the physical blockade signatures left by transcription factors and wrapped DNA histones before nuclease shedding.
 
 ::: kreview.features.wps_panel
     options:
@@ -51,13 +67,22 @@ Measures the physical blockade signatures left by transcription factors and wrap
     options:
       show_root_heading: true
       show_source: false
+::: kreview.features.tfbs_genomewide
+    options:
+      show_root_heading: true
+      show_source: false
 
 ---
 
 ## 🛑 Cleavage Signatures (EndMotifs)
+
 Models the specific micro-nuclease patterns (like DNASE1L3) structurally slicing accessible DNA at `CCCA` junctions.
 
 ::: kreview.features.endmotif
+    options:
+      show_root_heading: true
+      show_source: false
+::: kreview.features.endmotif_genomewide
     options:
       show_root_heading: true
       show_source: false
@@ -69,13 +94,22 @@ Models the specific micro-nuclease patterns (like DNASE1L3) structurally slicing
     options:
       show_root_heading: true
       show_source: false
+::: kreview.features.breakpoint_motif_genomewide
+    options:
+      show_root_heading: true
+      show_source: false
 
 ---
 
-## 🧬 Diagnostic Motifs
-Evaluates macro-scale localized sequence aberrations.
+## 🧬 Motif Divergence Scores
+
+Measures the statistical divergence of end-motif distributions from healthy baselines.
 
 ::: kreview.features.mds
+    options:
+      show_root_heading: true
+      show_source: false
+::: kreview.features.mds_genomewide
     options:
       show_root_heading: true
       show_source: false
@@ -91,7 +125,12 @@ Evaluates macro-scale localized sequence aberrations.
 ---
 
 ## 🗺️ Accessibility & Orientation
+
 ::: kreview.features.atac
+    options:
+      show_root_heading: true
+      show_source: false
+::: kreview.features.atac_genomewide
     options:
       show_root_heading: true
       show_source: false

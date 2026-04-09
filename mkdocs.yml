@@ -78,10 +78,19 @@ nav:
       - nbdev Workflow: developer/nbdev-workflow.md
       - Adding a Feature: developer/adding-a-feature.md
       - DuckDB Architecture: developer/duckdb-architecture.md
+      - Contributing: developer/contributing.md
+      - Release Guide: developer/release-guide.md
+  - Operations:
+      - CI/CD Pipelines: operations/ci-cd.md
+      - Docker: operations/docker.md
+      - Troubleshooting: operations/troubleshooting.md
   - API Reference:
       - CLI: api-reference/cli.md
       - Core Operations: api-reference/core.md
+      - Labeling Engine: api-reference/labels.md
+      - Evaluation Engine: api-reference/eval-engine.md
       - Evaluator Registry: api-reference/features.md
+  - Changelog: changelog.md
 markdown_extensions:
   - admonition
   - mkdocs-typer
