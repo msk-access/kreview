@@ -454,14 +454,23 @@ class CtDNALabeler:
 
             # Apply Insufficient Data fallback for 0 signal + low depth
             if not self.metadata_df.empty:
-                # Merge total fragments
+                # Resolve col name (schema changed in v0.8.2)
+                tf_col = (
+                    "total_fragments_pf"
+                    if "total_fragments_pf" in self.metadata_df.columns
+                    else "total_fragments"
+                )
+                assay_col = "assay" if "assay" in self.metadata_df.columns else tf_col
+                merged_cols = ["sample_id", tf_col]
+                if "assay" in self.metadata_df.columns:
+                    merged_cols.append("assay")
                 labels = labels.merge(
-                    self.metadata_df[["sample_id", "total_fragments_pf"]],
+                    self.metadata_df[merged_cols],
                     left_on="SAMPLE_ID",
                     right_on="sample_id",
                     how="left",
                 )
-                labels["total_fragments_pf"] = labels["total_fragments_pf"].fillna(0)
+                labels["total_fragments_pf"] = labels[tf_col].fillna(0)
                 insufficient = (
                     (labels["has_snv"] == False)
                     & (labels["has_sv"] == False)

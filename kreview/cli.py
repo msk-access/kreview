@@ -42,7 +42,7 @@ def label(
         str(healthy_xs1_samplesheet),
         str(healthy_xs2_samplesheet),
         str(cbioportal_dir),
-        list(krewlyzer_dir),
+        [],
     )
     config = LabelConfig(min_vaf=min_vaf, min_variants=min_variants)
 
@@ -168,7 +168,7 @@ def _render_quarto_report(matrix_path, feat_name, report_dir, python_exe):
         "--output",
         out_html.name,
         "--output-dir",
-        str(out_html.parent),
+        str(out_html.parent.absolute()),
     ]
 
     try:
@@ -312,6 +312,7 @@ def run(
             _echo(f"  Submitted {len(future_map)} tasks to {workers} workers")
 
             partial_results = []
+            failed_samples = []
             completed = 0
             for fut in concurrent.futures.as_completed(future_map):
                 chunk_idx = future_map[fut]
@@ -331,12 +332,22 @@ def run(
                         _echo(
                             f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: FAILED - {data}"
                         )
+                        failed_chunk = id_chunks[chunk_idx]
+                        failed_samples.extend(list(failed_chunk))
                 except Exception as exc:
                     _echo(
                         f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: EXCEPTION - {exc}"
                     )
+                    failed_chunk = id_chunks[chunk_idx]
+                    failed_samples.extend(list(failed_chunk))
 
         extract_sec = time.time() - t2
+        if failed_samples:
+            failed_path = out_path / f"{e.name}_failed_samples.csv"
+            pd.DataFrame({"SAMPLE_ID": failed_samples}).to_csv(failed_path, index=False)
+            _echo(
+                f"  WARNING: {len(failed_samples)} samples failed extraction. Saved to {failed_path.name}"
+            )
         _echo(f"  Extraction complete in {extract_sec:.1f}s")
 
         if not partial_results:
@@ -414,9 +425,12 @@ def run(
                 c_types = model_df.get("CANCER_TYPE", None)
                 if c_types is not None:
                     c_types = c_types.values
+                a_types = model_df.get("access_version", None)
+                if a_types is not None:
+                    a_types = a_types.values
 
                 model_res, lr_model, rf_model, xgb_model = single_feature_model(
-                    X, y, cancer_types=c_types
+                    X, y, cancer_types=c_types, assays=a_types
                 )
                 model_out = out_path / f"{e.name}_model_results.json"
 

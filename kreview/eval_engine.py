@@ -355,6 +355,7 @@ def single_feature_model(
     X: np.ndarray,  # shape (n_samples, n_sub_metrics)
     y: np.ndarray,  # binary labels (1 = positive class)
     cancer_types: np.ndarray | None = None,
+    assays: np.ndarray | None = None,
     n_folds: int = 5,
     random_state: int = 42,
 ) -> tuple[dict, object, object, object]:
@@ -484,7 +485,7 @@ def single_feature_model(
         if "auc_xgb" in results:
             results["auc_delta_xgb_rf"] = results["auc_xgb"] - results["auc_rf"]
 
-        # --- Cancer Type Subgroup Analysis (Top 10) ---
+            # --- Cancer Type Subgroup Analysis (Top 10) ---
         if cancer_types is not None:
             import pandas as pd
 
@@ -494,35 +495,99 @@ def single_feature_model(
 
             for c_type in top_10:
                 mask = cancer_types == c_type
-                if mask.sum() < 5:
+                n_samp = mask.sum()
+                if n_samp < 5:
                     continue  # Skip if too small
                 y_sub = y[mask]
 
-                # We need at least one positive and one negative for AUC
-                if len(np.unique(y_sub)) > 1:
-                    rf_prob_sub = rf_probs[mask]
-                    sub_auc = roc_auc_score(y_sub, rf_prob_sub)
-                else:
-                    sub_auc = None
+                # Check metrics for RF
+                res_sub = {}
+                try:
+                    p_rf = rf.predict(X[mask])
+                    tn_rf, fp_rf, fn_rf, tp_rf = confusion_matrix(
+                        y_sub, p_rf, labels=[0, 1]
+                    ).ravel()
+                    res_sub["rf_sensitivity"] = (
+                        tp_rf / (tp_rf + fn_rf) if (tp_rf + fn_rf) > 0 else None
+                    )
+                except Exception as e:
+                    log.warning("subgroup_rf_eval_failed", c_type=c_type, error=str(e))
 
-                # True Positive Rate (Sensitivity) at optimal threshold
-                pos_mask = y_sub == 1
-                if pos_mask.sum() > 0:
-                    rf_pred_pos = (rf_probs[mask][pos_mask] >= rf_opt).astype(int)
-                    sub_tpr = rf_pred_pos.sum() / len(rf_pred_pos)
-                else:
-                    sub_tpr = None
+                # Check metrics for XGBoost
+                if xgb is not None:
+                    try:
+                        p_xgb = xgb.predict(X[mask])
+                        tn_xgb, fp_xgb, fn_xgb, tp_xgb = confusion_matrix(
+                            y_sub, p_xgb, labels=[0, 1]
+                        ).ravel()
+                        res_sub["xgb_sensitivity"] = (
+                            tp_xgb / (tp_xgb + fn_xgb)
+                            if (tp_xgb + fn_xgb) > 0
+                            else None
+                        )
+                    except Exception as e:
+                        log.warning(
+                            "subgroup_xgb_eval_failed", c_type=c_type, error=str(e)
+                        )
 
-                c_stats.append(
-                    {
-                        "cancer_type": c_type,
-                        "n_samples": int(mask.sum()),
-                        "n_positives": int(pos_mask.sum()),
-                        "rf_auc": sub_auc,
-                        "rf_sensitivity": sub_tpr,
-                    }
-                )
+                if res_sub:
+                    c_stats.append(
+                        {
+                            "cancer_type": c_type,
+                            "n_samples": int(n_samp),
+                            "n_positives": int(y_sub.sum()),
+                            **res_sub,
+                        }
+                    )
             results["cancer_type_stats"] = c_stats
+
+        if assays is not None:
+            import pandas as pd
+
+            a_stats = []
+            a_series = pd.Series(assays)
+            for a_type in a_series.dropna().unique():
+                mask = assays == a_type
+                n_samp = mask.sum()
+                if n_samp < 5:
+                    continue
+                y_sub = y[mask]
+                res_sub = {}
+                try:
+                    p_rf = rf.predict(X[mask])
+                    tn_rf, fp_rf, fn_rf, tp_rf = confusion_matrix(
+                        y_sub, p_rf, labels=[0, 1]
+                    ).ravel()
+                    res_sub["rf_sensitivity"] = (
+                        tp_rf / (tp_rf + fn_rf) if (tp_rf + fn_rf) > 0 else None
+                    )
+                except Exception as e:
+                    log.warning("subgroup_rf_eval_failed", a_type=a_type, error=str(e))
+                if xgb is not None:
+                    try:
+                        p_xgb = xgb.predict(X[mask])
+                        tn_xgb, fp_xgb, fn_xgb, tp_xgb = confusion_matrix(
+                            y_sub, p_xgb, labels=[0, 1]
+                        ).ravel()
+                        res_sub["xgb_sensitivity"] = (
+                            tp_xgb / (tp_xgb + fn_xgb)
+                            if (tp_xgb + fn_xgb) > 0
+                            else None
+                        )
+                    except Exception as e:
+                        log.warning(
+                            "subgroup_xgb_eval_failed", a_type=a_type, error=str(e)
+                        )
+                if res_sub:
+                    a_stats.append(
+                        {
+                            "assay": a_type,
+                            "n_samples": int(n_samp),
+                            "n_positives": int(y_sub.sum()),
+                            **res_sub,
+                        }
+                    )
+            results["assay_stats"] = a_stats
 
         return results, lr, rf, xgb
     except Exception as e:

@@ -17,7 +17,7 @@ __all__ = ["log", "ATACEvaluator"]
 class ATACEvaluator(FeatureEvaluator):
     """Extracts ATAC footprint metrics per feature set."""
 
-    name = "ATAC"
+    name = "AtacOnTarget"
     source_file = ".ATAC.ontarget.parquet"
     tier = 2
     category = "epigenetics_and_geometry"
@@ -41,5 +41,5 @@ class ATACEvaluator(FeatureEvaluator):
 
             return extracted
         except Exception as e:
-            log.warning("atac_extraction_failed", error=str(e))
+            log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}

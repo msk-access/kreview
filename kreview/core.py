@@ -266,10 +266,13 @@ def load_clinical_patient(path: str | Path) -> pd.DataFrame:
 
 # %% ../nbs/00_core.ipynb 5
 def get_duckdb_conn() -> duckdb.DuckDBPyConnection:
-    """Create a thread-local DuckDB connection with optimal settings."""
+    """Create a thread-local DuckDB connection with optimal settings.
+    Configured natively for 4 threads and 4GB memory to prevent HPC OOMs.
+    """
     conn = duckdb.connect()
     conn.execute("SET threads TO 4")
     conn.execute("SET memory_limit = '4GB'")
+    log.debug("duckdb_conn_initialized", threads=4, memory_limit="4GB")
     return conn
 
 
@@ -393,17 +396,34 @@ def load_feature_cohort(
     df_list = []
     for i in range(0, len(file_paths), chunk_size):
         chunk = file_paths[i : i + chunk_size]
-        try:
-            df_chunk = conn.execute(query, [chunk]).df()
-            df_list.append(df_chunk)
-        except Exception as e:
-            log.error(
-                "feature_cohort_load_failed",
-                feature=feature_suffix,
-                error=str(e),
-                chunk_start=i,
-            )
-            return pd.DataFrame()  # Fail gracefully if any chunk drops
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            try:
+                df_chunk = conn.execute(query, [chunk]).df()
+                df_list.append(df_chunk)
+                break
+            except Exception as e:
+                err_str = str(e)
+                if attempt < max_retries - 1:
+                    log.warning(
+                        "duckdb_fuse_retry",
+                        feature=feature_suffix,
+                        attempt=attempt + 1,
+                        chunk_start=i,
+                        error=err_str,
+                    )
+                    time.sleep(
+                        2**attempt
+                    )  # Exponential backoff for MountainDuck FUSE timeouts
+                else:
+                    log.error(
+                        "feature_cohort_load_failed",
+                        feature=feature_suffix,
+                        error=err_str,
+                        chunk_start=i,
+                    )
+                    return pd.DataFrame()  # Permanent failure
 
     df = pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
 

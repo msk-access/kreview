@@ -10,7 +10,7 @@ log = structlog.get_logger()
 
 
 # %% auto 0
-__all__ = ["log", "EndMotifEvaluator"]
+__all__ = ["log", "EndMotifOnTargetEvaluator"]
 
 
 # %% ../../nbs/features/21_endmotif.ipynb 2
@@ -26,10 +26,10 @@ def _parse_array(s):
         return []
 
 
-class EndMotifEvaluator(FeatureEvaluator):
+class EndMotifOnTargetEvaluator(FeatureEvaluator):
     """Extracts 4-mer fragment end frequencies."""
 
-    name = "EndMotif"
+    name = "EndMotifOnTarget"
     source_file = ".EndMotif.ontarget.parquet"
     tier = 2
     category = "epigenetics_and_geometry"
@@ -47,9 +47,9 @@ class EndMotifEvaluator(FeatureEvaluator):
                 for row in df.to_dict("records"):
                     m = str(row["Motif"])
                     if pd.notna(row["Frequency"]):
-                        extracted[f"endmotif_{m}"] = float(row["Frequency"])
+                        extracted[f"endmotif_ontarget_{m}"] = float(row["Frequency"])
 
             return extracted
         except Exception as e:
-            log.warning("endmotif_extraction_failed", error=str(e))
+            log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}

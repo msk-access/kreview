@@ -150,13 +150,23 @@ d = {
                 "kreview/features/atac.py",
             ),
         },
+        "kreview.features.atac_genomewide": {
+            "kreview.features.atac_genomewide.ATACEvaluator": (
+                "features/atac_genomewide.html#atacevaluator",
+                "kreview/features/atac_genomewide.py",
+            ),
+            "kreview.features.atac_genomewide.ATACEvaluator.extract": (
+                "features/atac_genomewide.html#atacevaluator.extract",
+                "kreview/features/atac_genomewide.py",
+            ),
+        },
         "kreview.features.breakpoint_motif": {
-            "kreview.features.breakpoint_motif.BreakPointMotifEvaluator": (
-                "features/breakpoint_motif.html#breakpointmotifevaluator",
+            "kreview.features.breakpoint_motif.BreakPointMotifOnTargetEvaluator": (
+                "features/breakpoint_motif.html#breakpointmotifontargetevaluator",
                 "kreview/features/breakpoint_motif.py",
             ),
-            "kreview.features.breakpoint_motif.BreakPointMotifEvaluator.extract": (
-                "features/breakpoint_motif.html#breakpointmotifevaluator.extract",
+            "kreview.features.breakpoint_motif.BreakPointMotifOnTargetEvaluator.extract": (
+                "features/breakpoint_motif.html#breakpointmotifontargetevaluator.extract",
                 "kreview/features/breakpoint_motif.py",
             ),
             "kreview.features.breakpoint_motif._parse_array": (
@@ -164,13 +174,27 @@ d = {
                 "kreview/features/breakpoint_motif.py",
             ),
         },
+        "kreview.features.breakpoint_motif_genomewide": {
+            "kreview.features.breakpoint_motif_genomewide.BreakPointMotifGenomewideEvaluator": (
+                "features/breakpoint_motif_genomewide.html#breakpointmotifgenomewideevaluator",
+                "kreview/features/breakpoint_motif_genomewide.py",
+            ),
+            "kreview.features.breakpoint_motif_genomewide.BreakPointMotifGenomewideEvaluator.extract": (
+                "features/breakpoint_motif_genomewide.html#breakpointmotifgenomewideevaluator.extract",
+                "kreview/features/breakpoint_motif_genomewide.py",
+            ),
+            "kreview.features.breakpoint_motif_genomewide._parse_array": (
+                "features/breakpoint_motif_genomewide.html#_parse_array",
+                "kreview/features/breakpoint_motif_genomewide.py",
+            ),
+        },
         "kreview.features.endmotif": {
-            "kreview.features.endmotif.EndMotifEvaluator": (
-                "features/endmotif.html#endmotifevaluator",
+            "kreview.features.endmotif.EndMotifOnTargetEvaluator": (
+                "features/endmotif.html#endmotifontargetevaluator",
                 "kreview/features/endmotif.py",
             ),
-            "kreview.features.endmotif.EndMotifEvaluator.extract": (
-                "features/endmotif.html#endmotifevaluator.extract",
+            "kreview.features.endmotif.EndMotifOnTargetEvaluator.extract": (
+                "features/endmotif.html#endmotifontargetevaluator.extract",
                 "kreview/features/endmotif.py",
             ),
             "kreview.features.endmotif._parse_array": (
@@ -192,14 +216,38 @@ d = {
                 "kreview/features/endmotif_1mer.py",
             ),
         },
+        "kreview.features.endmotif_genomewide": {
+            "kreview.features.endmotif_genomewide.EndMotifGenomewideEvaluator": (
+                "features/endmotif_genomewide.html#endmotifgenomewideevaluator",
+                "kreview/features/endmotif_genomewide.py",
+            ),
+            "kreview.features.endmotif_genomewide.EndMotifGenomewideEvaluator.extract": (
+                "features/endmotif_genomewide.html#endmotifgenomewideevaluator.extract",
+                "kreview/features/endmotif_genomewide.py",
+            ),
+            "kreview.features.endmotif_genomewide._parse_array": (
+                "features/endmotif_genomewide.html#_parse_array",
+                "kreview/features/endmotif_genomewide.py",
+            ),
+        },
         "kreview.features.fsc_binlevel": {
-            "kreview.features.fsc_binlevel.FSCBinEvaluator": (
-                "features/fsc_binlevel.html#fscbinevaluator",
+            "kreview.features.fsc_binlevel.FSCOnTargetEvaluator": (
+                "features/fsc_binlevel.html#fscontargetevaluator",
                 "kreview/features/fsc_binlevel.py",
             ),
-            "kreview.features.fsc_binlevel.FSCBinEvaluator.extract": (
-                "features/fsc_binlevel.html#fscbinevaluator.extract",
+            "kreview.features.fsc_binlevel.FSCOnTargetEvaluator.extract": (
+                "features/fsc_binlevel.html#fscontargetevaluator.extract",
                 "kreview/features/fsc_binlevel.py",
+            ),
+        },
+        "kreview.features.fsc_binlevel_genomewide": {
+            "kreview.features.fsc_binlevel_genomewide.FSCGenomewideEvaluator": (
+                "features/fsc_genomewide.html#fscgenomewideevaluator",
+                "kreview/features/fsc_binlevel_genomewide.py",
+            ),
+            "kreview.features.fsc_binlevel_genomewide.FSCGenomewideEvaluator.extract": (
+                "features/fsc_genomewide.html#fscgenomewideevaluator.extract",
+                "kreview/features/fsc_binlevel_genomewide.py",
             ),
         },
         "kreview.features.fsc_gene": {
@@ -232,6 +280,16 @@ d = {
                 "kreview/features/fsd.py",
             ),
         },
+        "kreview.features.fsd_genomewide": {
+            "kreview.features.fsd_genomewide.FSDEvaluator": (
+                "features/fsd_genomewide.html#fsdevaluator",
+                "kreview/features/fsd_genomewide.py",
+            ),
+            "kreview.features.fsd_genomewide.FSDEvaluator.extract": (
+                "features/fsd_genomewide.html#fsdevaluator.extract",
+                "kreview/features/fsd_genomewide.py",
+            ),
+        },
         "kreview.features.fsr": {
             "kreview.features.fsr.FSREvaluator": (
                 "features/fsr.html#fsrevaluator",
@@ -240,6 +298,16 @@ d = {
             "kreview.features.fsr.FSREvaluator.extract": (
                 "features/fsr.html#fsrevaluator.extract",
                 "kreview/features/fsr.py",
+            ),
+        },
+        "kreview.features.fsr_genomewide": {
+            "kreview.features.fsr_genomewide.FSREvaluator": (
+                "features/fsr_genomewide.html#fsrevaluator",
+                "kreview/features/fsr_genomewide.py",
+            ),
+            "kreview.features.fsr_genomewide.FSREvaluator.extract": (
+                "features/fsr_genomewide.html#fsrevaluator.extract",
+                "kreview/features/fsr_genomewide.py",
             ),
         },
         "kreview.features.mds": {
@@ -272,6 +340,16 @@ d = {
                 "kreview/features/mds_gene.py",
             ),
         },
+        "kreview.features.mds_genomewide": {
+            "kreview.features.mds_genomewide.MDSEvaluator": (
+                "features/mds_genomewide.html#mdsevaluator",
+                "kreview/features/mds_genomewide.py",
+            ),
+            "kreview.features.mds_genomewide.MDSEvaluator.extract": (
+                "features/mds_genomewide.html#mdsevaluator.extract",
+                "kreview/features/mds_genomewide.py",
+            ),
+        },
         "kreview.features.ocf_offtarget": {
             "kreview.features.ocf_offtarget.OCFOfftargetEvaluator": (
                 "features/ocf_offtarget.html#ocfofftargetevaluator",
@@ -300,6 +378,16 @@ d = {
             "kreview.features.tfbs.TFBSEvaluator.extract": (
                 "features/tfbs.html#tfbsevaluator.extract",
                 "kreview/features/tfbs.py",
+            ),
+        },
+        "kreview.features.tfbs_genomewide": {
+            "kreview.features.tfbs_genomewide.TFBSEvaluator": (
+                "features/tfbs_genomewide.html#tfbsevaluator",
+                "kreview/features/tfbs_genomewide.py",
+            ),
+            "kreview.features.tfbs_genomewide.TFBSEvaluator.extract": (
+                "features/tfbs_genomewide.html#tfbsevaluator.extract",
+                "kreview/features/tfbs_genomewide.py",
             ),
         },
         "kreview.features.wps_background": {

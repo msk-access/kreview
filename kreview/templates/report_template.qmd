@@ -436,30 +436,95 @@ if mres is not None and "cancer_type_stats" in mres:
     if ct_stats:
         ct_df = pd.DataFrame(ct_stats)
         if "rf_sensitivity" in ct_df.columns:
-            # Drop purely None
-            ct_df = ct_df.dropna(subset=["rf_sensitivity"])
-            if not ct_df.empty:
-                ct_df = ct_df.sort_values(by="rf_sensitivity", ascending=True)
+            melt_cols = ["cancer_type", "n_positives", "n_samples"]
+            val_vars = ["rf_sensitivity"]
+            if "xgb_sensitivity" in ct_df.columns:
+                val_vars.append("xgb_sensitivity")
+                
+            long_df = pd.melt(ct_df, id_vars=melt_cols, value_vars=val_vars, var_name="Model", value_name="Sensitivity")
+            long_df["Model"] = long_df["Model"].map({"rf_sensitivity": "Random Forest", "xgb_sensitivity": "XGBoost"})
+            long_df = long_df.dropna(subset=["Sensitivity"])
+            
+            if not long_df.empty:
+                # Sort primarily by RF
+                sort_order = ct_df.sort_values(by="rf_sensitivity", ascending=True)["cancer_type"].tolist()
                 fig_ct = px.bar(
-                    ct_df, x="rf_sensitivity", y="cancer_type", orientation="h",
-                    color="rf_sensitivity",
+                    long_df, x="Sensitivity", y="cancer_type", color="Model", orientation="h",
+                    barmode="group",
                     hover_data=["n_positives", "n_samples"],
-                    color_continuous_scale="Viridis",
-                    title="Sensitivity by Cancer Subgroup (RF)"
+                    category_orders={"cancer_type": sort_order},
+                    color_discrete_map={"Random Forest": "#E85D75", "XGBoost": "#9C27B0"},
+                    title="Sensitivity by Cancer Subgroup"
                 )
                 _ = fig_ct.update_layout(
                     **LAYOUT_DEFAULTS,
-                    xaxis_title="Random Forest Sensitivity (Recall)",
+                    xaxis_title="Sensitivity (Recall)",
                     yaxis_title="",
-                    height=600
+                    height=600,
+                    legend_title=""
                 )
                 show_plotly(fig_ct)
             else:
                 display(Markdown("> No valid sensitivity calculable per subgroup."))
         else:
-             display(Markdown("> Subgroup missing RF sensitivity."))
+             display(Markdown("> Subgroup missing sensitivity measurements."))
     else:
         display(Markdown("> Cancer Yield array is empty."))
+```
+
+
+
+### Assay Yield
+
+::: {.callout-note collapse="true" icon="false"}
+## 🧪 Methodological Context: Assay Variations (Click to Expand)
+This metric natively stratifies the isolated Random Forest Sensitivity solely over differing targeted sequencing extraction assays (e.g. MSK-ACCESS v1 vs v2).
+Use this graph to strictly eliminate technical coverage bias.
+:::
+
+```{python}
+#| echo: false
+if mres is not None and "assay_stats" in mres:
+    a_stats = mres["assay_stats"]
+    if a_stats:
+        a_df = pd.DataFrame(a_stats)
+        if "rf_sensitivity" in a_df.columns:
+            melt_cols = ["assay", "n_positives", "n_samples"]
+            val_vars = ["rf_sensitivity"]
+            if "xgb_sensitivity" in a_df.columns:
+                val_vars.append("xgb_sensitivity")
+                
+            long_df = pd.melt(a_df, id_vars=melt_cols, value_vars=val_vars, var_name="Model", value_name="Sensitivity")
+            long_df["Model"] = long_df["Model"].map({"rf_sensitivity": "Random Forest", "xgb_sensitivity": "XGBoost"})
+            long_df = long_df.dropna(subset=["Sensitivity"])
+            
+            if not long_df.empty:
+                # Sort primarily by RF
+                sort_order = a_df.sort_values(by="rf_sensitivity", ascending=True)["assay"].tolist()
+                fig_a = px.bar(
+                    long_df, x="Sensitivity", y="assay", color="Model", orientation="h",
+                    barmode="group",
+                    hover_data=["n_positives", "n_samples"],
+                    category_orders={"assay": sort_order},
+                    color_discrete_map={"Random Forest": "#E85D75", "XGBoost": "#9C27B0"},
+                    title="Sensitivity by Assay"
+                )
+                _ = fig_a.update_layout(
+                    **LAYOUT_DEFAULTS,
+                    xaxis_title="Sensitivity (Recall)",
+                    yaxis_title="",
+                    height=450,
+                    legend_title=""
+                )
+                show_plotly(fig_a)
+            else:
+                display(Markdown("> No valid sensitivity calculable per assay."))
+        else:
+             display(Markdown("> Assay stats missing sensitivity measurements."))
+    else:
+        display(Markdown("> No assay subgroup statistics present."))
+else:
+    display(Markdown("> Assay metrics not evaluated by engine."))
 ```
 
 ### Classification Report
@@ -508,161 +573,164 @@ Markdown(f"Features mapped across Models:\n\n{feat_list}")
 
 ## Row {.tabset}
 
+
+```{python}
+#| echo: false
+# SHAP Helper functions
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
+    if model is None or shap_df_samp is None:
+        return Markdown("> Model not available.")
+    try:    
+        exp = shap.Explainer(model, X_sh)
+        sh_vals = exp(X_sh, check_additivity=False)
+        sv = sh_vals[..., 1] if len(sh_vals.shape) > 2 else sh_vals
+        
+        feature_names = X_sh.columns.tolist()
+        vals = np.abs(sv.values).mean(axis=0)
+        top_idx = np.argsort(vals)[-10:]
+        top_features = [feature_names[i] for i in top_idx]
+        
+        sample_labels = shap_df_samp["label"].values
+        s_ids = shap_df_samp["sample_id"].values if "sample_id" in shap_df_samp.columns else shap_df_samp.index.values
+        
+        records = []
+        for rank, i in enumerate(top_idx):
+            feature = feature_names[i]
+            for j in range(len(sv.values)):
+                records.append({
+                    'Feature': feature,
+                    'Feature_Idx': rank,
+                    'SHAP Impact': float(sv.values[j, i]),
+                    'Biomarker Value': float(sv.data[j, i]) if sv.data is not None else 0.0,
+                    'True Label': sample_labels[j],
+                    'Sample ID': s_ids[j]
+                })
+        
+        df_sv = pd.DataFrame(records)
+        df_sv['Feature Value'] = df_sv.groupby('Feature')['Biomarker Value'].transform(lambda x: (x - x.min()) / (x.max() - x.min() + 1e-8))
+        df_sv['Y'] = df_sv['Feature_Idx'] + np.random.uniform(-0.25, 0.25, size=len(df_sv))
+        
+        fig = px.scatter(df_sv, x='SHAP Impact', y='Y', color='Feature Value', 
+                       hover_data=['Sample ID', 'True Label', 'Feature', 'Biomarker Value'],
+                       color_continuous_scale=[[0, '#1E88E5'], [0.5, '#9C27B0'], [1, '#E53935']])
+        fig.update_traces(marker=dict(size=4, opacity=0.8, line=dict(width=0)))
+        fig.update_layout(
+            title=f"<b>{model_title}</b>: SHAP Importance", title_x=0.5,
+            plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=500,
+            xaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
+            yaxis=dict(showgrid=False, title='', tickmode='array', tickvals=list(range(len(top_features))), ticktext=top_features),
+            coloraxis_colorbar=dict(title=""), margin=dict(l=10, r=10, t=40, b=20)
+        )
+        show_plotly(fig)
+        return sv, top_idx, sample_labels, s_ids
+    except Exception as e:
+        return Markdown(f"> Error computing SHAP: {e}")
+
+def plot_shap_dependence(sv, top_idx, feature_names, sample_labels, s_ids, model_title=""):
+    if sv is None: return
+    feat1 = feature_names[top_idx[-1]]
+    top_2_idx = top_idx[-2] if len(top_idx) > 1 else top_idx[-1]
+    feat2 = feature_names[top_2_idx]
+    
+    df_dep = pd.DataFrame({
+        feat1: sv.data[:, top_idx[-1]], 'SHAP Impact': sv.values[:, top_idx[-1]],
+        feat2: sv.data[:, top_2_idx], 'True Label': sample_labels, 'Sample ID': s_ids
+    })
+    fig = px.scatter(df_dep, x=feat1, y='SHAP Impact', color=feat2, hover_data=['Sample ID', 'True Label'],
+                     color_continuous_scale=[[0, '#1E88E5'], [0.5, '#9C27B0'], [1, '#E53935']])
+    fig.update_traces(marker=dict(size=5, opacity=0.8, line=dict(width=0)))
+    fig.update_layout(
+        title=f"<b>{model_title}</b><br>Interaction: {feat1} vs {feat2}", title_x=0.5,
+        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=450,
+        xaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
+        yaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
+    show_plotly(fig)
+
+def plot_shap_waterfall(sv, probs, feature_names, sample_labels, model_title=""):
+    if sv is None: return
+    df_tracker = pd.DataFrame({'True Label': sample_labels, 'Probability': probs})
+    
+    tp_mask = df_tracker['True Label'] == "True ctDNA+"
+    best_tp_idx = df_tracker[tp_mask]['Probability'].idxmax() if tp_mask.sum() > 0 else 0
+    
+    fp_mask = df_tracker['True Label'] == "Healthy Normal"
+    worst_fp_idx = df_tracker[fp_mask]['Probability'].idxmax() if fp_mask.sum() > 0 else 0
+    
+    base_val = sv.base_values[0] if isinstance(sv.base_values, np.ndarray) and sv.base_values.size>0 else (sv.base_values if np.isscalar(sv.base_values) else 0)
+    
+    fig = make_subplots(rows=1, cols=2, subplot_titles=(
+        f"<b>True Positive</b> (Prob: {probs[best_tp_idx]:.2f})",
+        f"<b>False Positive</b> (Prob: {probs[worst_fp_idx]:.2f})"
+    ))
+    
+    for row_idx, s_idx in enumerate([best_tp_idx, worst_fp_idx]):
+        shap_vals = sv.values[s_idx]
+        order = np.argsort(np.abs(shap_vals))[-10:] 
+        x = ["Baseline"] + [feature_names[i] for i in order] + ["Final"]
+        y = [base_val] + [shap_vals[i] for i in order] + [base_val + np.sum(shap_vals)]
+        
+        hover_text = [f"Baseline: {base_val:.2f}"]
+        for i in order:
+            feat_val = sv.data[s_idx, i] if sv.data is not None else 0
+            hover_text.append(f"Val: {feat_val:.3f}<br>Push: {shap_vals[i]:+.3f}")
+        hover_text.append(f"Final: {y[-1]:.2f}")
+        
+        measure = ["absolute"] + ["relative"] * len(order) + ["total"]
+        waterfall_trace = go.Waterfall(
+            orientation="v", measure=measure, x=x, y=y, textposition="none", hovertext=hover_text, hoverinfo="x+text",
+            decreasing={"marker":{"color":"#1E88E5"}}, increasing={"marker":{"color":"#E53935"}}, totals={"marker":{"color":"#9C27B0"}}
+        )
+        fig.add_trace(waterfall_trace, row=1, col=row_idx+1)
+        
+    fig.update_layout(
+        title=f"<b>{model_title}</b>: Top Confidence Traces", title_x=0.5,
+        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=450, showlegend=False, margin=dict(l=20, r=20, t=60, b=20)
+    )
+    fig.update_xaxes(showgrid=False, tickangle=-45)
+    fig.update_yaxes(showgrid=True, gridcolor='#2e3440')
+    show_plotly(fig)
+```
+
 ### Biomarker Thresholds (Beeswarm)
 
 ```{python}
 #| echo: false
-if rf_model is not None and shap_df_sample is not None:
-    import plotly.express as px
-    explainer = shap.Explainer(rf_model)
-    shap_values = explainer(X_shap)
-    sv = shap_values[..., 1] if len(shap_values.shape) > 2 else shap_values
+rf_sv, rf_top, rf_sl, rf_sid = compute_shap_and_plot_beeswarm(rf_model, X_shap, shap_df_sample, "Random Forest") if rf_model is not None else (None, None, None, None)
+```
 
-    feature_names = X_shap.columns.tolist()
-    vals = np.abs(sv.values).mean(axis=0)
-    top_10_idx = np.argsort(vals)[-10:]
-    top_features = [feature_names[i] for i in top_10_idx]
-    
-    sample_labels = shap_df_sample["label"].values
-    sample_ids = shap_df_sample["sample_id"].values if "sample_id" in shap_df_sample.columns else shap_df_sample.index.values
-    
-    records = []
-    for rank, i in enumerate(top_10_idx):
-        feature = feature_names[i]
-        for j in range(len(sv.values)):
-            records.append({
-                'Feature': feature,
-                'Feature_Idx': rank,
-                'SHAP Impact': float(sv.values[j, i]),
-                'Biomarker Value': float(sv.data[j, i]) if sv.data is not None else 0.0,
-                'True Label': sample_labels[j],
-                'Sample ID': sample_ids[j]
-            })
-    
-    df_sv = pd.DataFrame(records)
-    df_sv['Feature Value'] = df_sv.groupby('Feature')['Biomarker Value'].transform(
-        lambda x: (x - x.min()) / (x.max() - x.min() + 1e-8)
-    )
-    df_sv['Y'] = df_sv['Feature_Idx'] + np.random.uniform(-0.25, 0.25, size=len(df_sv))
-
-    fig_shap = px.scatter(df_sv, x='SHAP Impact', y='Y', color='Feature Value', 
-                   hover_data=['Sample ID', 'True Label', 'Feature', 'Biomarker Value'],
-                   color_continuous_scale=[[0, '#1E88E5'], [0.5, '#9C27B0'], [1, '#E53935']])
-
-    _ = fig_shap.update_traces(marker=dict(size=5, opacity=0.8, line=dict(width=0)))
-    _ = fig_shap.update_layout(
-        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23',
-        font_color='#e0e6ed',
-        height=500,
-        xaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
-        yaxis=dict(showgrid=False, title='', tickmode='array', 
-                   tickvals=list(range(len(top_features))), ticktext=top_features),
-        coloraxis_colorbar=dict(title="Feature Value<br>(High/Low)", tickvals=[0, 1], ticktext=["Low", "High"]),
-        margin=dict(l=10, r=10, t=30, b=20)
-    )
-    show_plotly(fig_shap)
-else:
-    Markdown("> SHAP model objects not found. Run `kreview run`.")
+```{python}
+#| echo: false
+xgb_sv, xgb_top, xgb_sl, xgb_sid = compute_shap_and_plot_beeswarm(xgb_model, X_shap, shap_df_sample, "XGBoost") if xgb_model is not None else (None, None, None, None)
 ```
 
 ### Top Feature Dependence
 
 ```{python}
 #| echo: false
-if rf_model is not None and shap_df_sample is not None and top_feats:
-    import plotly.express as px
-    
-    feat1 = feature_names[top_10_idx[-1]]
-    top_2_idx = top_10_idx[-2] if len(top_10_idx) > 1 else top_10_idx[-1]
-    feat2 = feature_names[top_2_idx]
-    
-    df_dep = pd.DataFrame({
-        feat1: sv.data[:, top_10_idx[-1]],
-        'SHAP Impact': sv.values[:, top_10_idx[-1]],
-        feat2: sv.data[:, top_2_idx],
-        'True Label': sample_labels,
-        'Sample ID': sample_ids
-    })
-    
-    fig_dep = px.scatter(df_dep, x=feat1, y='SHAP Impact', color=feat2,
-                         hover_data=['Sample ID', 'True Label'],
-                         color_continuous_scale=[[0, '#1E88E5'], [0.5, '#9C27B0'], [1, '#E53935']],
-                         title=f"Interaction Effect: {feat1} vs {feat2}")
-    
-    _ = fig_dep.update_traces(marker=dict(size=6, opacity=0.8, line=dict(width=0)))
-    _ = fig_dep.update_layout(
-        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=500,
-        xaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
-        yaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
-        margin=dict(l=20, r=20, t=60, b=40)
-    )
-    show_plotly(fig_dep)
+plot_shap_dependence(rf_sv, rf_top, X_shap.columns.tolist(), rf_sl, rf_sid, "Random Forest") if rf_sv is not None else None
+```
+
+```{python}
+#| echo: false
+plot_shap_dependence(xgb_sv, xgb_top, X_shap.columns.tolist(), xgb_sl, xgb_sid, "XGBoost") if xgb_sv is not None else None
 ```
 
 ### Error Post-Mortem (Waterfalls)
 
 ```{python}
 #| echo: false
-if rf_model is not None and shap_df_sample is not None:
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    
-    probs = rf_preds
-        
-    df_waterfall_tracker = pd.DataFrame({
-        'True Label': sample_labels,
-        'Probability': probs
-    })
-    
-    tp_mask = df_waterfall_tracker['True Label'] == "True ctDNA+"
-    best_tp_idx = df_waterfall_tracker[tp_mask]['Probability'].idxmax() if tp_mask.sum() > 0 else 0
-        
-    fp_mask = df_waterfall_tracker['True Label'] == "Healthy Normal"
-    worst_fp_idx = df_waterfall_tracker[fp_mask]['Probability'].idxmax() if fp_mask.sum() > 0 else 0
+plot_shap_waterfall(rf_sv, rf_preds, X_shap.columns.tolist(), rf_sl, "Random Forest") if rf_sv is not None else None
+```
 
-    base_val = sv.base_values[0]
-
-    fig_waterfall = make_subplots(rows=1, cols=2, subplot_titles=(
-        f"Highest Conf. True Positive (Prob: {probs[best_tp_idx]:.2f})", 
-        f"Highest Conf. False Positive (Prob: {probs[worst_fp_idx]:.2f})"
-    ))
-
-    for col_idx, s_idx in enumerate([best_tp_idx, worst_fp_idx]):
-        shap_vals = sv.values[s_idx]
-        order = np.argsort(np.abs(shap_vals))[-10:] 
-        
-        x = ["Baseline"] + [feature_names[i] for i in order] + ["Final"]
-        y = [base_val] + [shap_vals[i] for i in order] + [base_val + np.sum(shap_vals)]
-        
-        hover_text = [f"Baseline Impact: {base_val:.2f}"]
-        for i in order:
-            feat_val = sv.data[s_idx, i] if sv.data is not None else 0
-            hover_text.append(f"Patient Value: {feat_val:.3f}<br>SHAP Push: {shap_vals[i]:+.3f}")
-        hover_text.append(f"Final Value: {y[-1]:.2f}")
-
-        measure = ["absolute"] + ["relative"] * len(order) + ["total"]
-        
-        waterfall_trace = go.Waterfall(
-            orientation = "v",
-            measure = measure,
-            x = x, y = y,
-            textposition = "none",
-            hovertext = hover_text,
-            hoverinfo = "x+text",
-            decreasing = {"marker":{"color":"#1E88E5"}},
-            increasing = {"marker":{"color":"#E53935"}},
-            totals = {"marker":{"color":"#9C27B0"}}
-        )
-        _ = fig_waterfall.add_trace(waterfall_trace, row=1, col=col_idx+1)
-
-    _ = fig_waterfall.update_layout(
-        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=600,
-        showlegend=False, margin=dict(l=10, r=10, t=60, b=20)
-    )
-    _ = fig_waterfall.update_xaxes(showgrid=False, tickangle=-45)
-    _ = fig_waterfall.update_yaxes(showgrid=True, gridcolor='#2e3440')
-
-    show_plotly(fig_waterfall)
+```{python}
+#| echo: false
+plot_shap_waterfall(xgb_sv, xgb_preds, X_shap.columns.tolist(), xgb_sl, "XGBoost") if xgb_sv is not None else None
 ```
 
 

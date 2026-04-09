@@ -60,5 +60,5 @@ class WPSGenomeEvaluator(FeatureEvaluator):
 
             return extracted
         except Exception as e:
-            log.warning("wps_genomewide_extraction_failed", error=str(e))
+            log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}

@@ -55,5 +55,5 @@ class FSCRegionsEvaluator(FeatureEvaluator):
 
             return extracted
         except Exception as e:
-            log.warning("fsc_regions_extraction_failed", error=str(e))
+            log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
