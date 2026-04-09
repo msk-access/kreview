@@ -11,6 +11,15 @@ RUN pip install --upgrade pip build && \
 # Stage 2: Runtime
 FROM python:3.12-slim
 
+# OCI Labels for GitHub Container Registry
+LABEL org.opencontainers.image.title="kreview"
+LABEL org.opencontainers.image.description="Evaluation Framework for Fragmentomics Features"
+LABEL org.opencontainers.image.url="https://github.com/msk-access/kreview"
+LABEL org.opencontainers.image.source="https://github.com/msk-access/kreview"
+LABEL org.opencontainers.image.vendor="MSK-ACCESS"
+LABEL org.opencontainers.image.licenses="AGPL-3.0"
+LABEL org.opencontainers.image.authors="Ronak Shah <shahr2@mskcc.org>"
+
 WORKDIR /app
 
 # Copy wheel from builder and install
@@ -29,4 +38,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Ensure output directories exist
 RUN mkdir -p /app/data /app/results
 
-CMD ["kreview", "--help"]
+ENTRYPOINT ["kreview"]
+CMD ["--help"]
