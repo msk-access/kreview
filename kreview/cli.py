@@ -167,6 +167,8 @@ def run(
     workers: int = typer.Option(4, help="Total processes"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     skip_report: bool = typer.Option(False, help="Skip HTML report generation"),
+    cv_folds: int = typer.Option(5, "--cv-folds", help="Number of cross-validation folds (3-20, default 5)"),
+    impute_strategy: str = typer.Option("median", "--impute-strategy", help="Imputation strategy for missing values: median, mean, or zero"),
     export_duckdb: bool = typer.Option(False, "--export-duckdb", help="Export a persistent duckdb data lake containing all feature matrices"),
     chunk_size: int = typer.Option(500, "--chunk-size", help="Batch size for DuckDB file loading over SFTP network mounts"),
 ):
@@ -174,12 +176,7 @@ def run(
     from kreview.core import Paths, LabelConfig, load_feature_cohort
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
-    if cv_folds < 3 or cv_folds > 20:
-        _echo("ERROR: --cv-folds must be between 3 and 20")
-        raise typer.Exit(code=1)
-    if impute_strategy not in ["median", "mean", "zero"]:
-        _echo("ERROR: --impute-strategy must be median, mean, or zero")
-        raise typer.Exit(code=1)
+
 
     from kreview.eval_engine import evaluate_feature, single_feature_model
     import time
@@ -188,6 +185,12 @@ def run(
 
     def _echo(msg):
         print(msg, flush=True)
+    if cv_folds < 3 or cv_folds > 20:
+        _echo("ERROR: --cv-folds must be between 3 and 20")
+        raise typer.Exit(code=1)
+    if impute_strategy not in ["median", "mean", "zero"]:
+        _echo("ERROR: --impute-strategy must be median, mean, or zero")
+        raise typer.Exit(code=1)
 
     _echo(f"=== kreview run (verbose={verbose}, workers={workers}) ===")
 
