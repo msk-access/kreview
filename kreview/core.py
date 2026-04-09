@@ -16,44 +16,81 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'IMPACT_PANELS', 'ACCESS_PANELS', 'VARIANT_KEY_COLS', 'MAF_USECOLS', 'LabelConfig', 'Paths', 'load_samplesheet',
-           'get_sample_ids', 'load_maf', 'load_sv', 'load_cna', 'load_clinical_sample', 'load_clinical_patient',
-           'clear_cbioportal_caches', 'get_duckdb_conn', 'discover_available_samples', 'load_feature_cohort',
-           'load_metadata_cohort', 'load_sample_feature', 'load_sample_metadata', 'make_variant_key', 'EvalRun']
+__all__ = [
+    "log",
+    "IMPACT_PANELS",
+    "ACCESS_PANELS",
+    "VARIANT_KEY_COLS",
+    "MAF_USECOLS",
+    "LabelConfig",
+    "Paths",
+    "load_samplesheet",
+    "get_sample_ids",
+    "load_maf",
+    "load_sv",
+    "load_cna",
+    "load_clinical_sample",
+    "load_clinical_patient",
+    "clear_cbioportal_caches",
+    "get_duckdb_conn",
+    "discover_available_samples",
+    "load_feature_cohort",
+    "load_metadata_cohort",
+    "load_sample_feature",
+    "load_sample_metadata",
+    "make_variant_key",
+    "EvalRun",
+]
 
 # %% ../nbs/00_core.ipynb #80f7c27c
 IMPACT_PANELS = ("IMPACT341", "IMPACT410", "IMPACT468", "IMPACT505")
 ACCESS_PANELS = ("ACCESS129", "ACCESS146")
 
 VARIANT_KEY_COLS = [
-    "Chromosome", "Start_Position", "End_Position",
-    "Reference_Allele", "Tumor_Seq_Allele2",
+    "Chromosome",
+    "Start_Position",
+    "End_Position",
+    "Reference_Allele",
+    "Tumor_Seq_Allele2",
 ]
 
 MAF_USECOLS = [
-    "Hugo_Symbol", "Tumor_Sample_Barcode", "Mutation_Status",
-    "Variant_Classification", "Chromosome", "Start_Position",
-    "End_Position", "Reference_Allele", "Tumor_Seq_Allele2",
-    "t_ref_count", "t_alt_count",
+    "Hugo_Symbol",
+    "Tumor_Sample_Barcode",
+    "Mutation_Status",
+    "Variant_Classification",
+    "Chromosome",
+    "Start_Position",
+    "End_Position",
+    "Reference_Allele",
+    "Tumor_Seq_Allele2",
+    "t_ref_count",
+    "t_alt_count",
 ]
+
 
 @dataclass
 class LabelConfig:
     """Configuration for the ctDNA labeling engine."""
-    min_vaf: float = 0.01            # VAF threshold for Possible ctDNA+
-    min_variants: int = 1            # Minimum # somatic SNVs passing VAF threshold
-    min_fragments: int = 2000          # Min fragments for Depth QC
+
+    min_vaf: float = 0.01  # VAF threshold for Possible ctDNA+
+    min_variants: int = 1  # Minimum # somatic SNVs passing VAF threshold
+    min_fragments: int = 2000  # Min fragments for Depth QC
     access_panels: tuple[str, ...] = ACCESS_PANELS
     impact_panels: tuple[str, ...] = IMPACT_PANELS
 
     def __repr__(self) -> str:
-        return (f"LabelConfig(min_vaf={self.min_vaf}, "
-                f"min_variants={self.min_variants}, "
-                f"panels={self.access_panels})")
+        return (
+            f"LabelConfig(min_vaf={self.min_vaf}, "
+            f"min_variants={self.min_variants}, "
+            f"panels={self.access_panels})"
+        )
+
 
 @dataclass
 class Paths:
     """All input paths for the labeling pipeline."""
+
     cancer_samplesheet: Path
     healthy_xs1_samplesheet: Path
     healthy_xs2_samplesheet: Path
@@ -66,7 +103,7 @@ class Paths:
         self.healthy_xs1_samplesheet = Path(self.healthy_xs1_samplesheet)
         self.healthy_xs2_samplesheet = Path(self.healthy_xs2_samplesheet)
         self.cbioportal_dir = Path(self.cbioportal_dir)
-        
+
         expanded = []
         for d in self.krewlyzer_dirs:
             p = Path(str(d).strip().strip('"').strip("'"))
@@ -117,11 +154,14 @@ def load_samplesheet(path: str | Path) -> pd.DataFrame:
     log.info("samplesheet_loaded", path=str(path), n_samples=len(df))
     return df
 
+
 def get_sample_ids(samplesheet_path: str | Path) -> set[str]:
     """Extract unique sample IDs from a samplesheet."""
     df = load_samplesheet(samplesheet_path)
     if "sample" not in df.columns:
-        log.error("invalid_samplesheet", path=str(samplesheet_path), columns=list(df.columns))
+        log.error(
+            "invalid_samplesheet", path=str(samplesheet_path), columns=list(df.columns)
+        )
         raise KeyError("'sample' column missing in samplesheet")
     return set(df["sample"])
 
@@ -137,15 +177,25 @@ def load_maf(path: str | Path) -> pd.DataFrame:
     log.info("loading_maf", path=str(path))
     try:
         df = pd.read_csv(
-            path, sep='\t', comment='#', usecols=MAF_USECOLS,
-            dtype={"t_ref_count": "Int64", "t_alt_count": "Int64",
-                   "Start_Position": "Int64", "End_Position": "Int64"},
+            path,
+            sep="\t",
+            comment="#",
+            usecols=MAF_USECOLS,
+            dtype={
+                "t_ref_count": "Int64",
+                "t_alt_count": "Int64",
+                "Start_Position": "Int64",
+                "End_Position": "Int64",
+            },
         )
-        log.info("maf_loaded", n_rows=len(df), n_samples=df['Tumor_Sample_Barcode'].nunique())
+        log.info(
+            "maf_loaded", n_rows=len(df), n_samples=df["Tumor_Sample_Barcode"].nunique()
+        )
         return df
     except Exception as e:
         log.error("maf_load_failed", path=str(path), error=str(e))
         raise
+
 
 @lru_cache(maxsize=1)
 def load_sv(path: str | Path) -> pd.DataFrame:
@@ -156,12 +206,13 @@ def load_sv(path: str | Path) -> pd.DataFrame:
 
     log.info("loading_sv", path=str(path))
     try:
-        df = pd.read_csv(path, sep='\t')
+        df = pd.read_csv(path, sep="\t")
         log.info("sv_loaded", n_rows=len(df))
         return df
     except Exception as e:
         log.error("sv_load_failed", path=str(path), error=str(e))
         raise
+
 
 @lru_cache(maxsize=1)
 def load_cna(path: str | Path) -> pd.DataFrame:
@@ -172,12 +223,13 @@ def load_cna(path: str | Path) -> pd.DataFrame:
 
     log.info("loading_cna", path=str(path))
     try:
-        df = pd.read_csv(path, sep='\t', index_col=0)
+        df = pd.read_csv(path, sep="\t", index_col=0)
         log.info("cna_loaded", n_genes=df.shape[0], n_samples=df.shape[1])
         return df
     except Exception as e:
         log.error("cna_load_failed", path=str(path), error=str(e))
         raise
+
 
 @lru_cache(maxsize=1)
 def load_clinical_sample(path: str | Path) -> pd.DataFrame:
@@ -188,12 +240,13 @@ def load_clinical_sample(path: str | Path) -> pd.DataFrame:
 
     log.info("loading_clinical_sample", path=str(path))
     try:
-        df = pd.read_csv(path, sep='\t', comment='#')
+        df = pd.read_csv(path, sep="\t", comment="#")
         log.info("clinical_sample_loaded", n_rows=len(df))
         return df
     except Exception as e:
         log.error("clinical_sample_load_failed", path=str(path), error=str(e))
         raise
+
 
 @lru_cache(maxsize=1)
 def load_clinical_patient(path: str | Path) -> pd.DataFrame:
@@ -204,14 +257,15 @@ def load_clinical_patient(path: str | Path) -> pd.DataFrame:
 
     log.info("loading_clinical_patient", path=str(path))
     try:
-        df = pd.read_csv(path, sep='\t', comment='#')
+        df = pd.read_csv(path, sep="\t", comment="#")
         log.info("clinical_patient_loaded", n_rows=len(df))
         return df
     except Exception as e:
         log.error("clinical_patient_load_failed", path=str(path), error=str(e))
         raise
 
-#| export
+
+# | export
 def clear_cbioportal_caches():
     """Explicitly clear all cBioPortal LRU caches to prevent memory leaks in long running processes."""
     load_maf.cache_clear()
@@ -222,7 +276,9 @@ def clear_cbioportal_caches():
 
 # %% ../nbs/00_core.ipynb #703f67bb
 import threading
+
 _thread_local = threading.local()
+
 
 def get_duckdb_conn() -> duckdb.DuckDBPyConnection:
     """Create a thread-local DuckDB connection with optimal settings.
@@ -235,6 +291,7 @@ def get_duckdb_conn() -> duckdb.DuckDBPyConnection:
         log.debug("duckdb_conn_initialized", threads=4, memory_limit="4GB")
         _thread_local.conn = conn
     return _thread_local.conn
+
 
 def discover_available_samples(
     results_dirs: list[Path],
@@ -252,13 +309,13 @@ def discover_available_samples(
         scan_path = results_path
         if (results_path / "results").is_dir():
             scan_path = results_path / "results"
-            
+
         for sample_dir in scan_path.iterdir():
             if sample_dir.is_dir():
                 marker = sample_dir / f"{sample_dir.name}{required_suffix}"
                 if marker.exists():
                     available[sample_dir.name] = scan_path
-    
+
     log.info("sample_discovery", n_available=len(available), num_dirs=len(results_dirs))
     return available
 
@@ -272,13 +329,13 @@ def load_feature_cohort(
     chunk_size: int = 500,
 ) -> pd.DataFrame:
     """Load one feature type across available samples using explicit file list.
-    
+
     ARCHITECTURE NOTE: We build an explicit file list from discovered samples
     instead of using a glob pattern. This avoids DuckDB scanning thousands of
     directories over network mounts (SFTP/NFS), which causes multi-minute stalls.
     """
     start_time = time.time()
-    
+
     if not results_dirs:
         log.error("results_dirs_empty")
         raise ValueError("Must provide at least one krewlyzer results directory")
@@ -288,21 +345,25 @@ def load_feature_cohort(
 
     # Step 1: Discover valid samples (fast filesystem ls, no parquet reads)
     log.info("discovering_samples", n_dirs=len(results_dirs))
-    available_samples = discover_available_samples(results_dirs, required_suffix=".metadata.parquet")
-    
+    available_samples = discover_available_samples(
+        results_dirs, required_suffix=".metadata.parquet"
+    )
+
     if sample_ids is not None:
         final_samples = sorted(set(sample_ids).intersection(available_samples.keys()))
         if len(final_samples) < len(set(sample_ids)):
-            log.warning("samples_missing_krewlyzer_output",
-                        requested=len(set(sample_ids)),
-                        found=len(final_samples))
+            log.warning(
+                "samples_missing_krewlyzer_output",
+                requested=len(set(sample_ids)),
+                found=len(final_samples),
+            )
     else:
         final_samples = sorted(available_samples.keys())
-        
+
     if not final_samples:
         log.warning("no_samples_available_for_cohort", feature=feature_suffix)
         return pd.DataFrame()
-    
+
     log.info("building_file_list", n_samples=len(final_samples))
 
     # Step 2: Build explicit file paths (no glob needed)
@@ -315,17 +376,21 @@ def load_feature_cohort(
             file_paths.append(str(fp))
         else:
             missing_files += 1
-    
+
     if missing_files > 0:
-        log.info("feature_files_missing", feature=feature_suffix,
-                 missing=missing_files, found=len(file_paths))
-    
+        log.info(
+            "feature_files_missing",
+            feature=feature_suffix,
+            missing=missing_files,
+            found=len(file_paths),
+        )
+
     if not file_paths:
         log.warning("no_feature_files_found", feature=feature_suffix)
         return pd.DataFrame()
-    
+
     log.info("reading_parquet_files", n_files=len(file_paths), chunk_size=chunk_size)
-    
+
     # Step 3: Read explicit file list (pass Python list directly, no subquery)
     query = """
         SELECT *,
@@ -337,14 +402,14 @@ def load_feature_cohort(
             hive_partitioning=false
         )
     """
-    
-    conn.execute("SET threads=4;") # Throttle SFTP I/O bursts
-    
+
+    conn.execute("SET threads=4;")  # Throttle SFTP I/O bursts
+
     df_list = []
     for i in range(0, len(file_paths), chunk_size):
-        chunk = file_paths[i:i + chunk_size]
+        chunk = file_paths[i : i + chunk_size]
         max_retries = 3
-        
+
         for attempt in range(max_retries):
             try:
                 df_chunk = conn.execute(query, [chunk]).df()
@@ -353,25 +418,48 @@ def load_feature_cohort(
             except Exception as e:
                 err_str = str(e)
                 if attempt < max_retries - 1:
-                    log.warning("duckdb_io_retry", feature=feature_suffix, attempt=attempt+1, chunk_start=i, error=err_str)
-                    time.sleep(2 ** attempt) # Exponential backoff for transient I/O failures
+                    log.warning(
+                        "duckdb_io_retry",
+                        feature=feature_suffix,
+                        attempt=attempt + 1,
+                        chunk_start=i,
+                        error=err_str,
+                    )
+                    time.sleep(
+                        2**attempt
+                    )  # Exponential backoff for transient I/O failures
                 else:
-                    log.error("feature_cohort_load_failed", feature=feature_suffix, error=err_str, chunk_start=i)
-                    return pd.DataFrame() # Permanent failure
-            
+                    log.error(
+                        "feature_cohort_load_failed",
+                        feature=feature_suffix,
+                        error=err_str,
+                        chunk_start=i,
+                    )
+                    return pd.DataFrame()  # Permanent failure
+
     df = pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
-        
+
     elapsed = time.time() - start_time
     if df.empty:
-        log.warning("empty_result", feature=feature_suffix, reason="no_matching_rows_found")
+        log.warning(
+            "empty_result", feature=feature_suffix, reason="no_matching_rows_found"
+        )
     else:
-        log.info("feature_cohort_loaded",
-                 feature=feature_suffix, 
-                 n_samples=df["sample_id"].nunique(),
-                 n_rows=len(df), 
-                 elapsed_sec=round(elapsed, 2))
-        log.info("load_complete", n_samples=df["sample_id"].nunique(), n_rows=len(df), elapsed_sec=round(elapsed, 1))
+        log.info(
+            "feature_cohort_loaded",
+            feature=feature_suffix,
+            n_samples=df["sample_id"].nunique(),
+            n_rows=len(df),
+            elapsed_sec=round(elapsed, 2),
+        )
+        log.info(
+            "load_complete",
+            n_samples=df["sample_id"].nunique(),
+            n_rows=len(df),
+            elapsed_sec=round(elapsed, 1),
+        )
     return df
+
 
 def load_metadata_cohort(results_dirs: list[Path], sample_ids=None):
     return load_feature_cohort(".metadata.parquet", results_dirs, sample_ids)
@@ -388,12 +476,13 @@ def load_sample_feature(
     if not path.exists():
         log.warning("file_missing", path=str(path), sample_id=sample_id)
         raise FileNotFoundError(f"Feature file not found: {path}")
-    
+
     try:
         return pd.read_parquet(path)
     except Exception as e:
         log.error("single_feature_load_failed", path=str(path), error=str(e))
         raise
+
 
 def load_sample_metadata(
     sample_id: str,
@@ -417,26 +506,32 @@ def make_variant_key(df: pd.DataFrame) -> pd.Series:
     if df.empty:
         log.warning("empty_df_in_variant_key")
         return pd.Series(dtype=object)
-    
+
     for col in VARIANT_KEY_COLS:
         if col not in df.columns:
             log.error("missing_variant_key_col", col=col)
             raise KeyError(f"Missing required col for variant key: {col}")
-            
+
     return df[VARIANT_KEY_COLS].apply(
-        lambda row: (row["Chromosome"], int(row["Start_Position"]),
-                     int(row["End_Position"]), row["Reference_Allele"],
-                     row["Tumor_Seq_Allele2"]),
+        lambda row: (
+            row["Chromosome"],
+            int(row["Start_Position"]),
+            int(row["End_Position"]),
+            row["Reference_Allele"],
+            row["Tumor_Seq_Allele2"],
+        ),
         axis=1,
     )
+
 
 @dataclass
 class EvalRun:
     """Records the exact conditions of an evaluation run."""
-    run_id: str                              
+
+    run_id: str
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    n_total_labeled: int = 0                 
-    n_evaluated_samples: int = 0             
+    n_total_labeled: int = 0
+    n_evaluated_samples: int = 0
     features_evaluated: list[str] = field(default_factory=list)
     label_config: LabelConfig = field(default_factory=LabelConfig)
 
@@ -450,4 +545,3 @@ class EvalRun:
         except Exception as e:
             log.error("eval_run_save_failed", path=str(path), error=str(e))
             raise
-

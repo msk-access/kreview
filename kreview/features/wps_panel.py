@@ -8,24 +8,28 @@ import structlog
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
-        
+
 
 # %% auto #0
-__all__ = ['log', 'WPSPanelEvaluator']
+__all__ = ["log", "WPSPanelEvaluator"]
+
 
 # %% ../../nbs/features/24_wps_panel.ipynb #cee7b4e4
 def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith('['): 
+    if not isinstance(s, str) or not s.startswith("["):
         return []
-    clean = s.replace('[', '').replace(']', '').replace(chr(10), '').replace(chr(13), '')
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
     try:
         return [float(x) for x in clean.split()]
     except (ValueError, TypeError):
         return []
 
+
 class WPSPanelEvaluator(FeatureEvaluator):
     """Extracts WPS nucleosome binding geometries."""
-    
+
     name = "WPSPanel"
     source_file = ".WPS.panel.parquet"
     tier = 2
@@ -41,22 +45,26 @@ class WPSPanelEvaluator(FeatureEvaluator):
             if "region_type" in cols:
                 array_cols = ["wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf"]
                 float_cols = ["local_depth"]
-                for row in df.to_dict('records'):
-                    rt = str(row["region_type"]).replace(" ", "_").replace("-","_").replace("|","_")
-                    
+                for row in df.to_dict("records"):
+                    rt = (
+                        str(row["region_type"])
+                        .replace(" ", "_")
+                        .replace("-", "_")
+                        .replace("|", "_")
+                    )
+
                     for m in float_cols:
                         if m in cols and pd.notna(row[m]):
                             extracted[f"{rt}_{m}"] = float(row[m])
-                            
+
                     for a in array_cols:
                         if a in cols and pd.notna(row[a]):
                             parsed = _parse_array(str(row[a]))
                             if len(parsed) > 0:
                                 extracted[f"{rt}_{a}_mean"] = float(np.mean(parsed))
                                 extracted[f"{rt}_{a}_std"] = float(np.std(parsed))
-    
+
             return extracted
         except Exception as e:
             log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
-

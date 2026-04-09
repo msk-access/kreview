@@ -10,7 +10,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'generate_report']
+__all__ = ["log", "generate_report"]
+
 
 # %% ../nbs/05_report.ipynb #0e657248
 def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
@@ -21,17 +22,21 @@ def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
     matrix_parquet = Path(matrix_parquet)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     if not matrix_parquet.exists():
-        log.error("report_generation_failed", error="Matrix parquet not found", path=str(matrix_parquet))
+        log.error(
+            "report_generation_failed",
+            error="Matrix parquet not found",
+            path=str(matrix_parquet),
+        )
         return None
-        
+
     df = pd.read_parquet(matrix_parquet)
     feat_name = matrix_parquet.stem.replace("_matrix", "")
     output_html = output_dir / f"{feat_name}_report.html"
-    
+
     log.info("generating_report_html", feature=feat_name, dest=str(output_html))
-    
+
     # We natively generate a rich self-contained HTML without relying strictly on Quarto
     # to avoid sub-process environment breaks during automated runs!
     html_parts = []
@@ -39,34 +44,43 @@ def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
     html_parts.append("<body style='font-family: sans-serif; padding: 20px;'>")
     html_parts.append(f"<h1>Kreview Feature Report: {feat_name}</h1>")
     html_parts.append(f"<p>Samples Evaluated: {len(df)}</p>")
-    
+
     cols = list(df.columns)
     skip_cols = {"SAMPLE_ID", "label", "label_color"}
-    target_metrics = [c for c in cols if c not in skip_cols and pd.api.types.is_numeric_dtype(df[c])]
-    
+    target_metrics = [
+        c for c in cols if c not in skip_cols and pd.api.types.is_numeric_dtype(df[c])
+    ]
+
     if not target_metrics:
         html_parts.append("<p>No numeric metrics found to plot.</p>")
     else:
         # Global multi-dimensional model if features > 1
         import numpy as np
+
         if len(target_metrics) > 1:
             try:
                 # We binary classify for RF (TP/HP vs TN/HN placeholder logic)
                 mask = df["label"].notna()
                 df_valid = df[mask].copy()
                 if not df_valid.empty:
-                    df_valid["is_pos"] = df_valid["label"].apply(lambda x: 1 if "Positive" in str(x) or "ctDNA+" in str(x) else 0)
+                    df_valid["is_pos"] = df_valid["label"].apply(
+                        lambda x: 1 if "Positive" in str(x) or "ctDNA+" in str(x) else 0
+                    )
                     X = df_valid[target_metrics].fillna(0).to_numpy()
                     y = df_valid["is_pos"].to_numpy()
-                    
+
                     if len(np.unique(y)) > 1:
                         models = ee.single_feature_model(X, y)
                         html_parts.append("<h2>Ensemble Predictive Analysis</h2>")
-                        html_parts.append(f"<p><strong>Random Forest AUC:</strong> {models.get('rf_auc', 'N/A')}</p>")
-                        html_parts.append(f"<p><strong>Logistic Regression AUC:</strong> {models.get('lr_auc', 'N/A')}</p>")
+                        html_parts.append(
+                            f"<p><strong>Random Forest AUC:</strong> {models.get('rf_auc', 'N/A')}</p>"
+                        )
+                        html_parts.append(
+                            f"<p><strong>Logistic Regression AUC:</strong> {models.get('lr_auc', 'N/A')}</p>"
+                        )
             except Exception as e:
                 log.warning("ensemble_model_failed", error=str(e))
-        
+
         # Singular charts
         html_parts.append("<h2>Metric Distributions</h2>")
         for m in target_metrics:
@@ -74,24 +88,27 @@ def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
                 fig = ee.plot_violin(df, feature_col=m)
                 if fig is not None:
                     # Write static HTML div
-                    plot_div = pio.to_html(fig, full_html=False, include_plotlyjs='cdn')
+                    plot_div = pio.to_html(fig, full_html=False, include_plotlyjs="cdn")
                     html_parts.append(f"<h3>{m}</h3>")
                     html_parts.append(plot_div)
-                    
+
                     # Generate stats
                     stats = ee.evaluate_feature(df[m], df["label"])
                     if stats:
                         html_parts.append("<ul>")
-                        html_parts.append(f"<li>Kruskal-Wallis p-value: {stats.get('kw_p', 'N/A')}</li>")
-                        html_parts.append(f"<li>Cohen's d (effect size): {stats.get('cohens_d', 'N/A')}</li>")
+                        html_parts.append(
+                            f"<li>Kruskal-Wallis p-value: {stats.get('kw_p', 'N/A')}</li>"
+                        )
+                        html_parts.append(
+                            f"<li>Cohen's d (effect size): {stats.get('cohens_d', 'N/A')}</li>"
+                        )
                         html_parts.append("</ul>")
             except Exception as e:
                 log.warning("plot_failed", metric=m, error=str(e))
 
     html_parts.append("</body></html>")
-    
+
     with open(output_html, "w") as f:
         f.write("\n".join(html_parts))
-        
-    return output_html
 
+    return output_html

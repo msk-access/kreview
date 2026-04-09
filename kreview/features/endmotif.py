@@ -7,24 +7,28 @@ import structlog
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
-        
+
 
 # %% auto #0
-__all__ = ['log', 'EndMotifOnTargetEvaluator']
+__all__ = ["log", "EndMotifOnTargetEvaluator"]
+
 
 # %% ../../nbs/features/21_endmotif.ipynb #b9f55c5c
 def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith('['): 
+    if not isinstance(s, str) or not s.startswith("["):
         return []
-    clean = s.replace('[', '').replace(']', '').replace(chr(10), '').replace(chr(13), '')
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
     try:
         return [float(x) for x in clean.split()]
     except (ValueError, TypeError):
         return []
 
+
 class EndMotifOnTargetEvaluator(FeatureEvaluator):
     """Extracts 4-mer fragment end frequencies."""
-    
+
     name = "EndMotifOnTarget"
     source_file = ".EndMotif.ontarget.parquet"
     tier = 2
@@ -40,13 +44,12 @@ class EndMotifOnTargetEvaluator(FeatureEvaluator):
             self.tier = 3
             self.category = "motifs"
             if "Motif" in cols and "Frequency" in cols:
-                for row in df.to_dict('records'):
+                for row in df.to_dict("records"):
                     m = str(row["Motif"])
                     if pd.notna(row["Frequency"]):
                         extracted[f"endmotif_ontarget_{m}"] = float(row["Frequency"])
-    
+
             return extracted
         except Exception as e:
             log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
-

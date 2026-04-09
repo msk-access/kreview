@@ -24,14 +24,28 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'LABEL_ORDER', 'LABEL_COLORS', 'FeatureEvaluator', 'evaluate_feature', 'plot_violin', 'plot_density',
-           'plot_feature_vs_vaf', 'plot_roc_curves', 'plot_feature_importance', 'plot_threshold_sensitivity',
-           'single_feature_model']
+__all__ = [
+    "log",
+    "LABEL_ORDER",
+    "LABEL_COLORS",
+    "FeatureEvaluator",
+    "evaluate_feature",
+    "plot_violin",
+    "plot_density",
+    "plot_feature_vs_vaf",
+    "plot_roc_curves",
+    "plot_feature_importance",
+    "plot_threshold_sensitivity",
+    "single_feature_model",
+]
+
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3
 class FeatureEvaluator:
-    """Base class for all feature evaluators. 
-    Defines the extraction contract that transforms raw DuckDB queries into 1D arrays."""
+    """Base class for all feature evaluators.
+    Defines the extraction contract that transforms raw DuckDB queries into 1D arrays.
+    """
+
     name: str = "base"
     source_file: str = ".dummy.parquet"
     tier: int = 1
@@ -40,7 +54,9 @@ class FeatureEvaluator:
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         """Transform the loaded raw dataframe into meaningful scalar metrics.
         Called per sample-group or per sample."""
-        raise NotImplementedError("Feature evaluators must implement the extract() method.")
+        raise NotImplementedError(
+            "Feature evaluators must implement the extract() method."
+        )
 
 
 # %% ../nbs/02_eval_engine.ipynb #69946ce8
@@ -48,11 +64,11 @@ class FeatureEvaluator:
 # excluded from all statistical tests and ML models by design.
 LABEL_ORDER = ["True ctDNA+", "Possible ctDNA+", "Possible ctDNA−", "Healthy Normal"]
 LABEL_COLORS = {
-    "True ctDNA+": "#D55E00",      # Vermillion (CVD-safe)
+    "True ctDNA+": "#D55E00",  # Vermillion (CVD-safe)
     "Possible ctDNA+": "#E69F00",  # Orange (CVD-safe)
     "Possible ctDNA−": "#999999",  # Gray (CVD-safe)
     "Possible ctDNA-": "#999999",  # Gray fallback
-    "Healthy Normal": "#009E73"    # Bluish Green (CVD-safe)
+    "Healthy Normal": "#009E73",  # Bluish Green (CVD-safe)
 }
 
 
@@ -70,7 +86,7 @@ def evaluate_feature(
         groups = {}
         for label in LABEL_ORDER:
             mask = labels == label
-            # Ensure index alignment if possible 
+            # Ensure index alignment if possible
             vals = feature_values[mask].dropna()
             groups[label] = vals
 
@@ -96,21 +112,30 @@ def evaluate_feature(
         ]
         for g1_name, g2_name in pairs:
             g1, g2 = groups.get(g1_name, []), groups.get(g2_name, [])
-            key = f"mwu_{g1_name}_vs_{g2_name}".replace(" ", "_").replace("+", "pos").replace("−", "neg")
+            key = (
+                f"mwu_{g1_name}_vs_{g2_name}".replace(" ", "_")
+                .replace("+", "pos")
+                .replace("−", "neg")
+            )
             if len(g1) >= 2 and len(g2) >= 2:
                 try:
                     u_stat, p_val = stats.mannwhitneyu(g1, g2, alternative="two-sided")
-                    r = 1 - (2 * u_stat) / (len(g1) * len(g2)) # rank-biserial. Note: g1 is always the biologically more "positive" tier (e.g. True+). Positive r means g2 tends to be larger, negative r means g1 tends to be larger.
+                    r = 1 - (2 * u_stat) / (
+                        len(g1) * len(g2)
+                    )  # rank-biserial. Note: g1 is always the biologically more "positive" tier (e.g. True+). Positive r means g2 tends to be larger, negative r means g1 tends to be larger.
                     result[f"{key}_pvalue"] = p_val
                     result[f"{key}_effect_size"] = r
                 except ValueError as e:
                     log.debug("mwu_failed", pair=f"{g1_name}-{g2_name}", error=str(e))
 
         # --- FDR correction on pairwise p-values (Benjamini-Hochberg) ---
-        pairwise_pval_keys = [k for k in result if k.endswith("_pvalue") and k.startswith("mwu_")]
+        pairwise_pval_keys = [
+            k for k in result if k.endswith("_pvalue") and k.startswith("mwu_")
+        ]
         if len(pairwise_pval_keys) >= 2:
             try:
                 from statsmodels.stats.multitest import multipletests
+
                 raw_pvals = [result[k] for k in pairwise_pval_keys]
                 _, corrected, _, _ = multipletests(raw_pvals, method="fdr_bh")
                 for k, p_corr in zip(pairwise_pval_keys, corrected):
@@ -124,36 +149,47 @@ def evaluate_feature(
         true_pos = groups.get("True ctDNA+", pd.Series())
         healthy = groups.get("Healthy Normal", pd.Series())
         if len(true_pos) >= 2 and len(healthy) >= 2:
-            pooled_std = np.sqrt((
-                (len(true_pos) - 1) * true_pos.std()**2 +
-                (len(healthy) - 1) * healthy.std()**2
-            ) / (len(true_pos) + len(healthy) - 2))
+            pooled_std = np.sqrt(
+                (
+                    (len(true_pos) - 1) * true_pos.std() ** 2
+                    + (len(healthy) - 1) * healthy.std() ** 2
+                )
+                / (len(true_pos) + len(healthy) - 2)
+            )
             if pooled_std > 0:
                 result["cohens_d_true_vs_healthy"] = (
-                    (true_pos.mean() - healthy.mean()) / pooled_std
-                )
+                    true_pos.mean() - healthy.mean()
+                ) / pooled_std
 
         # --- Cohen's d (Possible ctDNA+ vs Healthy) ---
         poss_pos = groups.get("Possible ctDNA+", pd.Series())
         if len(poss_pos) >= 2 and len(healthy) >= 2:
-            pooled_std_pp = np.sqrt((
-                (len(poss_pos) - 1) * poss_pos.std()**2 +
-                (len(healthy) - 1) * healthy.std()**2
-            ) / (len(poss_pos) + len(healthy) - 2))
+            pooled_std_pp = np.sqrt(
+                (
+                    (len(poss_pos) - 1) * poss_pos.std() ** 2
+                    + (len(healthy) - 1) * healthy.std() ** 2
+                )
+                / (len(poss_pos) + len(healthy) - 2)
+            )
             if pooled_std_pp > 0:
                 result["cohens_d_possible_vs_healthy"] = (
-                    (poss_pos.mean() - healthy.mean()) / pooled_std_pp
-                )
+                    poss_pos.mean() - healthy.mean()
+                ) / pooled_std_pp
 
         # --- Spearman correlations (Confounders) ---
         if max_vaf is not None:
             valid = feature_values.notna() & max_vaf.notna() & (max_vaf > 0)
             if valid.sum() >= 10:
                 try:
-                    if np.var(feature_values[valid]) == 0 or np.var(max_vaf[valid]) == 0:
+                    if (
+                        np.var(feature_values[valid]) == 0
+                        or np.var(max_vaf[valid]) == 0
+                    ):
                         r_val, p_val = 0.0, 1.0
                     else:
-                        r_val, p_val = stats.spearmanr(feature_values[valid], max_vaf[valid])
+                        r_val, p_val = stats.spearmanr(
+                            feature_values[valid], max_vaf[valid]
+                        )
                     result["spearman_vaf_r"] = r_val
                     result["spearman_vaf_p"] = p_val
                 except ValueError as e:
@@ -163,10 +199,15 @@ def evaluate_feature(
             valid = feature_values.notna() & total_fragments.notna()
             if valid.sum() >= 10:
                 try:
-                    if np.var(feature_values[valid]) == 0 or np.var(total_fragments[valid]) == 0:
+                    if (
+                        np.var(feature_values[valid]) == 0
+                        or np.var(total_fragments[valid]) == 0
+                    ):
                         r_val, p_val = 0.0, 1.0
                     else:
-                        r_val, p_val = stats.spearmanr(feature_values[valid], total_fragments[valid])
+                        r_val, p_val = stats.spearmanr(
+                            feature_values[valid], total_fragments[valid]
+                        )
                     result["spearman_depth_r"] = r_val
                     result["spearman_depth_p"] = p_val
                 except ValueError as e:
@@ -186,21 +227,32 @@ def evaluate_feature(
 
 
 # %% ../nbs/02_eval_engine.ipynb #bf144667
-def plot_violin(df: pd.DataFrame, feature_col: str, label_col: str = "label", title: str = "") -> go.Figure:
+def plot_violin(
+    df: pd.DataFrame, feature_col: str, label_col: str = "label", title: str = ""
+) -> go.Figure:
     """4-group violin with overlaid box plot and individual points for small groups."""
     try:
-        fig = px.violin(df, x=label_col, y=feature_col,
-                        color=label_col, box=True, points="outliers",
-                        category_orders={label_col: LABEL_ORDER},
-                        color_discrete_map=LABEL_COLORS,
-                        title=title)
+        fig = px.violin(
+            df,
+            x=label_col,
+            y=feature_col,
+            color=label_col,
+            box=True,
+            points="outliers",
+            category_orders={label_col: LABEL_ORDER},
+            color_discrete_map=LABEL_COLORS,
+            title=title,
+        )
         fig.update_layout(showlegend=False, xaxis_title="", yaxis_title=feature_col)
         return fig
     except Exception as e:
         log.error("plot_violin_failed", feature=feature_col, error=str(e))
         return go.Figure()
 
-def plot_density(df: pd.DataFrame, feature_col: str, label_col: str = "label", title: str = "") -> go.Figure:
+
+def plot_density(
+    df: pd.DataFrame, feature_col: str, label_col: str = "label", title: str = ""
+) -> go.Figure:
     """Overlaid density curves per group — shows distribution shape differences."""
     try:
         fig = go.Figure()
@@ -209,34 +261,58 @@ def plot_density(df: pd.DataFrame, feature_col: str, label_col: str = "label", t
                 continue
             subset = df[df[label_col] == label][feature_col].dropna()
             if len(subset) > 5:
-                fig.add_trace(go.Violin(
-                    y=subset, name=label, side="positive",
-                    line_color=LABEL_COLORS[label], meanline_visible=True,
-                    scalemode="width", width=0.8,
-                ))
+                fig.add_trace(
+                    go.Violin(
+                        y=subset,
+                        name=label,
+                        side="positive",
+                        line_color=LABEL_COLORS[label],
+                        meanline_visible=True,
+                        scalemode="width",
+                        width=0.8,
+                    )
+                )
         fig.update_layout(title=title, violinmode="overlay")
         return fig
     except Exception as e:
         log.error("plot_density_failed", feature=feature_col, error=str(e))
         return go.Figure()
 
-def plot_feature_vs_vaf(df: pd.DataFrame, feature_col: str, vaf_col: str = "max_vaf", label_col: str = "label", title: str = "") -> go.Figure:
+
+def plot_feature_vs_vaf(
+    df: pd.DataFrame,
+    feature_col: str,
+    vaf_col: str = "max_vaf",
+    label_col: str = "label",
+    title: str = "",
+) -> go.Figure:
     """Continuous relationship between feature and tumor burden (VAF proxy)."""
     try:
         cancer = df[df[vaf_col] > 0]  # exclude healthy & zero-VAF
         if cancer.empty:
             return go.Figure()
-        fig = px.scatter(cancer, x=vaf_col, y=feature_col, color=label_col,
-                         color_discrete_map=LABEL_COLORS, opacity=0.5,
-                         trendline="lowess", log_x=True,
-                         title=title)
+        fig = px.scatter(
+            cancer,
+            x=vaf_col,
+            y=feature_col,
+            color=label_col,
+            color_discrete_map=LABEL_COLORS,
+            opacity=0.5,
+            trendline="lowess",
+            log_x=True,
+            title=title,
+        )
         return fig
     except Exception as e:
         log.error("plot_vs_vaf_failed", feature=feature_col, error=str(e))
         return go.Figure()
 
-def plot_roc_curves(y_true_dict: dict[str, np.ndarray],
-                    y_score_dict: dict[str, np.ndarray], title: str = "") -> go.Figure:
+
+def plot_roc_curves(
+    y_true_dict: dict[str, np.ndarray],
+    y_score_dict: dict[str, np.ndarray],
+    title: str = "",
+) -> go.Figure:
     """Overlay ROC curves for multiple comparisons."""
     try:
         fig = go.Figure()
@@ -245,26 +321,48 @@ def plot_roc_curves(y_true_dict: dict[str, np.ndarray],
                 continue
             y_score = y_score_dict[name]
             if len(np.unique(y_true)) < 2:
-                continue # Cannot plot ROC with 1 class
+                continue  # Cannot plot ROC with 1 class
             fpr, tpr, _ = roc_curve(y_true, y_score)
             roc_auc = auc(fpr, tpr)
-            fig.add_trace(go.Scatter(
-                x=fpr, y=tpr, name=f"{name} (AUC={roc_auc:.3f})",
+            fig.add_trace(
+                go.Scatter(
+                    x=fpr,
+                    y=tpr,
+                    name=f"{name} (AUC={roc_auc:.3f})",
+                    mode="lines",
+                )
+            )
+        fig.add_trace(
+            go.Scatter(
+                x=[0, 1],
+                y=[0, 1],
                 mode="lines",
-            ))
-        fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines",
-                                 line=dict(dash="dash", color="gray"), name="Random"))
-        fig.update_layout(title=title, xaxis_title="False Positive Rate", yaxis_title="True Positive Rate")
+                line=dict(dash="dash", color="gray"),
+                name="Random",
+            )
+        )
+        fig.update_layout(
+            title=title,
+            xaxis_title="False Positive Rate",
+            yaxis_title="True Positive Rate",
+        )
         return fig
     except Exception as e:
         log.error("plot_roc_curves_failed", error=str(e))
         return go.Figure()
 
-def plot_feature_importance(importances: dict[str, float], title: str = "") -> go.Figure:
+
+def plot_feature_importance(
+    importances: dict[str, float], title: str = ""
+) -> go.Figure:
     """Bar plot of RF feature importances."""
     try:
-        df = pd.DataFrame({"feature": list(importances.keys()),
-                           "importance": list(importances.values())})
+        df = pd.DataFrame(
+            {
+                "feature": list(importances.keys()),
+                "importance": list(importances.values()),
+            }
+        )
         df = df.sort_values("importance", ascending=True).tail(20)  # Top 20
         fig = px.bar(df, x="importance", y="feature", orientation="h", title=title)
         return fig
@@ -272,11 +370,18 @@ def plot_feature_importance(importances: dict[str, float], title: str = "") -> g
         log.error("plot_rf_importance_failed", error=str(e))
         return go.Figure()
 
+
 def plot_threshold_sensitivity(results_df: pd.DataFrame, title: str = "") -> go.Figure:
     """Show how label counts shift with VAF/min_variants thresholds."""
     try:
-        fig = px.line(results_df, x="min_vaf", y="Possible ctDNA+",
-                      color="min_variants", markers=True, title=title)
+        fig = px.line(
+            results_df,
+            x="min_vaf",
+            y="Possible ctDNA+",
+            color="min_variants",
+            markers=True,
+            title=title,
+        )
         return fig
     except Exception as e:
         log.error("plot_threshold_sen_failed", error=str(e))
@@ -285,8 +390,8 @@ def plot_threshold_sensitivity(results_df: pd.DataFrame, title: str = "") -> go.
 
 # %% ../nbs/02_eval_engine.ipynb #7a8a3f8d
 def single_feature_model(
-    X: np.ndarray,            # shape (n_samples, n_sub_metrics)
-    y: np.ndarray,            # binary labels (1 = positive class)
+    X: np.ndarray,  # shape (n_samples, n_sub_metrics)
+    y: np.ndarray,  # binary labels (1 = positive class)
     feature_names: list[str] | None = None,
     cancer_types: np.ndarray | None = None,
     assays: np.ndarray | None = None,
@@ -324,7 +429,12 @@ def single_feature_model(
         min_class_counts = np.bincount(y).min()
         folds = min(n_folds, min_class_counts)
         if folds < 2:
-            return {"error": "Not enough samples per class for Stratified CV (<2)"}, None, None, None
+            return (
+                {"error": "Not enough samples per class for Stratified CV (<2)"},
+                None,
+                None,
+                None,
+            )
 
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         results["cv_folds_actual"] = folds
@@ -345,7 +455,9 @@ def single_feature_model(
         def safely_get_metrics(y_true, y_pred_prob, threshold=0.5):
             """Compute classification report and confusion matrix at given threshold."""
             y_pred = (y_pred_prob >= threshold).astype(int)
-            rep = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+            rep = classification_report(
+                y_true, y_pred, output_dict=True, zero_division=0
+            )
             cm = confusion_matrix(y_true, y_pred).tolist()
             return rep, cm
 
@@ -363,14 +475,19 @@ def single_feature_model(
             return float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))
 
         # ── Logistic Regression (Pipeline prevents scaler leakage) ──
-        lr_pipe = Pipeline([
-            ("scaler", StandardScaler()),
-            ("lr", LogisticRegression(
-                max_iter=1000,
-                random_state=random_state,
-                class_weight="balanced",
-            )),
-        ])
+        lr_pipe = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                (
+                    "lr",
+                    LogisticRegression(
+                        max_iter=1000,
+                        random_state=random_state,
+                        class_weight="balanced",
+                    ),
+                ),
+            ]
+        )
 
         lr_probs = cross_val_predict(lr_pipe, X, y, cv=cv, method="predict_proba")[:, 1]
         results["auc_lr"] = roc_auc_score(y, lr_probs)
@@ -392,7 +509,8 @@ def single_feature_model(
 
         # ── Random Forest ──
         rf = RandomForestClassifier(
-            n_estimators=100, max_depth=5,
+            n_estimators=100,
+            max_depth=5,
             min_samples_leaf=max(1, min(10, len(y) // 10)),
             random_state=random_state,
             class_weight="balanced",
@@ -402,10 +520,13 @@ def single_feature_model(
         rf_ci_low, rf_ci_high = _bootstrap_auc(y, rf_probs)
         results["auc_rf_ci_lower"] = rf_ci_low
         results["auc_rf_ci_upper"] = rf_ci_high
-        
+
         try:
             from sklearn.calibration import calibration_curve
-            prob_true, prob_pred = calibration_curve(y, rf_probs, n_bins=10, strategy="uniform")
+
+            prob_true, prob_pred = calibration_curve(
+                y, rf_probs, n_bins=10, strategy="uniform"
+            )
             results["rf_calibration"] = {
                 "prob_true": prob_true.tolist(),
                 "prob_pred": prob_pred.tolist(),
@@ -434,16 +555,18 @@ def single_feature_model(
         if XGBClassifier is not None:
             pos_weight = len(y[y == 0]) / max(1, len(y[y == 1]))
             xgb = XGBClassifier(
-                n_estimators=100, max_depth=5,
-                learning_rate=0.1, random_state=random_state,
+                n_estimators=100,
+                max_depth=5,
+                learning_rate=0.1,
+                random_state=random_state,
                 eval_metric="logloss",
                 use_label_encoder=False,
                 scale_pos_weight=pos_weight,
             )
             try:
-                xgb_probs = cross_val_predict(
-                    xgb, X, y, cv=cv, method="predict_proba"
-                )[:, 1]
+                xgb_probs = cross_val_predict(xgb, X, y, cv=cv, method="predict_proba")[
+                    :, 1
+                ]
                 results["auc_xgb"] = roc_auc_score(y, xgb_probs)
                 xgb_ci_low, xgb_ci_high = _bootstrap_auc(y, xgb_probs)
                 results["auc_xgb_ci_lower"] = xgb_ci_low
@@ -468,10 +591,13 @@ def single_feature_model(
             results["auc_delta_xgb_rf"] = results["auc_xgb"] - results["auc_rf"]
 
         # ── Top features (post-CV, from RF importances) ──
-        if feature_names is not None and isinstance(results.get("rf_feature_importances"), dict):
+        if feature_names is not None and isinstance(
+            results.get("rf_feature_importances"), dict
+        ):
             sorted_feats = sorted(
                 results["rf_feature_importances"].items(),
-                key=lambda x: x[1], reverse=True
+                key=lambda x: x[1],
+                reverse=True,
             )
             results["top_features"] = [f[0] for f in sorted_feats[:10]]
 
@@ -480,7 +606,8 @@ def single_feature_model(
         rf_oof_preds = (rf_probs >= rf_opt).astype(int)
         xgb_oof_preds = (
             (xgb_probs >= results.get("xgb_optimal_threshold", 0.5)).astype(int)
-            if xgb_probs is not None else None
+            if xgb_probs is not None
+            else None
         )
 
         def _subgroup_metrics(mask, y_all, rf_preds, xgb_preds_arr):
@@ -503,9 +630,15 @@ def single_feature_model(
             if xgb_preds_arr is not None:
                 try:
                     p_sub = xgb_preds_arr[mask]
-                    tn, fp, fn, tp = confusion_matrix(y_sub, p_sub, labels=[0, 1]).ravel()
-                    res["xgb_sensitivity"] = float(tp / (tp + fn)) if (tp + fn) > 0 else None
-                    res["xgb_specificity"] = float(tn / (tn + fp)) if (tn + fp) > 0 else None
+                    tn, fp, fn, tp = confusion_matrix(
+                        y_sub, p_sub, labels=[0, 1]
+                    ).ravel()
+                    res["xgb_sensitivity"] = (
+                        float(tp / (tp + fn)) if (tp + fn) > 0 else None
+                    )
+                    res["xgb_specificity"] = (
+                        float(tn / (tn + fp)) if (tn + fp) > 0 else None
+                    )
                 except Exception as e:
                     log.warning("subgroup_xgb_failed", error=str(e))
 
@@ -514,48 +647,56 @@ def single_feature_model(
         # Cancer type subgroup analysis (Top 10)
         if cancer_types is not None:
             import pandas as pd
+
             c_stats = []
             c_series = pd.Series(cancer_types)
             top_10 = c_series.value_counts().nlargest(10).index
 
             for c_type in top_10:
-                mask = (cancer_types == c_type)
+                mask = cancer_types == c_type
                 n_samp = mask.sum()
                 if n_samp < 5:
                     continue
                 res_sub = _subgroup_metrics(mask, y, rf_oof_preds, xgb_oof_preds)
                 if res_sub:
-                    c_stats.append({
-                        "cancer_type": c_type,
-                        "n_samples": int(n_samp),
-                        "n_positives": int(y[mask].sum()),
-                        **res_sub,
-                    })
+                    c_stats.append(
+                        {
+                            "cancer_type": c_type,
+                            "n_samples": int(n_samp),
+                            "n_positives": int(y[mask].sum()),
+                            **res_sub,
+                        }
+                    )
             results["cancer_type_stats"] = c_stats
 
         # Assay subgroup analysis
         if assays is not None:
             import pandas as pd
+
             a_stats = []
             a_series = pd.Series(assays)
             for a_type in a_series.dropna().unique():
-                mask = (assays == a_type)
+                mask = assays == a_type
                 n_samp = mask.sum()
                 if n_samp < 5:
                     continue
                 res_sub = _subgroup_metrics(mask, y, rf_oof_preds, xgb_oof_preds)
                 if res_sub:
-                    a_stats.append({
-                        "assay": a_type,
-                        "n_samples": int(n_samp),
-                        "n_positives": int(y[mask].sum()),
-                        **res_sub,
-                    })
+                    a_stats.append(
+                        {
+                            "assay": a_type,
+                            "n_samples": int(n_samp),
+                            "n_positives": int(y[mask].sum()),
+                            **res_sub,
+                        }
+                    )
             results["assay_stats"] = a_stats
 
         return results, lr_pipe, rf, xgb
     except Exception as e:
         import traceback
-        log.error("single_feature_model_failed", error=str(e), trace=traceback.format_exc())
-        return {"error": str(e)}, None, None, None
 
+        log.error(
+            "single_feature_model_failed", error=str(e), trace=traceback.format_exc()
+        )
+        return {"error": str(e)}, None, None, None

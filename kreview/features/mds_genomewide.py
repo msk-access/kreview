@@ -10,12 +10,13 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'MDSEvaluator']
+__all__ = ["log", "MDSEvaluator"]
+
 
 # %% ../../nbs/features/19b_mds_genomewide.ipynb #c34b7afe
 class MDSEvaluator(FeatureEvaluator):
     """Global MDS signature."""
-    
+
     name = "MdsGenomewide"
     source_file = ".MDS.parquet"
     tier = 2
@@ -32,9 +33,8 @@ class MDSEvaluator(FeatureEvaluator):
                 extracted["global_mds"] = float(df["MDS"].mean())
             if "mds_gw_z" in cols:
                 extracted["global_mds_z"] = float(df["mds_gw_z"].mean())
-    
+
             return extracted
         except Exception as e:
             log.exception("extraction_failed", evaluator=self.name, error=str(e))
             return {}
-

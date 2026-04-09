@@ -7,16 +7,31 @@ import numpy as np
 import structlog
 
 from kreview.core import (
-    LabelConfig, Paths, IMPACT_PANELS, make_variant_key,
-    load_samplesheet, load_maf, load_sv, load_cna,
-    load_clinical_sample, load_clinical_patient,
+    LabelConfig,
+    Paths,
+    IMPACT_PANELS,
+    make_variant_key,
+    load_samplesheet,
+    load_maf,
+    load_sv,
+    load_cna,
+    load_clinical_sample,
+    load_clinical_patient,
 )
 
 log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'compute_impact_match', 'compute_snv_summary', 'compute_sv_summary', 'compute_cna_summary', 'CtDNALabeler']
+__all__ = [
+    "log",
+    "compute_impact_match",
+    "compute_snv_summary",
+    "compute_sv_summary",
+    "compute_cna_summary",
+    "CtDNALabeler",
+]
+
 
 # %% ../nbs/01_labels.ipynb #6333e679
 def _build_patient_impact_variants(
@@ -25,13 +40,13 @@ def _build_patient_impact_variants(
 ) -> dict[str, set[tuple]]:
     """Build a lookup: patient_id → set of somatic variant keys from IMPACT samples."""
     try:
-        impact_samples = clinical[
-            clinical["GENE_PANEL"].isin(IMPACT_PANELS)
-        ][["SAMPLE_ID", "PATIENT_ID"]]
+        impact_samples = clinical[clinical["GENE_PANEL"].isin(IMPACT_PANELS)][
+            ["SAMPLE_ID", "PATIENT_ID"]
+        ]
 
         impact_maf = maf[
-            (maf["Tumor_Sample_Barcode"].isin(set(impact_samples["SAMPLE_ID"]))) &
-            (maf["Mutation_Status"] == "SOMATIC")
+            (maf["Tumor_Sample_Barcode"].isin(set(impact_samples["SAMPLE_ID"])))
+            & (maf["Mutation_Status"] == "SOMATIC")
         ].copy()
 
         if impact_maf.empty:
@@ -40,23 +55,24 @@ def _build_patient_impact_variants(
 
         impact_maf = impact_maf.merge(
             impact_samples,
-            left_on="Tumor_Sample_Barcode", right_on="SAMPLE_ID",
+            left_on="Tumor_Sample_Barcode",
+            right_on="SAMPLE_ID",
             how="inner",
         )
 
         impact_maf["variant_key"] = make_variant_key(impact_maf)
 
-        result = (
-            impact_maf
-            .groupby("PATIENT_ID")["variant_key"]
-            .apply(set)
-            .to_dict()
+        result = impact_maf.groupby("PATIENT_ID")["variant_key"].apply(set).to_dict()
+        log.info(
+            "built_impact_lookup",
+            n_patients=len(result),
+            n_variant_keys=sum(len(v) for v in result.values()),
         )
-        log.info("built_impact_lookup", n_patients=len(result), n_variant_keys=sum(len(v) for v in result.values()))
         return result
     except Exception as e:
         log.error("impact_lookup_build_failed", error=str(e))
         raise
+
 
 def compute_impact_match(
     eligible_ids: set[str],
@@ -67,35 +83,42 @@ def compute_impact_match(
     also appears in the same patient's IMPACT tissue sample.
     """
     try:
-        access_patients = clinical[
-            clinical["SAMPLE_ID"].isin(eligible_ids)
-        ][["SAMPLE_ID", "PATIENT_ID"]].drop_duplicates()
+        access_patients = clinical[clinical["SAMPLE_ID"].isin(eligible_ids)][
+            ["SAMPLE_ID", "PATIENT_ID"]
+        ].drop_duplicates()
 
         patient_impact_vars = _build_patient_impact_variants(maf, clinical)
         patients_with_impact = set(patient_impact_vars.keys())
 
         access_maf = maf[
-            (maf["Tumor_Sample_Barcode"].isin(eligible_ids)) &
-            (maf["Mutation_Status"] == "SOMATIC")
+            (maf["Tumor_Sample_Barcode"].isin(eligible_ids))
+            & (maf["Mutation_Status"] == "SOMATIC")
         ].copy()
 
         if len(access_maf) == 0:
-            return pd.DataFrame({
-                "SAMPLE_ID": list(eligible_ids),
-                "has_impact_match": False,
-                "n_impact_confirmed": 0,
-                "has_paired_impact": [
-                    access_patients.loc[
-                        access_patients["SAMPLE_ID"] == s, "PATIENT_ID"
-                    ].iloc[0] in patients_with_impact
-                    if s in access_patients["SAMPLE_ID"].values else False
-                    for s in eligible_ids
-                ],
-            })
+            return pd.DataFrame(
+                {
+                    "SAMPLE_ID": list(eligible_ids),
+                    "has_impact_match": False,
+                    "n_impact_confirmed": 0,
+                    "has_paired_impact": [
+                        (
+                            access_patients.loc[
+                                access_patients["SAMPLE_ID"] == s, "PATIENT_ID"
+                            ].iloc[0]
+                            in patients_with_impact
+                            if s in access_patients["SAMPLE_ID"].values
+                            else False
+                        )
+                        for s in eligible_ids
+                    ],
+                }
+            )
 
         access_maf = access_maf.merge(
             access_patients,
-            left_on="Tumor_Sample_Barcode", right_on="SAMPLE_ID",
+            left_on="Tumor_Sample_Barcode",
+            right_on="SAMPLE_ID",
             how="inner",
         )
 
@@ -103,15 +126,14 @@ def compute_impact_match(
 
         access_maf["in_impact"] = access_maf.apply(
             lambda row: (
-                row["PATIENT_ID"] in patient_impact_vars and
-                row["variant_key"] in patient_impact_vars[row["PATIENT_ID"]]
+                row["PATIENT_ID"] in patient_impact_vars
+                and row["variant_key"] in patient_impact_vars[row["PATIENT_ID"]]
             ),
             axis=1,
         )
 
         per_sample = (
-            access_maf
-            .groupby("Tumor_Sample_Barcode")
+            access_maf.groupby("Tumor_Sample_Barcode")
             .agg(
                 has_impact_match=("in_impact", "any"),
                 n_impact_confirmed=("in_impact", "sum"),
@@ -120,7 +142,9 @@ def compute_impact_match(
             .reset_index()
             .rename(columns={"Tumor_Sample_Barcode": "SAMPLE_ID"})
         )
-        per_sample["has_paired_impact"] = per_sample["_patient_id"].isin(patients_with_impact)
+        per_sample["has_paired_impact"] = per_sample["_patient_id"].isin(
+            patients_with_impact
+        )
         per_sample = per_sample.drop(columns=["_patient_id"])
 
         missing = eligible_ids - set(per_sample["SAMPLE_ID"])
@@ -128,19 +152,25 @@ def compute_impact_match(
             missing_patients = access_patients[
                 access_patients["SAMPLE_ID"].isin(missing)
             ]
-            missing_df = pd.DataFrame({
-                "SAMPLE_ID": list(missing),
-                "has_impact_match": False,
-                "n_impact_confirmed": 0,
-            })
-            missing_df = missing_df.merge(
-                missing_patients, on="SAMPLE_ID", how="left"
+            missing_df = pd.DataFrame(
+                {
+                    "SAMPLE_ID": list(missing),
+                    "has_impact_match": False,
+                    "n_impact_confirmed": 0,
+                }
             )
-            missing_df["has_paired_impact"] = missing_df["PATIENT_ID"].isin(patients_with_impact)
+            missing_df = missing_df.merge(missing_patients, on="SAMPLE_ID", how="left")
+            missing_df["has_paired_impact"] = missing_df["PATIENT_ID"].isin(
+                patients_with_impact
+            )
             missing_df = missing_df.drop(columns=["PATIENT_ID"])
             per_sample = pd.concat([per_sample, missing_df], ignore_index=True)
 
-        log.info("impact_match_computed", matched=int(per_sample['has_impact_match'].sum()), paired_impact=int(per_sample['has_paired_impact'].sum()))
+        log.info(
+            "impact_match_computed",
+            matched=int(per_sample["has_impact_match"].sum()),
+            paired_impact=int(per_sample["has_paired_impact"].sum()),
+        )
         return per_sample
     except Exception as e:
         log.error("compute_impact_match_failed", error=str(e))
@@ -157,18 +187,20 @@ def compute_snv_summary(
     """Summarize somatic SNV status per eligible sample."""
     try:
         somatic = maf[
-            (maf["Tumor_Sample_Barcode"].isin(eligible_ids)) &
-            (maf["Mutation_Status"] == "SOMATIC")
+            (maf["Tumor_Sample_Barcode"].isin(eligible_ids))
+            & (maf["Mutation_Status"] == "SOMATIC")
         ].copy()
 
         if len(somatic) == 0:
-            return pd.DataFrame({
-                "SAMPLE_ID": list(eligible_ids),
-                "has_snv": False,
-                "n_somatic_snvs": 0,
-                "n_total_somatic_snvs": 0,
-                "max_vaf": 0.0,
-            })
+            return pd.DataFrame(
+                {
+                    "SAMPLE_ID": list(eligible_ids),
+                    "has_snv": False,
+                    "n_somatic_snvs": 0,
+                    "n_total_somatic_snvs": 0,
+                    "max_vaf": 0.0,
+                }
+            )
 
         total_depth = somatic["t_ref_count"] + somatic["t_alt_count"]
         somatic["VAF"] = np.where(
@@ -179,16 +211,17 @@ def compute_snv_summary(
 
         def _agg(group: pd.DataFrame) -> pd.Series:
             passing = group[group["VAF"] >= min_vaf]
-            return pd.Series({
-                "has_snv": len(passing) >= min_variants,
-                "n_somatic_snvs": len(passing),
-                "n_total_somatic_snvs": len(group),
-                "max_vaf": group["VAF"].max(),
-            })
+            return pd.Series(
+                {
+                    "has_snv": len(passing) >= min_variants,
+                    "n_somatic_snvs": len(passing),
+                    "n_total_somatic_snvs": len(group),
+                    "max_vaf": group["VAF"].max(),
+                }
+            )
 
         per_sample = (
-            somatic
-            .groupby("Tumor_Sample_Barcode")
+            somatic.groupby("Tumor_Sample_Barcode")
             .apply(_agg, include_groups=False)
             .reset_index()
             .rename(columns={"Tumor_Sample_Barcode": "SAMPLE_ID"})
@@ -196,16 +229,23 @@ def compute_snv_summary(
 
         missing = eligible_ids - set(per_sample["SAMPLE_ID"])
         if missing:
-            missing_df = pd.DataFrame({
-                "SAMPLE_ID": list(missing),
-                "has_snv": False,
-                "n_somatic_snvs": 0,
-                "n_total_somatic_snvs": 0,
-                "max_vaf": 0.0,
-            })
+            missing_df = pd.DataFrame(
+                {
+                    "SAMPLE_ID": list(missing),
+                    "has_snv": False,
+                    "n_somatic_snvs": 0,
+                    "n_total_somatic_snvs": 0,
+                    "max_vaf": 0.0,
+                }
+            )
             per_sample = pd.concat([per_sample, missing_df], ignore_index=True)
 
-        log.info("snv_summary_computed", min_vaf=min_vaf, min_variants=min_variants, positive_samples=int(per_sample['has_snv'].sum()))
+        log.info(
+            "snv_summary_computed",
+            min_vaf=min_vaf,
+            min_variants=min_variants,
+            positive_samples=int(per_sample["has_snv"].sum()),
+        )
         return per_sample
     except Exception as e:
         log.error("compute_snv_summary_failed", error=str(e))
@@ -220,20 +260,20 @@ def compute_sv_summary(
     """Summarize somatic SV status per eligible sample (binary presence/absence)."""
     try:
         somatic_sv = sv_df[
-            (sv_df["Sample_ID"].isin(eligible_ids)) &
-            (sv_df["SV_Status"] == "SOMATIC")
+            (sv_df["Sample_ID"].isin(eligible_ids)) & (sv_df["SV_Status"] == "SOMATIC")
         ]
 
         if len(somatic_sv) == 0:
-            return pd.DataFrame({
-                "SAMPLE_ID": list(eligible_ids),
-                "has_sv": False,
-                "n_somatic_svs": 0,
-            })
+            return pd.DataFrame(
+                {
+                    "SAMPLE_ID": list(eligible_ids),
+                    "has_sv": False,
+                    "n_somatic_svs": 0,
+                }
+            )
 
         per_sample = (
-            somatic_sv
-            .groupby("Sample_ID")
+            somatic_sv.groupby("Sample_ID")
             .agg(
                 has_sv=("SV_Status", lambda x: True),
                 n_somatic_svs=("SV_Status", "count"),
@@ -244,14 +284,18 @@ def compute_sv_summary(
 
         missing = eligible_ids - set(per_sample["SAMPLE_ID"])
         if missing:
-            missing_df = pd.DataFrame({
-                "SAMPLE_ID": list(missing),
-                "has_sv": False,
-                "n_somatic_svs": 0,
-            })
+            missing_df = pd.DataFrame(
+                {
+                    "SAMPLE_ID": list(missing),
+                    "has_sv": False,
+                    "n_somatic_svs": 0,
+                }
+            )
             per_sample = pd.concat([per_sample, missing_df], ignore_index=True)
 
-        log.info("sv_summary_computed", somatic_sv_samples=int(per_sample['has_sv'].sum()))
+        log.info(
+            "sv_summary_computed", somatic_sv_samples=int(per_sample["has_sv"].sum())
+        )
         return per_sample
     except Exception as e:
         log.error("compute_sv_summary_failed", error=str(e))
@@ -272,21 +316,30 @@ def compute_cna_summary(
         for sample_id in present:
             col = cna_df[sample_id]
             n_events = (col.fillna(0) != 0).sum()
-            rows.append({
-                "SAMPLE_ID": sample_id,
-                "has_cna": n_events > 0,
-                "n_cna_events": int(n_events),
-            })
+            rows.append(
+                {
+                    "SAMPLE_ID": sample_id,
+                    "has_cna": n_events > 0,
+                    "n_cna_events": int(n_events),
+                }
+            )
 
         for sample_id in absent:
-            rows.append({
-                "SAMPLE_ID": sample_id,
-                "has_cna": False,
-                "n_cna_events": 0,
-            })
+            rows.append(
+                {
+                    "SAMPLE_ID": sample_id,
+                    "has_cna": False,
+                    "n_cna_events": 0,
+                }
+            )
 
         result = pd.DataFrame(rows)
-        log.info("cna_summary_computed", positive_samples=int(result['has_cna'].sum()), present_in_matrix=len(present), absent_from_matrix=len(absent))
+        log.info(
+            "cna_summary_computed",
+            positive_samples=int(result["has_cna"].sum()),
+            present_in_matrix=len(present),
+            absent_from_matrix=len(absent),
+        )
         return result
     except Exception as e:
         log.error("compute_cna_summary_failed", error=str(e))
@@ -304,7 +357,7 @@ class CtDNALabeler:
     LABEL_TRUE_POS = "True ctDNA+"
     LABEL_POSS_POS = "Possible ctDNA+"
     LABEL_POSS_NEG = "Possible ctDNA−"
-    LABEL_HEALTHY  = "Healthy Normal"
+    LABEL_HEALTHY = "Healthy Normal"
     LABEL_INSUF_DATA = "Insufficient Data"
 
     def __init__(self, paths: Paths, config: LabelConfig = LabelConfig()):
@@ -315,9 +368,10 @@ class CtDNALabeler:
     def _load_data(self):
         if self.paths.krewlyzer_dirs:
             from kreview.core import load_metadata_cohort
+
             self.metadata_df = load_metadata_cohort(self.paths.krewlyzer_dirs)
         else:
-            self.metadata_df = pd.DataFrame(columns=['sample_id', 'total_fragments_pf'])
+            self.metadata_df = pd.DataFrame(columns=["sample_id", "total_fragments_pf"])
         log.info("loading_labeler_data", config=repr(self.config))
 
         self.cancer_ss = load_samplesheet(self.paths.cancer_samplesheet)
@@ -338,23 +392,37 @@ class CtDNALabeler:
             access_clinical["SAMPLE_ID"].isin(cancer_sample_ids)
         ].copy()
         self.eligible_ids = set(self.eligible["SAMPLE_ID"])
-        
+
         self.clinical_patient = load_clinical_patient(self.paths.clinical_patient)
         self.maf = load_maf(self.paths.maf)
         self.sv = load_sv(self.paths.sv)
         self.cna = load_cna(self.paths.cna)
 
-        self._impact_df = compute_impact_match(self.eligible_ids, self.maf, self.clinical_sample)
+        self._impact_df = compute_impact_match(
+            self.eligible_ids, self.maf, self.clinical_sample
+        )
         self._sv_df = compute_sv_summary(self.eligible_ids, self.sv)
         self._cna_df = compute_cna_summary(self.eligible_ids, self.cna)
-        self._snv_df = compute_snv_summary(self.eligible_ids, self.maf, min_vaf=self.config.min_vaf, min_variants=self.config.min_variants)
+        self._snv_df = compute_snv_summary(
+            self.eligible_ids,
+            self.maf,
+            min_vaf=self.config.min_vaf,
+            min_variants=self.config.min_variants,
+        )
 
     def _assign_labels(self, snv_df: pd.DataFrame) -> pd.DataFrame:
         try:
-            labels = self.eligible[[
-                "SAMPLE_ID", "PATIENT_ID", "CANCER_TYPE", "CANCER_TYPE_DETAILED",
-                "ONCOTREE_CODE", "SAMPLE_TYPE", "GENE_PANEL",
-            ]].copy()
+            labels = self.eligible[
+                [
+                    "SAMPLE_ID",
+                    "PATIENT_ID",
+                    "CANCER_TYPE",
+                    "CANCER_TYPE_DETAILED",
+                    "ONCOTREE_CODE",
+                    "SAMPLE_TYPE",
+                    "GENE_PANEL",
+                ]
+            ].copy()
 
             assay_map = dict(zip(self.cancer_ss["sample"], self.cancer_ss["assay"]))
             labels["access_version"] = labels["SAMPLE_ID"].map(assay_map).str.upper()
@@ -364,32 +432,61 @@ class CtDNALabeler:
             labels = labels.merge(self._sv_df, on="SAMPLE_ID", how="left")
             labels = labels.merge(self._cna_df, on="SAMPLE_ID", how="left")
 
-            bool_cols = ["has_impact_match", "has_snv", "has_sv", "has_cna", "has_paired_impact"]
+            bool_cols = [
+                "has_impact_match",
+                "has_snv",
+                "has_sv",
+                "has_cna",
+                "has_paired_impact",
+            ]
             for col in bool_cols:
                 labels[col] = labels[col].fillna(False).astype(bool)
 
-            int_cols = ["n_impact_confirmed", "n_somatic_snvs", "n_total_somatic_snvs", "n_somatic_svs", "n_cna_events"]
+            int_cols = [
+                "n_impact_confirmed",
+                "n_somatic_snvs",
+                "n_total_somatic_snvs",
+                "n_somatic_svs",
+                "n_cna_events",
+            ]
             for col in int_cols:
                 labels[col] = labels[col].fillna(0).astype(int)
 
             labels["max_vaf"] = labels["max_vaf"].fillna(0.0)
 
             labels["label"] = self.LABEL_POSS_NEG
-            
+
             # Apply Insufficient Data fallback for 0 signal + low depth
             if not self.metadata_df.empty:
                 # Resolve col name (schema changed in v0.8.2)
-                tf_col = 'total_fragments_pf' if 'total_fragments_pf' in self.metadata_df.columns else 'total_fragments'
-                merged_cols = ['sample_id', tf_col]
-                if 'assay' in self.metadata_df.columns: merged_cols.append('assay')
-                labels = labels.merge(self.metadata_df[merged_cols], left_on='SAMPLE_ID', right_on='sample_id', how='left')
-                labels['total_fragments_pf'] = labels[tf_col].fillna(0)
-                insufficient = (labels["has_snv"] == False) & (labels["has_sv"] == False) & (labels["has_cna"] == False) & (labels["total_fragments_pf"] < self.config.min_fragments)
+                tf_col = (
+                    "total_fragments_pf"
+                    if "total_fragments_pf" in self.metadata_df.columns
+                    else "total_fragments"
+                )
+                merged_cols = ["sample_id", tf_col]
+                if "assay" in self.metadata_df.columns:
+                    merged_cols.append("assay")
+                labels = labels.merge(
+                    self.metadata_df[merged_cols],
+                    left_on="SAMPLE_ID",
+                    right_on="sample_id",
+                    how="left",
+                )
+                labels["total_fragments_pf"] = labels[tf_col].fillna(0)
+                insufficient = (
+                    (labels["has_snv"] == False)
+                    & (labels["has_sv"] == False)
+                    & (labels["has_cna"] == False)
+                    & (labels["total_fragments_pf"] < self.config.min_fragments)
+                )
                 labels.loc[insufficient, "label"] = self.LABEL_INSUF_DATA
-                
+
             is_possible_pos = labels["has_snv"]
             labels.loc[is_possible_pos, "label"] = self.LABEL_POSS_POS
-            is_true_pos = labels["has_impact_match"] | labels["has_sv"] | labels["has_cna"]
+            is_true_pos = (
+                labels["has_impact_match"] | labels["has_sv"] | labels["has_cna"]
+            )
             labels.loc[is_true_pos, "label"] = self.LABEL_TRUE_POS
 
             return labels
@@ -402,30 +499,32 @@ class CtDNALabeler:
         rows = []
         for version, sample_ids in self.healthy_ids.items():
             for sid in sample_ids:
-                rows.append({
-                    "SAMPLE_ID": sid,
-                    "PATIENT_ID": np.nan,
-                    "label": self.LABEL_HEALTHY,
-                    "has_impact_match": False,
-                    "has_snv": False,
-                    "has_sv": False,
-                    "has_cna": False,
-                    "has_paired_impact": False,
-                    "max_vaf": 0.0,
-                    "n_impact_confirmed": 0,
-                    "n_somatic_snvs": 0,
-                    "n_total_somatic_snvs": 0,
-                    "n_somatic_svs": 0,
-                    "n_cna_events": 0,
-                    "access_version": version,
-                    "CANCER_TYPE": np.nan,
-                    "CANCER_TYPE_DETAILED": np.nan,
-                    "ONCOTREE_CODE": np.nan,
-                    "SAMPLE_TYPE": np.nan,
-                    "GENE_PANEL": np.nan,
-                    "min_vaf_used": vaf_used,
-                    "min_variants_used": nvars_used,
-                })
+                rows.append(
+                    {
+                        "SAMPLE_ID": sid,
+                        "PATIENT_ID": np.nan,
+                        "label": self.LABEL_HEALTHY,
+                        "has_impact_match": False,
+                        "has_snv": False,
+                        "has_sv": False,
+                        "has_cna": False,
+                        "has_paired_impact": False,
+                        "max_vaf": 0.0,
+                        "n_impact_confirmed": 0,
+                        "n_somatic_snvs": 0,
+                        "n_total_somatic_snvs": 0,
+                        "n_somatic_svs": 0,
+                        "n_cna_events": 0,
+                        "access_version": version,
+                        "CANCER_TYPE": np.nan,
+                        "CANCER_TYPE_DETAILED": np.nan,
+                        "ONCOTREE_CODE": np.nan,
+                        "SAMPLE_TYPE": np.nan,
+                        "GENE_PANEL": np.nan,
+                        "min_vaf_used": vaf_used,
+                        "min_variants_used": nvars_used,
+                    }
+                )
         return pd.DataFrame(rows)
 
     def label_all(self) -> pd.DataFrame:
@@ -434,7 +533,9 @@ class CtDNALabeler:
             cancer_labels["min_vaf_used"] = self.config.min_vaf
             cancer_labels["min_variants_used"] = self.config.min_variants
 
-            healthy_df = self._build_healthy_df(self.config.min_vaf, self.config.min_variants)
+            healthy_df = self._build_healthy_df(
+                self.config.min_vaf, self.config.min_variants
+            )
             all_labels = pd.concat([cancer_labels, healthy_df], ignore_index=True)
 
             counts = all_labels["label"].value_counts().to_dict()
@@ -444,13 +545,19 @@ class CtDNALabeler:
             log.error("label_all_failed", error=str(e))
             raise
 
-    def relabel(self, min_vaf: float | None = None, min_variants: int | None = None) -> pd.DataFrame:
+    def relabel(
+        self, min_vaf: float | None = None, min_variants: int | None = None
+    ) -> pd.DataFrame:
         try:
             vaf = min_vaf if min_vaf is not None else self.config.min_vaf
-            nvars = min_variants if min_variants is not None else self.config.min_variants
+            nvars = (
+                min_variants if min_variants is not None else self.config.min_variants
+            )
 
             log.info("relabeling", min_vaf=vaf, min_variants=nvars)
-            new_snv = compute_snv_summary(self.eligible_ids, self.maf, min_vaf=vaf, min_variants=nvars)
+            new_snv = compute_snv_summary(
+                self.eligible_ids, self.maf, min_vaf=vaf, min_variants=nvars
+            )
 
             cancer_labels = self._assign_labels(new_snv)
             cancer_labels["min_vaf_used"] = vaf
@@ -458,7 +565,7 @@ class CtDNALabeler:
 
             healthy_df = self._build_healthy_df(vaf, nvars)
             all_labels = pd.concat([cancer_labels, healthy_df], ignore_index=True)
-            
+
             counts = all_labels["label"].value_counts().to_dict()
             log.info("relabel_complete", distribution=counts)
             return all_labels
@@ -479,7 +586,8 @@ class CtDNALabeler:
                 "has_paired_impact": int(labels["has_paired_impact"].sum()),
             },
             "by_panel": labels.groupby("access_version")["label"]
-                .value_counts().unstack(fill_value=0).to_dict(),
+            .value_counts()
+            .unstack(fill_value=0)
+            .to_dict(),
             "config": repr(self.config),
         }
-
