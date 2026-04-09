@@ -36,9 +36,16 @@ from sklearn.preprocessing import StandardScaler
 pio.renderers._render_on_display = False
 _plotly_loaded = False
 
-def show_plotly(fig):
+import os
+def show_plotly(fig, filename=None):
     global _plotly_loaded
     if isinstance(fig, go.Figure):
+        if filename:
+            try:
+                os.makedirs("static_plots", exist_ok=True)
+                fig.write_image(f"static_plots/{filename}.png", scale=2)
+            except Exception:
+                pass
         # Prevent clipping horizontally and vertically, including a heavy bottom padding for bottom-aligned vertical legend
         fig.update_layout(margin=dict(b=150, t=50, l=10, r=10))
         html_str = fig.to_html(
@@ -58,16 +65,20 @@ pio.templates.default = "plotly_dark"
 warnings.filterwarnings('ignore')
 
 from kreview.eval_engine import (
-    LABEL_ORDER, plot_violin, plot_density,
+    LABEL_ORDER, LABEL_COLORS, plot_violin, plot_density,
     plot_feature_vs_vaf, plot_feature_importance, plot_roc_curves
 )
 
-MUTED_NEON = {
-    "True ctDNA+": "#E85D75",      
-    "Possible ctDNA+": "#FF9B42",  
-    "Possible ctDNA-": "gray",  
-    "Possible ctDNA−": "gray",  
-    "Healthy Normal": "#8DDA77"    
+# L-01: Extracted Theme Constants
+THEME = {
+    # M-11: CVD-safe palette mapped from eval_engine
+    "labels": LABEL_COLORS,
+    "models": ["#0072B2", "#CC79A7", "#F0E442"], # Blue, Red-Purple, Yellow (Okabe-Ito CVD-safe)
+    "model_map": {"Logistic Regression": "#0072B2", "Random Forest": "#CC79A7", "XGBoost": "#F0E442"},
+    "bg": "#1a1d23",
+    "grid": "#2e3440",
+    "text": "#e0e6ed",
+    "axis": "#88c0d0"
 }
 
 LAYOUT_DEFAULTS = dict(
@@ -170,21 +181,22 @@ if mres is not None and top_feats:
 
         # Calculate Predictions
         if lr_model is not None:
-            # LR requires scaling
+            # lr_model is a Pipeline(scaler + lr) — handles scaling internally
             try:
-                scaler = StandardScaler().fit(X_shap_raw)
-                lr_preds = lr_model.predict_proba(scaler.transform(X_shap))[:, 1]
-            except: pass
+                lr_preds = lr_model.predict_proba(X_shap)[:, 1]
+            except Exception as e:
+                print(f"[WARN] LR prediction failed: {e}")
         if rf_model is not None:
-            rf_preds = rf_model.predict_proba(X_shap)[:, 1]
             try:
+                rf_preds = rf_model.predict_proba(X_shap)[:, 1]
                 rf_preds_all = rf_model.predict_proba(df[top_feats].fillna(0))[:, 1]
-            except:
-                pass
+            except Exception as e:
+                print(f"[WARN] RF prediction failed: {e}")
         if xgb_model is not None:
             try:
                 xgb_preds = xgb_model.predict_proba(X_shap)[:, 1]
-            except: pass
+            except Exception as e:
+                print(f"[WARN] XGBoost prediction failed: {e}")
 ```
 
 # Global Glossary {.sidebar}
@@ -278,14 +290,14 @@ if metric_records:
     perf_df = pd.DataFrame(metric_records)
     fig_perf = px.bar(
         perf_df, x="Metric", y="Score", color="Model", barmode="group",
-        color_discrete_sequence=["#ff9b42", "#E85D75", "#9C27B0"]
+        color_discrete_sequence=THEME["models"]
     )
     _ = fig_perf.update_layout(
         **LAYOUT_DEFAULTS,
         yaxis=dict(range=[0, 1]),
         title="Cross-Validated Performance Metrics"
     )
-    show_plotly(fig_perf)
+    show_plotly(fig_perf, filename="performance_metrics")
 else:
     Markdown("> Detailed performance metrics not available in JSON output.")
 ```
@@ -307,11 +319,11 @@ if y_shap is not None and len(y_score_dict) > 0:
         height=600
     )
         # Color scheme adjustment
-    colors = ["#ff9b42", "#E85D75", "#9C27B0"]
+    colors = THEME["models"]
     for i, trace in enumerate(fig_roc.data):
         if trace.name != "Random":
             trace.line.color = colors[i % len(colors)]
-    show_plotly(fig_roc)
+    show_plotly(fig_roc, filename="roc_curve")
 else:
     Markdown("> ROC data not available.")
 ```
@@ -342,7 +354,7 @@ if rf_preds_all is not None:
         if len(d) > 2:
             hist_data.append(d)
             group_labels.append(lbl)
-            colors.append(MUTED_NEON.get(lbl, "gray"))
+            colors.append(THEME["labels"].get(lbl, "gray"))
             
     if len(hist_data) > 0:
         fig_kde = create_distplot(hist_data, group_labels, colors=colors,
@@ -354,7 +366,7 @@ if rf_preds_all is not None:
             yaxis_title="Density",
             height=600
         )
-        show_plotly(fig_kde)
+        show_plotly(fig_kde, filename="kde_distribution")
     else:
         display(Markdown("> Not enough samples per class for density plotting."))
 else:
@@ -453,7 +465,7 @@ if mres is not None and "cancer_type_stats" in mres:
                     barmode="group",
                     hover_data=["n_positives", "n_samples"],
                     category_orders={"cancer_type": sort_order},
-                    color_discrete_map={"Random Forest": "#E85D75", "XGBoost": "#9C27B0"},
+                    color_discrete_map=THEME["model_map"],
                     title="Sensitivity by Cancer Subgroup"
                 )
                 _ = fig_ct.update_layout(
@@ -463,7 +475,7 @@ if mres is not None and "cancer_type_stats" in mres:
                     height=600,
                     legend_title=""
                 )
-                show_plotly(fig_ct)
+                show_plotly(fig_ct, filename="sensitivity_by_cancer")
             else:
                 display(Markdown("> No valid sensitivity calculable per subgroup."))
         else:
@@ -506,7 +518,7 @@ if mres is not None and "assay_stats" in mres:
                     barmode="group",
                     hover_data=["n_positives", "n_samples"],
                     category_orders={"assay": sort_order},
-                    color_discrete_map={"Random Forest": "#E85D75", "XGBoost": "#9C27B0"},
+                    color_discrete_map=THEME["model_map"],
                     title="Sensitivity by Assay"
                 )
                 _ = fig_a.update_layout(
@@ -620,8 +632,8 @@ def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
         fig.update_traces(marker=dict(size=4, opacity=0.8, line=dict(width=0)))
         fig.update_layout(
             title=f"<b>{model_title}</b>: SHAP Importance", title_x=0.5,
-            plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=500,
-            xaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
+            plot_bgcolor=THEME['bg'], paper_bgcolor=THEME['bg'], font_color=THEME['text'], height=500,
+            xaxis=dict(showgrid=True, gridcolor=THEME['grid'], zerolinecolor=THEME['axis'], zerolinewidth=2),
             yaxis=dict(showgrid=False, title='', tickmode='array', tickvals=list(range(len(top_features))), ticktext=top_features),
             coloraxis_colorbar=dict(title=""), margin=dict(l=10, r=10, t=40, b=20)
         )
@@ -645,9 +657,9 @@ def plot_shap_dependence(sv, top_idx, feature_names, sample_labels, s_ids, model
     fig.update_traces(marker=dict(size=5, opacity=0.8, line=dict(width=0)))
     fig.update_layout(
         title=f"<b>{model_title}</b><br>Interaction: {feat1} vs {feat2}", title_x=0.5,
-        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=450,
-        xaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
-        yaxis=dict(showgrid=True, gridcolor='#2e3440', zerolinecolor='#88c0d0', zerolinewidth=2),
+        plot_bgcolor=THEME['bg'], paper_bgcolor=THEME['bg'], font_color=THEME['text'], height=450,
+        xaxis=dict(showgrid=True, gridcolor=THEME['grid'], zerolinecolor=THEME['axis'], zerolinewidth=2),
+        yaxis=dict(showgrid=True, gridcolor=THEME['grid'], zerolinecolor=THEME['axis'], zerolinewidth=2),
         margin=dict(l=20, r=20, t=50, b=20)
     )
     show_plotly(fig)
@@ -690,10 +702,10 @@ def plot_shap_waterfall(sv, probs, feature_names, sample_labels, model_title="")
         
     fig.update_layout(
         title=f"<b>{model_title}</b>: Top Confidence Traces", title_x=0.5,
-        plot_bgcolor='#1a1d23', paper_bgcolor='#1a1d23', font_color='#e0e6ed', height=450, showlegend=False, margin=dict(l=20, r=20, t=60, b=20)
+        plot_bgcolor=THEME['bg'], paper_bgcolor=THEME['bg'], font_color=THEME['text'], height=450, showlegend=False, margin=dict(l=20, r=20, t=60, b=20)
     )
     fig.update_xaxes(showgrid=False, tickangle=-45)
-    fig.update_yaxes(showgrid=True, gridcolor='#2e3440')
+    fig.update_yaxes(showgrid=True, gridcolor=THEME['grid'])
     show_plotly(fig)
 ```
 
@@ -755,7 +767,7 @@ if eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
         fig_vol = px.scatter(
             eval_volcano, x="cohens_d_true_vs_healthy", y="-log10(p)",
             hover_name="hover_text", color="is_top",
-            color_discrete_map={True: MUTED_NEON["True ctDNA+"], False: "#515865"}
+            color_discrete_map={True: THEME["labels"]["True ctDNA+"], False: "#515865"}
         )
         # Reference lines: p=0.01 significance + Cohen's D=0.8 large effect
         _ = fig_vol.add_hline(y=-np.log10(0.01), line_dash="dash", line_color="#8DDA77", opacity=0.5)
@@ -836,7 +848,7 @@ if top_col:
         df, x="label", y=top_col, color="label",
         box=True, points="outliers",
         category_orders={"label": LABEL_ORDER},
-        color_discrete_map=MUTED_NEON
+        color_discrete_map=THEME["labels"]
     )
     _ = fig_v.update_layout(
         **LAYOUT_DEFAULTS,
@@ -858,7 +870,7 @@ if top_col:
         if len(subset) > 5:
             _ = fig_dn.add_trace(go.Violin(
                 y=subset, name=label, side="positive",
-                line_color=MUTED_NEON.get(label, "gray"),
+                line_color=THEME["labels"].get(label, "gray"),
                 meanline_visible=True, width=1.2, opacity=0.8
             ))
     _ = fig_dn.update_layout(
@@ -879,7 +891,7 @@ if top_col and "max_vaf" in df.columns:
     if len(cancer) > 0:
         fig_vaf = px.scatter(
             cancer, x="max_vaf", y=top_col, color="label",
-            color_discrete_map=MUTED_NEON, opacity=0.6,
+            color_discrete_map=THEME["labels"], opacity=0.6,
             trendline="lowess", log_x=True
         )
         _ = fig_vaf.update_layout(
