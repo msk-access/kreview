@@ -53,6 +53,6 @@ class GCEvaluator(FeatureEvaluator):
 
 ## 3. That's It!
 
-Run `nbdev_export`. Your class will be scraped and published into `kreview/features/gc_evaluator.py`.
+Run `nbdev-export`. Your class will be scraped and published into `kreview/features/gc_evaluator.py`.
 
 Because `GCEvaluator` subclasses our root `FeatureEvaluator`, `registry.py` will actively discover it the next time you call `kreview run`, bind it to the CLI tree, build the biological ctDNA cohorts, inject it into the DuckDB data lake aggregator, run Sklearn metrics across it, and publish an HTML dashboard for it!
