@@ -19,6 +19,9 @@ process KREVIEW_RUN {
     path "output/kreview_lake.duckdb", emit: duckdb_db   , optional: true
 
     script:
+    def features_flag = params.features ? "--features \"${params.features}\"" : ""
+    def tier_flag     = params.tier     ? "--tier ${params.tier}"             : ""
+    
     """
     # 1. Ensure output skeleton exists
     mkdir -p output/
@@ -35,6 +38,8 @@ process KREVIEW_RUN {
         --impute-strategy ${params.impute_strategy ?: 'median'} \\
         --chunk-size ${params.chunk_size} \\
         --workers ${task.cpus} \\
+        ${features_flag} \\
+        ${tier_flag} \\
         --export-duckdb \\
         --output output/
     """

@@ -37,6 +37,10 @@ def helpMessage() {
      --chunk_size               DuckDB maxfile limit  (default: 50 local, 500 slurm)
      --impute_strategy          Imputation method (default: median)
 
+     Targeted Execution:
+     --features                 Comma-separated list of evaluators (e.g. "AtacOnTarget,FSCOnTarget")
+     --tier                     Run only a specific tier level (e.g. 1 or 2)
+
      Profiles:
      -profile docker            Run locally leveraging GHCR Docker
      -profile slurm             Run on HPC clusters leveraging Singularity
