@@ -78,7 +78,8 @@ jobs:
           git fetch --all
 
       - name: Build and deploy versioned docs
-        # Strips 'v' if present (e.g., v0.1.0 -> 0.1.0) and updates stable alias
+        # Strips 'v' if present (e.g., v0.1.0 -> 0.1.0) and sets it as the default homepage
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          mike deploy --push --update-aliases $VERSION stable
+          mike deploy --push --update-aliases $VERSION latest
+          mike set-default --push latest
