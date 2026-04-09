@@ -83,6 +83,7 @@ nav:
   - Operations:
       - CI/CD Pipelines: operations/ci-cd.md
       - Docker: operations/docker.md
+      - Nextflow: operations/nextflow.md
       - Troubleshooting: operations/troubleshooting.md
   - API Reference:
       - CLI: api-reference/cli.md
