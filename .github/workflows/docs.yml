@@ -31,4 +31,6 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
       - name: Build and deploy versioned docs
-        run: mike deploy --push dev
+        run: |
+          mike deploy --push --update-aliases dev
+          mike set-default --push dev
