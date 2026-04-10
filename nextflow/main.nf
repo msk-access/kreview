@@ -31,11 +31,21 @@ def helpMessage() {
      --cbioportal_dir           Absolute path to MSK cBioPortal sync directory
      --krewlyzer_dir            Absolute path to parquet results (or manifest.txt file)
 
-     Options:
+     ML Engine:
      --outdir                   Output directory (default: ./results)
-     --cv_folds                 Cross Validation chunks (default: 5)
+     --cv_folds                 Cross Validation folds (default: 5, slurm: 10)
+     --top_n                    Max features for model training (default: 50)
      --chunk_size               DuckDB maxfile limit  (default: 50 local, 500 slurm)
      --impute_strategy          Imputation method (default: median)
+
+     SHAP Explainability:
+     --shap_samples             Max samples for SHAP computation (default: 500, slurm: 5000)
+     --shap_features            Max features displayed in SHAP plots (default: 10, slurm: 20)
+
+     Execution Control:
+     --resume_eval              Skip evaluators with existing results (default: false)
+     --skip_report              Skip Quarto dashboard generation (default: false)
+     --cvd_safe                 Use colorblind-safe palette (default: false)
 
      Targeted Execution:
      --features                 Comma-separated list of evaluators (e.g. "AtacOnTarget,FSCOnTarget")
