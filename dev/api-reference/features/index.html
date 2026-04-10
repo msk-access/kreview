@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -3187,7 +3187,10 @@
 
 
 
-        <p>Extracts GC-corrected GC log2 signals from genomic bins.</p>
+        <p>Extracts GC-corrected log2 fragment size category signals from on-target genomic bins.</p>
+<p>Only bins with read coverage (total &gt; 0) are included in aggregation.
+On-target panels typically cover ~2% of bins; without this filter,
+the 98% zero-coverage bins dominate the median with sentinel values.</p>
 
 
 
@@ -3275,7 +3278,10 @@
 
 
 
-        <p>Extracts GC-corrected GC log2 signals from genomic bins.</p>
+        <p>Extracts GC-corrected log2 fragment size category signals from genomewide bins.</p>
+<p>Only bins with read coverage (total &gt; 0) are included in aggregation.
+Genomewide panels typically cover ~93% of bins, but the filter ensures
+uncovered bins don't contribute noise to summary statistics.</p>
 
 
 
@@ -3363,7 +3369,10 @@
 
 
 
-        <p>Extracts wide net ratios for targeted panels.</p>
+        <p>Extracts fragment size category ratios aggregated across gene-level regions.</p>
+<p>Only regions with read coverage (total &gt; 0) are included in aggregation.
+<abbr title="Fragment Size Coverage">FSC</abbr> regions are typically ~99.8% covered, so this filter is a consistency
+safeguard rather than a critical fix.</p>
 
 
 
@@ -3627,7 +3636,10 @@
 
 
 
-        <p>Extracts the short/long fragment size ratio across predefined structural metrics.</p>
+        <p>Extracts the short/long fragment size ratio across on-target genomic bins.</p>
+<p>Only bins with read coverage (total_count &gt; 0) are included in aggregation.
+On-target panels typically cover ~2% of bins; without this filter,
+the 98% zero-coverage bins dominate the median with zero values.</p>
 
 
 
@@ -3715,7 +3727,10 @@
 
 
 
-        <p>Extracts the short/long fragment size ratio across predefined structural metrics.</p>
+        <p>Extracts the short/long fragment size ratio across genomewide bins.</p>
+<p>Only bins with read coverage (total_count &gt; 0) are included in aggregation.
+Genomewide panels typically cover ~93% of bins, but the filter ensures
+uncovered bins don't contribute noise to summary statistics.</p>
 
 
 

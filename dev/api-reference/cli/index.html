@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1474,10 +1474,15 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kreview report [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>  --input-dir PATH  Directory with *_matrix.parquet files  [required]
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  --out-dir PATH    Directory to deposit Quarto reports  [default: reports/]
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  --cvd-safe        Render dashboards and plots using an Okabe-Ito Colorblind-
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>                    Safe palette instead of default neon.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>  --input-dir PATH         Directory with *_matrix.parquet files  [required]
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  --out-dir PATH           Directory to deposit Quarto reports  [default:
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>                           reports/]
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>  --cvd-safe               Render dashboards and plots using an Okabe-Ito
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>                           Colorblind-Safe palette instead of default neon.
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  --shap-samples INTEGER   Max samples for SHAP explainability computation in
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>                           dashboards.  [default: 500]
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>  --shap-features INTEGER  Max features to visualize in SHAP plots.  [default:
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>                           10]
 </code></pre></div>
 <h2 id="run">run</h2>
 <p>Run full pipeline: label → extract → evaluate → report.</p>
@@ -1512,6 +1517,18 @@
 <a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>                                  containing all feature matrices
 <a id="__codelineno-8-26" name="__codelineno-8-26" href="#__codelineno-8-26"></a>  --chunk-size INTEGER            Batch size for DuckDB file loading over SFTP
 <a id="__codelineno-8-27" name="__codelineno-8-27" href="#__codelineno-8-27"></a>                                  network mounts  [default: 500]
+<a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a>  --top-n INTEGER                 Max sub-metrics to feed into ML models per
+<a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a>                                  evaluator. All sub-metrics are included up
+<a id="__codelineno-8-30" name="__codelineno-8-30" href="#__codelineno-8-30"></a>                                  to this cap; the model's feature importance
+<a id="__codelineno-8-31" name="__codelineno-8-31" href="#__codelineno-8-31"></a>                                  ranks them.  [default: 50]
+<a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
+<a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a>                                  computation in dashboards. Lower values
+<a id="__codelineno-8-34" name="__codelineno-8-34" href="#__codelineno-8-34"></a>                                  reduce memory usage.  [default: 500]
+<a id="__codelineno-8-35" name="__codelineno-8-35" href="#__codelineno-8-35"></a>  --shap-features INTEGER         Max features to visualize in SHAP
+<a id="__codelineno-8-36" name="__codelineno-8-36" href="#__codelineno-8-36"></a>                                  beeswarm/waterfall plots. The model still
+<a id="__codelineno-8-37" name="__codelineno-8-37" href="#__codelineno-8-37"></a>                                  trains on --top-n features.  [default: 10]
+<a id="__codelineno-8-38" name="__codelineno-8-38" href="#__codelineno-8-38"></a>  --resume                        Skip evaluators whose model results already
+<a id="__codelineno-8-39" name="__codelineno-8-39" href="#__codelineno-8-39"></a>                                  exist in the output directory.
 </code></pre></div>
 
 
