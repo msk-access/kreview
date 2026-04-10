@@ -560,6 +560,27 @@ def run(
             )
 
             if top_feats:
+                # Variance guard: drop features that are constant across all model samples.
+                # Constant features produce AUC=0.500 and waste compute.
+                X_raw = model_df[top_feats].fillna(0)
+                nonconst = [c for c in top_feats if X_raw[c].std() > 0]
+                n_dropped = len(top_feats) - len(nonconst)
+                if n_dropped > 0:
+                    _echo(
+                        f"  WARNING: Dropped {n_dropped} constant features (zero variance)"
+                    )
+                    top_feats = nonconst
+
+                if not top_feats:
+                    _echo(
+                        f"  WARNING: All features are constant for {e.name}, skipping model"
+                    )
+                    continue
+
+                import warnings
+
+                warnings.filterwarnings("ignore", message=".*use_label_encoder.*")
+
                 X = model_df[top_feats].fillna(0).values
                 c_types = model_df.get("CANCER_TYPE", None)
                 if c_types is not None:

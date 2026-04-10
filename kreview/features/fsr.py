@@ -14,7 +14,12 @@ __all__ = ["log", "FSREvaluator"]
 
 # %% ../../nbs/features/14_fsr.ipynb #3a85e316
 class FSREvaluator(FeatureEvaluator):
-    """Extracts the short/long fragment size ratio across predefined structural metrics."""
+    """Extracts the short/long fragment size ratio across on-target genomic bins.
+
+    Only bins with read coverage (total_count > 0) are included in aggregation.
+    On-target panels typically cover ~2% of bins; without this filter,
+    the 98% zero-coverage bins dominate the median with zero values.
+    """
 
     name = "FsrOnTarget"
     source_file = ".FSR.ontarget.parquet"
@@ -26,6 +31,20 @@ class FSREvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
+
+            # Filter to bins with actual read coverage
+            if "total_count" in df.columns:
+                n_total = len(df)
+                df = df[df["total_count"] > 0]
+                extracted["n_covered_bins"] = len(df)
+                extracted["n_total_bins"] = n_total
+                if df.empty:
+                    log.warning(
+                        "no_covered_bins",
+                        evaluator=self.name,
+                        total_bins=n_total,
+                    )
+                    return extracted
 
             cols = set(df.columns)
             target_metrics = [

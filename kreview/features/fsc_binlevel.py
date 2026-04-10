@@ -14,7 +14,12 @@ __all__ = ["log", "FSCOnTargetEvaluator"]
 
 # %% ../../nbs/features/11_fsc_binlevel.ipynb #e0ade985
 class FSCOnTargetEvaluator(FeatureEvaluator):
-    """Extracts GC-corrected GC log2 signals from genomic bins."""
+    """Extracts GC-corrected log2 fragment size category signals from on-target genomic bins.
+
+    Only bins with read coverage (total > 0) are included in aggregation.
+    On-target panels typically cover ~2% of bins; without this filter,
+    the 98% zero-coverage bins dominate the median with sentinel values.
+    """
 
     name = "FSCOnTarget"
     source_file = ".FSC.ontarget.parquet"
@@ -27,22 +32,36 @@ class FSCOnTargetEvaluator(FeatureEvaluator):
             if df.empty:
                 return extracted
 
+            # Filter to bins with actual read coverage
+            if "total" in df.columns:
+                n_total = len(df)
+                df = df[df["total"] > 0]
+                extracted["n_covered_bins"] = len(df)
+                extracted["n_total_bins"] = n_total
+                if df.empty:
+                    log.warning(
+                        "no_covered_bins",
+                        evaluator=self.name,
+                        total_bins=n_total,
+                    )
+                    return extracted
+
             cols = set(df.columns)
-            log2_cols = [c for c in cols if c.endswith("_log2")]
+            log2_cols = sorted(c for c in cols if c.endswith("_log2"))
 
-            # Global median over all bins
-            for l in log2_cols:
-                extracted[f"global_{l}_median"] = float(df[l].median())
+            # Global median over covered bins
+            for col in log2_cols:
+                extracted[f"global_{col}_median"] = float(df[col].median())
 
-            # Per-chromosome aggregates
+            # Per-chromosome aggregates over covered bins
             if "chrom" in cols:
                 chroms = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"]
-                for c in chroms:
-                    sub = df[df["chrom"] == c]
+                for chrom in chroms:
+                    sub = df[df["chrom"] == chrom]
                     if sub.empty:
                         continue
-                    for l in log2_cols:
-                        extracted[f"{c}_{l}_median"] = float(sub[l].median())
+                    for col in log2_cols:
+                        extracted[f"{chrom}_{col}_median"] = float(sub[col].median())
 
             return extracted
         except Exception as e:
