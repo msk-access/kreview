@@ -69,6 +69,18 @@ def label(
     from kreview.core import Paths, LabelConfig
     from kreview.labels import CtDNALabeler
 
+    print("=== kreview label ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --cancer-samplesheet : {cancer_samplesheet}", flush=True)
+    print(f"  --healthy-xs1       : {healthy_xs1_samplesheet}", flush=True)
+    print(f"  --healthy-xs2       : {healthy_xs2_samplesheet}", flush=True)
+    print(f"  --cbioportal-dir    : {cbioportal_dir}", flush=True)
+    print(f"  --output            : {output}", flush=True)
+    print(f"  --min-vaf           : {min_vaf}", flush=True)
+    print(f"  --min-variants      : {min_variants}", flush=True)
+    print(f"  --chunk-size        : {chunk_size}", flush=True)
+    print("", flush=True)
+
     paths = Paths(
         str(cancer_samplesheet),
         str(healthy_xs1_samplesheet),
@@ -676,6 +688,15 @@ def report(
     """Re-generate HTML Dashboards from existing matrix parquet files."""
     import glob
     import sys
+
+    print("=== kreview report ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --input-dir     : {input_dir}", flush=True)
+    print(f"  --out-dir       : {out_dir}", flush=True)
+    print(f"  --cvd-safe      : {cvd_safe}", flush=True)
+    print(f"  --shap-samples  : {shap_samples}", flush=True)
+    print(f"  --shap-features : {shap_features}", flush=True)
+    print("", flush=True)
 
     in_path = Path(input_dir).absolute()
     matrices = glob.glob(str(in_path / "*_matrix.parquet"))
