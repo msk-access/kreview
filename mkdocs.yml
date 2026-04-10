@@ -135,7 +135,7 @@ extra:
   generator: false
   version:
     provider: mike
-    default: stable
+    default: latest
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/msk-access/kreview
