@@ -1,5 +1,18 @@
 ---
 title: "Kreview Intelligence Dashboard"
+format:
+  dashboard:
+    theme:
+      - cyborg
+      - custom.scss
+    embed-resources: true
+    html-math-method: katex
+    include-in-header: 
+      text: |
+        <style>
+          .legend .scrollbox { clip-path: none !important; }
+          g.legend rect.bg { fill-opacity: 0 !important; }
+        </style>
 jupyter: python3
 execute:
   cache: false
@@ -12,6 +25,7 @@ execute:
 # Quarto injects -P params here; defaults are for local development only
 matrix_path = "output/FSC_gene_matrix.parquet"
 feature_name = "FSC_gene"
+cvd_safe = False
 ```
 
 ```{python}
@@ -66,15 +80,26 @@ warnings.filterwarnings('ignore')
 
 from kreview.eval_engine import (
     LABEL_ORDER, LABEL_COLORS, plot_violin, plot_density,
-    plot_feature_vs_vaf, plot_feature_importance, plot_roc_curves
+    plot_feature_vs_vaf, plot_feature_importance, plot_roc_curves,
+    set_theme
 )
+
+# Sanitize potential string injection from Quarto CLI
+is_cvd_safe = str(cvd_safe).lower() == "true"
+
+set_theme(is_cvd_safe)
+
+if is_cvd_safe:
+    p_models = ["#0072B2", "#CC79A7", "#F0E442"]
+else:
+    p_models = ["#ff9b42", "#E85D75", "#9C27B0"] # Orange, Hot Pink, Purple
 
 # L-01: Extracted Theme Constants
 THEME = {
-    # M-11: CVD-safe palette mapped from eval_engine
+    # Dynamically toggle between CVD-safe and neon
     "labels": LABEL_COLORS,
-    "models": ["#0072B2", "#CC79A7", "#F0E442"], # Blue, Red-Purple, Yellow (Okabe-Ito CVD-safe)
-    "model_map": {"Logistic Regression": "#0072B2", "Random Forest": "#CC79A7", "XGBoost": "#F0E442"},
+    "models": p_models,
+    "model_map": {"Logistic Regression": p_models[0], "Random Forest": p_models[1], "XGBoost": p_models[2]},
     "bg": "#1a1d23",
     "grid": "#2e3440",
     "text": "#e0e6ed",

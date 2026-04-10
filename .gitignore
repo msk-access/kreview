@@ -76,3 +76,8 @@ results/
 *.json
 *.bed.gz
 *.bed.gz.tbi
+
+# Runtime Dashboard and Execution Artifacts
+nohup.out
+reports/
+static_plots/

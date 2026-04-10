@@ -10,8 +10,7 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ["log", "FSCOnTargetEvaluator"]
-
+__all__ = ['log', 'FSCOnTargetEvaluator']
 
 # %% ../../nbs/features/11_fsc_binlevel.ipynb #e0ade985
 class FSCOnTargetEvaluator(FeatureEvaluator):

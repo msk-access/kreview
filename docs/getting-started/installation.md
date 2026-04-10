@@ -46,21 +46,16 @@ cd kreview
     ```
 
 === "Developer Install"
-
-    Install with linting, testing, and documentation tools:
-
+    Install with all linting, testing, CI, and documentation tools bundled:
     ```bash
-    pip install -e '.[dev,test,docs]'
+    pip install -e '.[all]'
     ```
 
-=== "Docs Only"
-
-    If you only want to build or preview the documentation:
-
-    ```bash
-    pip install -e '.[docs]'
-    mkdocs serve
-    ```
+### Optional Sub-Packages
+If you only need specific toolchains instead of the full `all` suite:
+- **Jupyter Only**: `pip install -e '.[jupyter]'`
+- **Testing Only**: `pip install -e '.[test]'`
+- **Docs Only**: `pip install -e '.[docs]'`
 
 ### 3. Install Git Hooks
 

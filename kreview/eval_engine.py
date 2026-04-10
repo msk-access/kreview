@@ -24,21 +24,9 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = [
-    "log",
-    "LABEL_ORDER",
-    "LABEL_COLORS",
-    "FeatureEvaluator",
-    "evaluate_feature",
-    "plot_violin",
-    "plot_density",
-    "plot_feature_vs_vaf",
-    "plot_roc_curves",
-    "plot_feature_importance",
-    "plot_threshold_sensitivity",
-    "single_feature_model",
-]
-
+__all__ = ['log', 'LABEL_ORDER', 'NEON_COLORS', 'CVD_SAFE_COLORS', 'LABEL_COLORS', 'FeatureEvaluator', 'set_theme',
+           'evaluate_feature', 'plot_violin', 'plot_density', 'plot_feature_vs_vaf', 'plot_roc_curves',
+           'plot_feature_importance', 'plot_threshold_sensitivity', 'single_feature_model']
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3
 class FeatureEvaluator:
@@ -63,13 +51,29 @@ class FeatureEvaluator:
 # Only the 4 ML-relevant tiers. "Insufficient Data" samples are
 # excluded from all statistical tests and ML models by design.
 LABEL_ORDER = ["True ctDNA+", "Possible ctDNA+", "Possible ctDNA−", "Healthy Normal"]
-LABEL_COLORS = {
+NEON_COLORS = {
+    "True ctDNA+": "#E85D75",  # Pinkish red
+    "Possible ctDNA+": "#FF9B42",  # Vivid orange
+    "Possible ctDNA−": "gray",
+    "Possible ctDNA-": "gray",
+    "Healthy Normal": "#8DDA77",  # Bright green
+}
+
+CVD_SAFE_COLORS = {
     "True ctDNA+": "#D55E00",  # Vermillion (CVD-safe)
     "Possible ctDNA+": "#E69F00",  # Orange (CVD-safe)
     "Possible ctDNA−": "#999999",  # Gray (CVD-safe)
     "Possible ctDNA-": "#999999",  # Gray fallback
     "Healthy Normal": "#009E73",  # Bluish Green (CVD-safe)
 }
+
+LABEL_COLORS = NEON_COLORS.copy()
+
+
+def set_theme(cvd_safe: bool = False):
+    """Dynamically updates the global label and model colors based on CVD preference."""
+    global LABEL_COLORS
+    LABEL_COLORS.update(CVD_SAFE_COLORS if cvd_safe else NEON_COLORS)
 
 
 # %% ../nbs/02_eval_engine.ipynb #e48e056e

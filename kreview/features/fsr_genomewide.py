@@ -10,8 +10,7 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ["log", "FSREvaluator"]
-
+__all__ = ['log', 'FSREvaluator']
 
 # %% ../../nbs/features/14b_fsr_genomewide.ipynb #3a85e316
 class FSREvaluator(FeatureEvaluator):

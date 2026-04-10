@@ -56,6 +56,25 @@ docs = [
     "mkdocs-panzoom-plugin>=0.5.2",
     "mkdocs-pdf>=0.1.2"
 ]
+all = [
+    "papermill>=2.5.0",
+    "jupyter>=1.0.0",
+    "matplotlib>=3.7.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black[jupyter]>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.24.0",
+    "mkdocs-typer>=0.0.3",
+    "mike>=2.0.0",
+    "mkdocs-mermaid2-plugin>=1.2.3",
+    "mkdocs-glightbox>=0.5.2",
+    "mkdocs-git-revision-date-localized-plugin>=1.5.1",
+    "mkdocs-panzoom-plugin>=0.5.2",
+    "mkdocs-pdf>=0.1.2"
+]
 
 [project.urls]
 Repository = "https://github.com/msk-access/kreview"

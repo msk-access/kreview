@@ -13,8 +13,7 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ["log", "get_all_evaluators"]
-
+__all__ = ['log', 'get_all_evaluators']
 
 # %% ../nbs/03_registry.ipynb #74dfa558
 def get_all_evaluators() -> list[FeatureEvaluator]:

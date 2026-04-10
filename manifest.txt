@@ -1,3 +1,3 @@
-/Users/shahr2/Library/Group Containers/G69SCX94XU.duck/Library/Application Support/duck/Volumes.noindex/shahr2 - islogin01.mskcc.org – SFTP/share/krewlyzer/0.8.2/access_12_245
-/Users/shahr2/Library/Group Containers/G69SCX94XU.duck/Library/Application Support/duck/Volumes.noindex/shahr2 - islogin01.mskcc.org – SFTP/share/krewlyzer/0.8.2/healthy_controls/xs1
-/Users/shahr2/Library/Group Containers/G69SCX94XU.duck/Library/Application Support/duck/Volumes.noindex/shahr2 - islogin01.mskcc.org – SFTP/share/krewlyzer/0.8.2/healthy_controls/xs2
+/Users/shahr2/mnt/share/krewlyzer/0.8.2/access_12_245
+/Users/shahr2/mnt/share/krewlyzer/0.8.2/healthy_controls/xs1
+/Users/shahr2/mnt/share/krewlyzer/0.8.2/healthy_controls/xs2

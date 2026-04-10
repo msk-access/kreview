@@ -23,15 +23,7 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = [
-    "log",
-    "compute_impact_match",
-    "compute_snv_summary",
-    "compute_sv_summary",
-    "compute_cna_summary",
-    "CtDNALabeler",
-]
-
+__all__ = ['log', 'compute_impact_match', 'compute_snv_summary', 'compute_sv_summary', 'compute_cna_summary', 'CtDNALabeler']
 
 # %% ../nbs/01_labels.ipynb #6333e679
 def _build_patient_impact_variants(
@@ -369,7 +361,9 @@ class CtDNALabeler:
         if self.paths.krewlyzer_dirs:
             from kreview.core import load_metadata_cohort
 
-            self.metadata_df = load_metadata_cohort(self.paths.krewlyzer_dirs)
+            self.metadata_df = load_metadata_cohort(
+                self.paths.krewlyzer_dirs, chunk_size=self.config.chunk_size
+            )
         else:
             self.metadata_df = pd.DataFrame(columns=["sample_id", "total_fragments_pf"])
         log.info("loading_labeler_data", config=repr(self.config))

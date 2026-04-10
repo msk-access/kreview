@@ -10,8 +10,7 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ["log", "WPSBackgroundEvaluator"]
-
+__all__ = ['log', 'WPSBackgroundEvaluator']
 
 # %% ../../nbs/features/26_wps_background.ipynb #fccdac31
 def _parse_array(s):

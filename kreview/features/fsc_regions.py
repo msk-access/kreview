@@ -10,8 +10,7 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ["log", "FSCRegionsEvaluator"]
-
+__all__ = ['log', 'FSCRegionsEvaluator']
 
 # %% ../../nbs/features/12_fsc_regions.ipynb #f85bbceb
 class FSCRegionsEvaluator(FeatureEvaluator):

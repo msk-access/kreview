@@ -2,42 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
----
-
-## [Unreleased]
-
+## [0.0.2] - 2026-04-09
 ### Added
-- **Multi-model evaluation:** XGBoost alongside Random Forest and Logistic Regression
-- **SHAP explainability:** Beeswarm, dependence, and waterfall plots for RF and XGB
-- **Subgroup analysis:** Sensitivity metrics stratified by cancer type and assay version
-- **Exponential backoff retry:** DuckDB file loading with automatic retry on transient I/O failures
-- **8 genomewide evaluators:** ATAC, BreakPointMotif, EndMotif, FSC, FSD, FSR, MDS, TFBS
-- **CI/CD:** PyPI publishing via OIDC, GHCR Docker image publishing, Docker build dry-run in tests
-- **Documentation:** MkDocs Material site with 15+ pages, Mermaid diagrams, MathJax, auto-generated API reference
-- **Docker support:** Multi-stage Dockerfile with Quarto for standalone report generation
+- **Diagnostic Upgrades**: Implemented explicit Sensitivity and Specificity clinical evaluations automatically calculating Youden's J static cutoffs and logging metrics securely to the results JSON matrix.
+- **Model Expansion**: Added scalable `XGBoost` modeling alongside native `Random Forest` and `Logistic Regression` classifiers inline.
+- **Theme Selection**: Introduced `set_theme()` support parsing `--cvd-safe` toggle parameters. Allows zero-friction toggling between Okabe-Ito (colorblind secure) and global Muted Neon visualization workflows.
+- **Cluster Deployment Optimization**: Injected `[all]` pip extra support resolving seamless multi-tool HPC dependencies smoothly (`pip install -e ".[all]"`). 
 
-### Changed
-- Feature count expanded from 18 to 26 evaluators
-- CLI `--features` now accepts comma-separated values
-- `Paths.krewlyzer_dirs` accepts manifest `.txt` files
-- Dashboard layout changed from dual-column to sequential full-width rows
-- nbdev upgraded from 2.x to 3.0.12 (hyphenated CLI commands)
+### Fixed 
+- **Dashboard Standalone Render**: Resolved `format: dashboard` clipping anomalies resulting from undocumented Quarto `_quarto.yml` project context bleeding. Hardcoded formatting constraints dynamically allowing pipeline usage deeply isolated in site-packages perfectly.
+- **Path Resolution Hacks**: Removed namespace package AST resolution assumptions and substituted secure `__file__` contextual path checks, completely resolving editable `pip install -e .` template `NoneType` bugs natively.
+- **CLI Options**: Restored destroyed `--verbose` option parsing.
+
+## [0.0.1] - 2026-04-09
+### Added
+- Formally released the production-grade `kreview` Evaluation Framework for fragmentomics features.
+- Five-tier classification algorithm implemented for accurate clinical ctDNA labeling: `Possible ctDNA−`, `True ctDNA+`, `Possible ctDNA+`, `Healthy Normal`, `Malignancy (Heme)`.
+- Scikit-learn Pipeline injection to eliminate cross-fold scaling leakage during standard ML `evaluate_feature`.
+- DuckDB I/O optimizations strictly mapping internal batch chunks dynamically configured for Desktop (`--chunk-size 50`) and HPC SLURM networks (`--chunk-size 500`).
+- Integrated dynamic `kaleido` plotting backends for clinical PDF Quarto workflows.
+- Dedicated Nextflow NF-Core DSL2 environment scaling wrapper specifically designed to ingest `manifest.txt` parameters recursively without crushing symmetric `work/` limits.
+- GitHub Container Registry release pipeline (`ghcr.io/msk-access/kreview`) fully established utilizing OCI registry labels.
 
 ### Fixed
-- `PermissionError` during large-cohort loading via chunked I/O + retry
-- Silent failures in subgroup analysis now logged explicitly
-- `FSCBinEvaluator` test typo in notebook unit tests
-
-## [0.0.1] - 2026-04-06
-
-### Added
-- Initial project scaffold using nbdev
-- 5-tier ctDNA labeling engine (including Insufficient Data) (`CtDNALabeler`)
-- DuckDB-backed parquet loading with chunked I/O
-- 18 feature evaluators (Tier 1: FSC, FSD; Tier 2: WPS, EndMotif, OCF, etc.)
-- Random Forest and Logistic Regression evaluation with Stratified K-Fold CV
-- Quarto HTML dashboard generation
-- CLI via Typer (`kreview run`, `kreview label`)
-- pytest test suite with coverage reporting
+- Out-of-fold probability caching logic strictly refactored away from simplistic aggregation bias.
+- Hardcoded `papermill` exceptions mapped into modular pipeline architecture.
+- Replaced ambiguous test metrics with explicitly verified Benjamini-Hochberg (FDR) corrections over Mann-Whitney metrics.

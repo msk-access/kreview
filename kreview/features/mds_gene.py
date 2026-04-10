@@ -10,8 +10,7 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ["log", "MDSGeneEvaluator"]
-
+__all__ = ['log', 'MDSGeneEvaluator']
 
 # %% ../../nbs/features/20_mds_gene.ipynb #0831bfc4
 class MDSGeneEvaluator(FeatureEvaluator):

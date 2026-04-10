@@ -35,7 +35,7 @@ $card-border-color: rgba(255, 155, 66, 0.15) !default;
 // Plotly container — prevent overflow and ensure proper sizing
 .card-body .js-plotly-plot {
   width: 100% !important;
-  overflow: hidden;
+  overflow: visible !important;
 }
 
 // itables / DataTables dark mode compatibility
@@ -57,4 +57,12 @@ table.dataTable tbody tr:hover {
 }
 .callout-warning {
   border-left-color: #FF9B42 !important;
+}
+
+// Plotly legend clipping fix
+.legend .scrollbox {
+  clip-path: none !important;
+}
+g.legend rect.bg {
+  fill-opacity: 0 !important;
 }

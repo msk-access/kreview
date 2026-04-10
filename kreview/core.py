@@ -16,31 +16,10 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = [
-    "log",
-    "IMPACT_PANELS",
-    "ACCESS_PANELS",
-    "VARIANT_KEY_COLS",
-    "MAF_USECOLS",
-    "LabelConfig",
-    "Paths",
-    "load_samplesheet",
-    "get_sample_ids",
-    "load_maf",
-    "load_sv",
-    "load_cna",
-    "load_clinical_sample",
-    "load_clinical_patient",
-    "clear_cbioportal_caches",
-    "get_duckdb_conn",
-    "discover_available_samples",
-    "load_feature_cohort",
-    "load_metadata_cohort",
-    "load_sample_feature",
-    "load_sample_metadata",
-    "make_variant_key",
-    "EvalRun",
-]
+__all__ = ['log', 'IMPACT_PANELS', 'ACCESS_PANELS', 'VARIANT_KEY_COLS', 'MAF_USECOLS', 'LabelConfig', 'Paths', 'load_samplesheet',
+           'get_sample_ids', 'load_maf', 'load_sv', 'load_cna', 'load_clinical_sample', 'load_clinical_patient',
+           'clear_cbioportal_caches', 'get_duckdb_conn', 'discover_available_samples', 'load_feature_cohort',
+           'load_metadata_cohort', 'load_sample_feature', 'load_sample_metadata', 'make_variant_key', 'EvalRun']
 
 # %% ../nbs/00_core.ipynb #80f7c27c
 IMPACT_PANELS = ("IMPACT341", "IMPACT410", "IMPACT468", "IMPACT505")
@@ -78,11 +57,13 @@ class LabelConfig:
     min_fragments: int = 2000  # Min fragments for Depth QC
     access_panels: tuple[str, ...] = ACCESS_PANELS
     impact_panels: tuple[str, ...] = IMPACT_PANELS
+    chunk_size: int = 500  # Batch size for file loading
 
     def __repr__(self) -> str:
         return (
             f"LabelConfig(min_vaf={self.min_vaf}, "
             f"min_variants={self.min_variants}, "
+            f"chunk_size={self.chunk_size}, "
             f"panels={self.access_panels})"
         )
 
@@ -461,8 +442,12 @@ def load_feature_cohort(
     return df
 
 
-def load_metadata_cohort(results_dirs: list[Path], sample_ids=None):
-    return load_feature_cohort(".metadata.parquet", results_dirs, sample_ids)
+def load_metadata_cohort(
+    results_dirs: list[Path], sample_ids=None, chunk_size: int = 500
+):
+    return load_feature_cohort(
+        ".metadata.parquet", results_dirs, sample_ids, chunk_size=chunk_size
+    )
 
 
 # %% ../nbs/00_core.ipynb #6d814a93
