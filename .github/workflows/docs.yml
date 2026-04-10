@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   docs:
@@ -34,3 +36,17 @@ jobs:
         run: |
           mike deploy --push --update-aliases dev
           mike set-default --push dev
+
+      - name: Checkout newly built gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-export
+          
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: gh-pages-export
+          
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
