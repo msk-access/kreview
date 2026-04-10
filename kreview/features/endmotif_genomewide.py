@@ -10,7 +10,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'EndMotifGenomewideEvaluator']
+__all__ = ["log", "EndMotifGenomewideEvaluator"]
+
 
 # %% ../../nbs/features/21b_endmotif_genomewide.ipynb #b9f55c5c
 def _parse_array(s):

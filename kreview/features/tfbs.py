@@ -10,7 +10,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'TFBSEvaluator']
+__all__ = ["log", "TFBSEvaluator"]
+
 
 # %% ../../nbs/features/18_tfbs.ipynb #0e39738d
 class TFBSEvaluator(FeatureEvaluator):

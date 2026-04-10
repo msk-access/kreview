@@ -10,7 +10,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'ATACEvaluator']
+__all__ = ["log", "ATACEvaluator"]
+
 
 # %% ../../nbs/features/17_atac.ipynb #874d8529
 class ATACEvaluator(FeatureEvaluator):

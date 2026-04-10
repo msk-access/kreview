@@ -11,7 +11,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'WPSGenomeEvaluator']
+__all__ = ["log", "WPSGenomeEvaluator"]
+
 
 # %% ../../nbs/features/25_wps_genomewide.ipynb #86f68672
 def _parse_array(s):

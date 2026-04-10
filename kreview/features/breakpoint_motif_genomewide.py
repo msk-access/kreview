@@ -10,7 +10,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'BreakPointMotifGenomewideEvaluator']
+__all__ = ["log", "BreakPointMotifGenomewideEvaluator"]
+
 
 # %% ../../nbs/features/22b_breakpoint_motif_genomewide.ipynb #0b410faf
 def _parse_array(s):

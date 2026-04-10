@@ -11,7 +11,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'WPSPanelEvaluator']
+__all__ = ["log", "WPSPanelEvaluator"]
+
 
 # %% ../../nbs/features/24_wps_panel.ipynb #cee7b4e4
 def _parse_array(s):

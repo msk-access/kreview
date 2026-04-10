@@ -24,9 +24,24 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'LABEL_ORDER', 'NEON_COLORS', 'CVD_SAFE_COLORS', 'LABEL_COLORS', 'FeatureEvaluator', 'set_theme',
-           'evaluate_feature', 'plot_violin', 'plot_density', 'plot_feature_vs_vaf', 'plot_roc_curves',
-           'plot_feature_importance', 'plot_threshold_sensitivity', 'single_feature_model']
+__all__ = [
+    "log",
+    "LABEL_ORDER",
+    "NEON_COLORS",
+    "CVD_SAFE_COLORS",
+    "LABEL_COLORS",
+    "FeatureEvaluator",
+    "set_theme",
+    "evaluate_feature",
+    "plot_violin",
+    "plot_density",
+    "plot_feature_vs_vaf",
+    "plot_roc_curves",
+    "plot_feature_importance",
+    "plot_threshold_sensitivity",
+    "single_feature_model",
+]
+
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3
 class FeatureEvaluator:

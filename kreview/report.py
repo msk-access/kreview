@@ -10,7 +10,8 @@ log = structlog.get_logger()
 
 
 # %% auto #0
-__all__ = ['log', 'generate_report']
+__all__ = ["log", "generate_report"]
+
 
 # %% ../nbs/05_report.ipynb #0e657248
 def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
