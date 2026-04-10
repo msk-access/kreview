@@ -17,6 +17,7 @@ jupyter: python3
 execute:
   cache: false
   echo: false
+  debug: true
 ---
 
 ```{python}
@@ -639,20 +640,30 @@ from plotly.subplots import make_subplots
 
 def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
     if model is None or shap_df_samp is None:
-        return Markdown("> Model not available.")
+        return None, None, None, None
     try:    
         exp = shap.TreeExplainer(model)
         sh_vals = exp.shap_values(X_sh)
-        # TreeExplainer returns list [class0, class1] for binary — take class 1
+
+        # Robust binary output handling: may be list, 3D array, or 2D array
         if isinstance(sh_vals, list):
             sv_values = sh_vals[1]
+        elif getattr(sh_vals, "ndim", 0) == 3:
+            sv_values = sh_vals[:, :, 1]
         else:
             sv_values = sh_vals
-        # Build an Explanation object for consistent downstream access
+
+        # Safe expected_value extraction for binary models
         base_val = exp.expected_value
         if isinstance(base_val, (list, np.ndarray)):
-            base_val = base_val[1]  # class 1 baseline for binary
-        sv = shap.Explanation(values=sv_values, base_values=base_val, data=X_sh.values, feature_names=X_sh.columns.tolist())
+            base_val = base_val[1] if len(base_val) > 1 else base_val[0]
+
+        sv = shap.Explanation(
+            values=sv_values,
+            base_values=base_val,
+            data=X_sh.values,
+            feature_names=X_sh.columns.tolist(),
+        )
         
         feature_names = X_sh.columns.tolist()
         vals = np.abs(sv.values).mean(axis=0)
@@ -693,7 +704,8 @@ def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
         show_plotly(fig)
         return sv, top_idx, sample_labels, s_ids
     except Exception as e:
-        return Markdown(f"> Error computing SHAP: {e}")
+        display(Markdown(f"> Error computing SHAP for {model_title}: {e}"))
+        return None, None, None, None
 
 def plot_shap_dependence(sv, top_idx, feature_names, sample_labels, s_ids, model_title=""):
     if sv is None: return
