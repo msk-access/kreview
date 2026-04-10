@@ -87,12 +87,14 @@ pre-commit install
 Before submitting a PR, make sure you've completed all of these:
 
 - [ ] Code changes are made in `nbs/*.ipynb` (not `.py` files)
-- [ ] `nbdev-export` has been run and `.py` files are in sync
+- [ ] Configuration limits sync: Check if `nextflow/nextflow.config` requires reciprocal variable syncing.
+- [ ] `nbdev-export` has been run *after* any version bumps and `.py` files are in sync
 - [ ] `nbdev-clean` has been run to strip notebook metadata
-- [ ] `ruff check kreview/` passes with no errors
-- [ ] `black kreview/` has been run (formatting)
+- [ ] `ruff check .` passes with no errors
+- [ ] `python -m black .` has been run globally (formatting natively over notebooks and python sources)
 - [ ] `pytest --cov=kreview` passes
 - [ ] Documentation is updated if public APIs changed
+- [ ] Changelogs Sync: `CHANGELOG.md` perfectly copied to `docs/changelog.md`
 - [ ] Commit messages follow Conventional Commits format
 - [ ] PR targets the `develop` branch (not `main`)
 
