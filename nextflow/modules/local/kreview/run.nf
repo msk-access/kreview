@@ -19,8 +19,11 @@ process KREVIEW_RUN {
     path "output/kreview_lake.duckdb", emit: duckdb_db   , optional: true
 
     script:
-    def features_flag = params.features ? "--features \"${params.features}\"" : ""
-    def tier_flag     = params.tier     ? "--tier ${params.tier}"             : ""
+    def features_flag = params.features     ? "--features \"${params.features}\"" : ""
+    def tier_flag     = params.tier         ? "--tier ${params.tier}"             : ""
+    def resume_flag   = params.resume_eval  ? "--resume"                          : ""
+    def skip_rpt_flag = params.skip_report  ? "--skip-report"                     : ""
+    def cvd_flag      = params.cvd_safe     ? "--cvd-safe"                        : ""
     
     """
     # 1. Ensure output skeleton exists
@@ -35,11 +38,17 @@ process KREVIEW_RUN {
         --cbioportal-dir "${cbioportal_dir}" \\
         --krewlyzer-dir "${krewlyzer_results}" \\
         --cv-folds ${params.cv_folds ?: 5} \\
+        --top-n ${params.top_n ?: 50} \\
         --impute-strategy ${params.impute_strategy ?: 'median'} \\
         --chunk-size ${params.chunk_size} \\
+        --shap-samples ${params.shap_samples ?: 500} \\
+        --shap-features ${params.shap_features ?: 10} \\
         --workers ${task.cpus} \\
         ${features_flag} \\
         ${tier_flag} \\
+        ${resume_flag} \\
+        ${skip_rpt_flag} \\
+        ${cvd_flag} \\
         --export-duckdb \\
         --output output/
     """

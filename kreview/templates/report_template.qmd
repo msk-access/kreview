@@ -17,6 +17,7 @@ jupyter: python3
 execute:
   cache: false
   echo: false
+  debug: true
 ---
 
 ```{python}
@@ -26,6 +27,8 @@ execute:
 matrix_path = "output/FSC_gene_matrix.parquet"
 feature_name = "FSC_gene"
 cvd_safe = False
+shap_samples = 500
+shap_features = 10
 ```
 
 ```{python}
@@ -146,6 +149,7 @@ else:
 
 # ── Load model results ──
 model_path = Path(matrix_path).parent / f"{feature_name}_model_results.json"
+_shap_display_n = int(shap_features)  # Controls VISUALIZATION only, not computation
 if model_path.exists():
     with open(model_path) as f:
         mres = json.load(f)
@@ -153,11 +157,12 @@ if model_path.exists():
     auc_lr = mres.get('auc_lr', 0)
     auc_xgb = mres.get('auc_xgb', 0)
     
-    top_feats = mres.get("top_features", numeric_cols)[:10]
+    # Use ALL features the model was trained on — SHAP requires matching shape
+    top_feats = mres.get("top_features", numeric_cols)
 else:
     mres = None
     auc_rf = auc_lr = auc_xgb = 0
-    top_feats = numeric_cols[:10]
+    top_feats = numeric_cols
 
 # Load Models
 import shap
@@ -188,25 +193,35 @@ if mres is not None and top_feats:
         "True ctDNA+", "Possible ctDNA+", 
         "Healthy Normal", "Possible ctDNA-", "Possible ctDNA−"
     ])
-    shap_df = df[model_label].copy()
+
+    # ── KDE density predictions (subsample full df to save memory) ──
+    if rf_model is not None:
+        try:
+            _kde_n = min(2000, len(df))
+            kde_idx = df.sample(n=_kde_n, random_state=99).index
+            rf_preds_all = rf_model.predict_proba(df.loc[kde_idx, top_feats].fillna(0))[:, 1]
+            kde_labels = df.loc[kde_idx, "label"].values
+        except Exception as e:
+            print(f"[WARN] RF KDE prediction failed: {e}")
+            rf_preds_all = None
+            kde_labels = None
+    
+    # ── SHAP subsample ──
+    shap_df = df[model_label]
+    _max_shap = int(shap_samples)
     
     if len(shap_df) > 0:
-        X_shap_raw = shap_df[top_feats].fillna(0)
-        y_shap_raw = shap_df["label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
-        
-        if len(X_shap_raw) > 1000:
-            sample_idx = X_shap_raw.sample(n=1000, random_state=42).index
-            X_shap = X_shap_raw.loc[sample_idx]
-            y_shap = y_shap_raw[X_shap_raw.index.get_indexer(sample_idx)]
-            shap_df_sample = shap_df.loc[sample_idx]
+        if len(shap_df) > _max_shap:
+            sample_idx = shap_df.sample(n=_max_shap, random_state=42).index
         else:
-            X_shap = X_shap_raw
-            y_shap = y_shap_raw
-            shap_df_sample = shap_df
+            sample_idx = shap_df.index
+        
+        X_shap = shap_df.loc[sample_idx, top_feats].fillna(0)
+        y_shap = shap_df.loc[sample_idx, "label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
+        shap_df_sample = shap_df.loc[sample_idx, ["label"] + (["sample_id"] if "sample_id" in shap_df.columns else [])].copy()
 
-        # Calculate Predictions
+        # Calculate Predictions on SHAP subset only
         if lr_model is not None:
-            # lr_model is a Pipeline(scaler + lr) — handles scaling internally
             try:
                 lr_preds = lr_model.predict_proba(X_shap)[:, 1]
             except Exception as e:
@@ -214,7 +229,6 @@ if mres is not None and top_feats:
         if rf_model is not None:
             try:
                 rf_preds = rf_model.predict_proba(X_shap)[:, 1]
-                rf_preds_all = rf_model.predict_proba(df[top_feats].fillna(0))[:, 1]
             except Exception as e:
                 print(f"[WARN] RF prediction failed: {e}")
         if xgb_model is not None:
@@ -222,6 +236,10 @@ if mres is not None and top_feats:
                 xgb_preds = xgb_model.predict_proba(X_shap)[:, 1]
             except Exception as e:
                 print(f"[WARN] XGBoost prediction failed: {e}")
+
+    # ── Free the full dataframe — only keep what dashboards need ──
+    del shap_df
+    import gc; gc.collect()
 ```
 
 # Global Glossary {.sidebar}
@@ -365,7 +383,7 @@ A clinically perfect diagnostic biomarker will natively violently pull all Negat
 
 ```{python}
 #| echo: false
-if rf_preds_all is not None:
+if rf_preds_all is not None and kde_labels is not None:
     from plotly.figure_factory import create_distplot
     
     probs = rf_preds_all
@@ -374,7 +392,7 @@ if rf_preds_all is not None:
     colors = []
     
     for lbl in LABEL_ORDER:
-        mask = df["label"] == lbl
+        mask = kde_labels == lbl
         d = probs[mask]
         if len(d) > 2:
             hist_data.append(d)
@@ -618,17 +636,37 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
+def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title="", n_display=10):
     if model is None or shap_df_samp is None:
-        return Markdown("> Model not available.")
+        return None, None, None, None
     try:    
-        exp = shap.Explainer(model, X_sh)
-        sh_vals = exp(X_sh, check_additivity=False)
-        sv = sh_vals[..., 1] if len(sh_vals.shape) > 2 else sh_vals
+        exp = shap.TreeExplainer(model)
+        sh_vals = exp.shap_values(X_sh, check_additivity=False)
+
+        # Robust binary output handling: may be list, 3D array, or 2D array
+        if isinstance(sh_vals, list):
+            sv_values = sh_vals[1]
+        elif getattr(sh_vals, "ndim", 0) == 3:
+            sv_values = sh_vals[:, :, 1]
+        else:
+            sv_values = sh_vals
+
+        # Safe expected_value extraction for binary models
+        base_val = exp.expected_value
+        if isinstance(base_val, (list, np.ndarray)):
+            base_val = base_val[1] if len(base_val) > 1 else base_val[0]
+
+        sv = shap.Explanation(
+            values=sv_values,
+            base_values=base_val,
+            data=X_sh.values,
+            feature_names=X_sh.columns.tolist(),
+        )
         
         feature_names = X_sh.columns.tolist()
         vals = np.abs(sv.values).mean(axis=0)
-        top_idx = np.argsort(vals)[-10:]
+        # Only display top N features by mean |SHAP|, even though all were computed
+        top_idx = np.argsort(vals)[-n_display:]
         top_features = [feature_names[i] for i in top_idx]
         
         sample_labels = shap_df_samp["label"].values
@@ -665,7 +703,8 @@ def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
         show_plotly(fig)
         return sv, top_idx, sample_labels, s_ids
     except Exception as e:
-        return Markdown(f"> Error computing SHAP: {e}")
+        display(Markdown(f"> Error computing SHAP for {model_title}: {e}"))
+        return None, None, None, None
 
 def plot_shap_dependence(sv, top_idx, feature_names, sample_labels, s_ids, model_title=""):
     if sv is None: return
@@ -738,12 +777,18 @@ def plot_shap_waterfall(sv, probs, feature_names, sample_labels, model_title="")
 
 ```{python}
 #| echo: false
-rf_sv, rf_top, rf_sl, rf_sid = compute_shap_and_plot_beeswarm(rf_model, X_shap, shap_df_sample, "Random Forest") if rf_model is not None else (None, None, None, None)
+rf_sv, rf_top, rf_sl, rf_sid = compute_shap_and_plot_beeswarm(rf_model, X_shap, shap_df_sample, "Random Forest", n_display=_shap_display_n) if rf_model is not None else (None, None, None, None)
 ```
 
 ```{python}
 #| echo: false
-xgb_sv, xgb_top, xgb_sl, xgb_sid = compute_shap_and_plot_beeswarm(xgb_model, X_shap, shap_df_sample, "XGBoost") if xgb_model is not None else (None, None, None, None)
+#| output: false
+import gc; gc.collect()  # Reclaim RF SHAP memory before XGB
+```
+
+```{python}
+#| echo: false
+xgb_sv, xgb_top, xgb_sl, xgb_sid = compute_shap_and_plot_beeswarm(xgb_model, X_shap, shap_df_sample, "XGBoost", n_display=_shap_display_n) if xgb_model is not None else (None, None, None, None)
 ```
 
 ### Top Feature Dependence

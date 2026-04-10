@@ -69,6 +69,18 @@ def label(
     from kreview.core import Paths, LabelConfig
     from kreview.labels import CtDNALabeler
 
+    print("=== kreview label ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --cancer-samplesheet : {cancer_samplesheet}", flush=True)
+    print(f"  --healthy-xs1       : {healthy_xs1_samplesheet}", flush=True)
+    print(f"  --healthy-xs2       : {healthy_xs2_samplesheet}", flush=True)
+    print(f"  --cbioportal-dir    : {cbioportal_dir}", flush=True)
+    print(f"  --output            : {output}", flush=True)
+    print(f"  --min-vaf           : {min_vaf}", flush=True)
+    print(f"  --min-variants      : {min_variants}", flush=True)
+    print(f"  --chunk-size        : {chunk_size}", flush=True)
+    print("", flush=True)
+
     paths = Paths(
         str(cancer_samplesheet),
         str(healthy_xs1_samplesheet),
@@ -180,6 +192,8 @@ def _render_quarto_report(
     report_dir: Path,
     python_exe: str,
     cvd_safe: bool = False,
+    shap_samples: int = 500,
+    shap_features: int = 10,
 ) -> tuple[bool, str]:
     """Render a Quarto HTML dashboard for a single feature matrix."""
     import subprocess
@@ -206,6 +220,10 @@ def _render_quarto_report(
         f"feature_name:{feat_name}",
         "-P",
         f"cvd_safe:{str(cvd_safe).lower()}",
+        "-P",
+        f"shap_samples:{shap_samples}",
+        "-P",
+        f"shap_features:{shap_features}",
         "--output",
         out_html.name,
         "--output-dir",
@@ -219,14 +237,14 @@ def _render_quarto_report(
             capture_output=True,
             text=True,
             check=True,
-            timeout=300,
+            timeout=600,
             cwd=str(template_dir),
         )
         return True, str(out_html)
     except subprocess.CalledProcessError as exc:
-        return False, exc.stderr[:500]
+        return False, exc.stderr[-1500:]
     except subprocess.TimeoutExpired:
-        return False, "Timeout (>300s)"
+        return False, "Timeout (>600s)"
 
 
 @app.command()
@@ -272,6 +290,26 @@ def run(
         "--chunk-size",
         help="Batch size for DuckDB file loading over SFTP network mounts",
     ),
+    top_n: int = typer.Option(
+        50,
+        "--top-n",
+        help="Max sub-metrics to feed into ML models per evaluator. All sub-metrics are included up to this cap; the model's feature importance ranks them.",
+    ),
+    shap_samples: int = typer.Option(
+        500,
+        "--shap-samples",
+        help="Max samples for SHAP explainability computation in dashboards. Lower values reduce memory usage.",
+    ),
+    shap_features: int = typer.Option(
+        10,
+        "--shap-features",
+        help="Max features to visualize in SHAP beeswarm/waterfall plots. The model still trains on --top-n features.",
+    ),
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        help="Skip evaluators whose model results already exist in the output directory.",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig, load_feature_cohort
@@ -294,6 +332,30 @@ def run(
         raise typer.Exit(code=1)
 
     _echo(f"=== kreview run (verbose={verbose}, workers={workers}) ===")
+    _echo("Configuration:")
+    _echo(f"  --cancer-samplesheet : {cancer_samplesheet}")
+    _echo(f"  --healthy-xs1       : {healthy_xs1_samplesheet}")
+    _echo(f"  --healthy-xs2       : {healthy_xs2_samplesheet}")
+    _echo(f"  --cbioportal-dir    : {cbioportal_dir}")
+    _echo(f"  --krewlyzer-dir     : {krewlyzer_dir}")
+    _echo(f"  --output            : {output}")
+    _echo(f"  --min-vaf           : {min_vaf}")
+    _echo(f"  --min-variants      : {min_variants}")
+    _echo(f"  --features          : {features or 'ALL'}")
+    _echo(f"  --tier              : {tier or 'ALL'}")
+    _echo(f"  --workers           : {workers}")
+    _echo(f"  --cv-folds          : {cv_folds}")
+    _echo(f"  --top-n             : {top_n}")
+    _echo(f"  --impute-strategy   : {impute_strategy}")
+    _echo(f"  --chunk-size        : {chunk_size}")
+    _echo(f"  --shap-samples      : {shap_samples}")
+    _echo(f"  --shap-features     : {shap_features}")
+    _echo(f"  --skip-report       : {skip_report}")
+    _echo(f"  --cvd-safe          : {cvd_safe}")
+    _echo(f"  --export-duckdb     : {export_duckdb}")
+    _echo(f"  --resume            : {resume}")
+    _echo(f"  --verbose           : {verbose}")
+    _echo("")
 
     # ── Step 1: Labels ──
     _echo("Step 1: Generating Labels...")
@@ -337,6 +399,13 @@ def run(
     for e in target_evals:
         _echo(f"\n{'='*60}")
         _echo(f"Processing evaluator: {e.name}")
+
+        # ── Resume checkpoint: skip if model results already exist ──
+        if resume:
+            checkpoint = out_path / f"{e.name}_model_results.json"
+            if checkpoint.exists():
+                _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
+                continue
 
         # ── Step 3: Load + Shard + Extract ──
         _echo(f"Step 3: Loading & extracting '{e.name}'...")
@@ -474,17 +543,44 @@ def run(
             .values
         )
         if len(model_df) >= 20 and len(np.unique(y)) == 2:
-            # Use top-5 features by absolute Cohen's d
+            # Pre-filter sub-metrics by Cohen's d (noise reduction) then
+            # feed the top --top-n into the model for importance ranking.
             if "cohens_d_true_vs_healthy" in eval_df.columns:
-                top_feats = (
+                ranked = (
                     eval_df.dropna(subset=["cohens_d_true_vs_healthy"])
-                    .nlargest(5, "cohens_d_true_vs_healthy")["feature_column"]
+                    .sort_values("cohens_d_true_vs_healthy", key=abs, ascending=False)
+                    .head(top_n)["feature_column"]
                     .tolist()
                 )
+                top_feats = ranked if ranked else numeric_cols[:top_n]
             else:
-                top_feats = numeric_cols[:5]
+                top_feats = numeric_cols[:top_n]
+            _echo(
+                f"  Feeding {len(top_feats)}/{len(numeric_cols)} sub-metrics into model (--top-n={top_n})"
+            )
 
             if top_feats:
+                # Variance guard: drop features that are constant across all model samples.
+                # Constant features produce AUC=0.500 and waste compute.
+                X_raw = model_df[top_feats].fillna(0)
+                nonconst = [c for c in top_feats if X_raw[c].std() > 0]
+                n_dropped = len(top_feats) - len(nonconst)
+                if n_dropped > 0:
+                    _echo(
+                        f"  WARNING: Dropped {n_dropped} constant features (zero variance)"
+                    )
+                    top_feats = nonconst
+
+                if not top_feats:
+                    _echo(
+                        f"  WARNING: All features are constant for {e.name}, skipping model"
+                    )
+                    continue
+
+                import warnings
+
+                warnings.filterwarnings("ignore", message=".*use_label_encoder.*")
+
                 X = model_df[top_feats].fillna(0).values
                 c_types = model_df.get("CANCER_TYPE", None)
                 if c_types is not None:
@@ -494,7 +590,12 @@ def run(
                     a_types = a_types.values
 
                 model_res, lr_model, rf_model, xgb_model = single_feature_model(
-                    X, y, cancer_types=c_types, assays=a_types
+                    X,
+                    y,
+                    feature_names=top_feats,
+                    cancer_types=c_types,
+                    assays=a_types,
+                    n_folds=cv_folds,
                 )
                 model_out = out_path / f"{e.name}_model_results.json"
 
@@ -541,7 +642,13 @@ def run(
                 feat_name = Path(p).name.replace("_matrix.parquet", "")
                 _echo(f"  Rendering {feat_name}...")
                 ok, msg = _render_quarto_report(
-                    p, feat_name, report_dir, sys.executable, cvd_safe=cvd_safe
+                    p,
+                    feat_name,
+                    report_dir,
+                    sys.executable,
+                    cvd_safe=cvd_safe,
+                    shap_samples=shap_samples,
+                    shap_features=shap_features,
                 )
                 if ok:
                     _echo(f"  Saved: {msg}")
@@ -588,10 +695,29 @@ def report(
         "--cvd-safe",
         help="Render dashboards and plots using an Okabe-Ito Colorblind-Safe palette instead of default neon.",
     ),
+    shap_samples: int = typer.Option(
+        500,
+        "--shap-samples",
+        help="Max samples for SHAP explainability computation in dashboards.",
+    ),
+    shap_features: int = typer.Option(
+        10,
+        "--shap-features",
+        help="Max features to visualize in SHAP plots.",
+    ),
 ):
     """Re-generate HTML Dashboards from existing matrix parquet files."""
     import glob
     import sys
+
+    print("=== kreview report ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --input-dir     : {input_dir}", flush=True)
+    print(f"  --out-dir       : {out_dir}", flush=True)
+    print(f"  --cvd-safe      : {cvd_safe}", flush=True)
+    print(f"  --shap-samples  : {shap_samples}", flush=True)
+    print(f"  --shap-features : {shap_features}", flush=True)
+    print("", flush=True)
 
     in_path = Path(input_dir).absolute()
     matrices = glob.glob(str(in_path / "*_matrix.parquet"))
@@ -606,7 +732,13 @@ def report(
         feat_name = Path(p).name.replace("_matrix.parquet", "")
         print(f"Rendering dashboard for {feat_name}...", flush=True)
         ok, msg = _render_quarto_report(
-            p, feat_name, out_path, sys.executable, cvd_safe=cvd_safe
+            p,
+            feat_name,
+            out_path,
+            sys.executable,
+            cvd_safe=cvd_safe,
+            shap_samples=shap_samples,
+            shap_features=shap_features,
         )
         if ok:
             print(f"  Saved: {msg}", flush=True)

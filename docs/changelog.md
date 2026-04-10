@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.0.6] - 2026-04-10
+### Fixed
+- **Bin-Level Extractor Coverage Filtering**: Fixed critical data bug where FSC and FSR on-target extractors computed `median()` across all 28,823 genomic bins, including the 98% with zero coverage. The zero-coverage sentinel values (`-29.897` for log2, `0.0` for ratios) dominated the median, producing constant features and AUC=0.500 for all models. Now filters to `total > 0` bins before aggregation.
+- **SHAP Feature Shape Mismatch**: Fixed `TreeExplainer` crashes caused by passing a feature-subset matrix instead of the full model-trained feature set. SHAP now computes on all 50 model features; `--shap-features` only limits visualization display count.
+- **SHAP Binary Output Handling**: Added robust handling for all `TreeExplainer` return shapes (list, 3D array, 2D array) and safe `expected_value` extraction for binary classifiers.
+- **Error Visibility**: Changed Quarto stderr capture from first 500 chars to last 1500 chars, surfacing actual Python errors instead of kernel boot messages.
+
+### Added
+- **Nextflow HPC Parity**: Wired all new CLI flags (`--top-n`, `--shap-samples`, `--shap-features`, `--resume`, `--skip-report`, `--cvd-safe`) into Nextflow `nextflow.config` and `run.nf` with HPC-optimized SLURM defaults (10-fold CV, 5000 SHAP samples, 64GB RAM).
+- **CLI Configuration Logging**: All three commands (`label`, `run`, `report`) now log their full parameter state at startup for reproducibility.
+- **Resume Support**: `--resume` flag skips evaluators with existing model results, enabling incremental re-runs.
+- **Variance Guard**: CLI automatically drops zero-variance features before model training with a logged warning, preventing wasted compute on constant columns.
+- **Coverage Monitoring**: All bin-level extractors now emit `n_covered_bins` and `n_total_bins` in the feature matrix for downstream QC.
+
+### Changed
+- **Memory Management**: Aggressive dashboard optimization — subsampled KDE plots (2000 samples), `gc.collect()` between SHAP runs, explicit dataframe deletion after filtering.
+- **SHAP Explainer**: Switched from generic `shap.Explainer` to `shap.TreeExplainer` to prevent OOM-causing `KernelExplainer` fallback.
+- **HPC Resource Allocation**: `process_high` memory increased from 32GB to 64GB for SHAP-heavy report generation.
 
 ## [0.0.5] - 2026-04-09
 ### Fixed

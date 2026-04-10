@@ -14,7 +14,12 @@ __all__ = ["log", "FSCRegionsEvaluator"]
 
 # %% ../../nbs/features/12_fsc_regions.ipynb #f85bbceb
 class FSCRegionsEvaluator(FeatureEvaluator):
-    """Extracts wide net ratios for targeted panels."""
+    """Extracts fragment size category ratios aggregated across gene-level regions.
+
+    Only regions with read coverage (total > 0) are included in aggregation.
+    FSC regions are typically ~99.8% covered, so this filter is a consistency
+    safeguard rather than a critical fix.
+    """
 
     name = "FSC_regions"
     source_file = ".FSC.regions.parquet"
@@ -27,6 +32,20 @@ class FSCRegionsEvaluator(FeatureEvaluator):
             if df.empty:
                 return extracted
 
+            # Filter to regions with actual read coverage
+            if "total" in df.columns:
+                n_total = len(df)
+                df = df[df["total"] > 0]
+                extracted["n_covered_regions"] = len(df)
+                extracted["n_total_regions"] = n_total
+                if df.empty:
+                    log.warning(
+                        "no_covered_regions",
+                        evaluator=self.name,
+                        total_regions=n_total,
+                    )
+                    return extracted
+
             cols = set(df.columns)
             ratios = [
                 "ultra_short_ratio",
@@ -36,13 +55,13 @@ class FSCRegionsEvaluator(FeatureEvaluator):
                 "long_ratio",
             ]
 
-            # Global
+            # Global summary across covered regions
             for r in ratios:
                 if r in cols:
                     extracted[f"global_{r}_mean"] = float(df[r].mean())
                     extracted[f"global_{r}_std"] = float(df[r].std())
 
-            # Variance across genes
+            # Variance across genes (inter-gene heterogeneity)
             if "gene" in cols:
                 for r in ratios:
                     if r in cols:
