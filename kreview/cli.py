@@ -293,6 +293,11 @@ def run(
         "--shap-features",
         help="Max features to visualize in SHAP beeswarm/waterfall plots. The model still trains on --top-n features.",
     ),
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        help="Skip evaluators whose model results already exist in the output directory.",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig, load_feature_cohort
@@ -358,6 +363,13 @@ def run(
     for e in target_evals:
         _echo(f"\n{'='*60}")
         _echo(f"Processing evaluator: {e.name}")
+
+        # ── Resume checkpoint: skip if model results already exist ──
+        if resume:
+            checkpoint = out_path / f"{e.name}_model_results.json"
+            if checkpoint.exists():
+                _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
+                continue
 
         # ── Step 3: Load + Shard + Extract ──
         _echo(f"Step 3: Loading & extracting '{e.name}'...")
