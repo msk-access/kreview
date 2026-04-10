@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://img.shields.io/badge/Release-v0.1.0-FF9B42.svg" alt="Release Badge">
+  <img src="https://img.shields.io/github/v/tag/msk-access/kreview?label=Release&color=FF9B42" alt="Release Badge">
   <img src="https://img.shields.io/badge/nbdev-Enabled-blue.svg" alt="nbdev Badge">
   <img src="https://img.shields.io/badge/Powered_by-DuckDB-yellow.svg" alt="DuckDB Badge">
   <img src="https://img.shields.io/badge/Reports-Quarto-blueviolet.svg" alt="Quarto Badge">

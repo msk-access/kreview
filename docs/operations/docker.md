@@ -13,7 +13,7 @@ docker pull ghcr.io/msk-access/kreview:latest
 Or pin to a specific version:
 
 ```bash
-docker pull ghcr.io/msk-access/kreview:v0.1.0
+docker pull ghcr.io/msk-access/kreview:latest
 ```
 
 ---
