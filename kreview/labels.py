@@ -22,7 +22,15 @@ from kreview.core import (
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'compute_impact_match', 'compute_snv_summary', 'compute_sv_summary', 'compute_cna_summary', 'CtDNALabeler']
+__all__ = [
+    "log",
+    "compute_impact_match",
+    "compute_snv_summary",
+    "compute_sv_summary",
+    "compute_cna_summary",
+    "CtDNALabeler",
+]
+
 
 # %% ../nbs/01_labels.ipynb #6333e679
 def _build_patient_impact_variants(
@@ -167,6 +175,7 @@ def compute_impact_match(
         log.error("compute_impact_match_failed", error=str(e))
         raise
 
+
 # %% ../nbs/01_labels.ipynb #41a901ed
 def compute_snv_summary(
     eligible_ids: set[str],
@@ -241,6 +250,7 @@ def compute_snv_summary(
         log.error("compute_snv_summary_failed", error=str(e))
         raise
 
+
 # %% ../nbs/01_labels.ipynb #c9709211
 def compute_sv_summary(
     eligible_ids: set[str],
@@ -290,6 +300,7 @@ def compute_sv_summary(
         log.error("compute_sv_summary_failed", error=str(e))
         raise
 
+
 # %% ../nbs/01_labels.ipynb #e5ce6bcf
 def compute_cna_summary(
     eligible_ids: set[str],
@@ -332,6 +343,7 @@ def compute_cna_summary(
     except Exception as e:
         log.error("compute_cna_summary_failed", error=str(e))
         raise
+
 
 # %% ../nbs/01_labels.ipynb #439dcd7c
 class CtDNALabeler:

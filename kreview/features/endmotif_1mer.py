@@ -9,7 +9,8 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'EndMotif1merEvaluator']
+__all__ = ["log", "EndMotif1merEvaluator"]
+
 
 # %% ../../nbs/features/23_endmotif_1mer.ipynb #b74ea526
 def _parse_array(s):

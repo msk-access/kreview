@@ -15,10 +15,31 @@ import time
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'IMPACT_PANELS', 'ACCESS_PANELS', 'VARIANT_KEY_COLS', 'MAF_USECOLS', 'LabelConfig', 'Paths', 'load_samplesheet',
-           'get_sample_ids', 'load_maf', 'load_sv', 'load_cna', 'load_clinical_sample', 'load_clinical_patient',
-           'clear_cbioportal_caches', 'get_duckdb_conn', 'discover_available_samples', 'load_feature_cohort',
-           'load_metadata_cohort', 'load_sample_feature', 'load_sample_metadata', 'make_variant_key', 'EvalRun']
+__all__ = [
+    "log",
+    "IMPACT_PANELS",
+    "ACCESS_PANELS",
+    "VARIANT_KEY_COLS",
+    "MAF_USECOLS",
+    "LabelConfig",
+    "Paths",
+    "load_samplesheet",
+    "get_sample_ids",
+    "load_maf",
+    "load_sv",
+    "load_cna",
+    "load_clinical_sample",
+    "load_clinical_patient",
+    "clear_cbioportal_caches",
+    "get_duckdb_conn",
+    "discover_available_samples",
+    "load_feature_cohort",
+    "load_metadata_cohort",
+    "load_sample_feature",
+    "load_sample_metadata",
+    "make_variant_key",
+    "EvalRun",
+]
 
 # %% ../nbs/00_core.ipynb #80f7c27c
 IMPACT_PANELS = ("IMPACT341", "IMPACT410", "IMPACT468", "IMPACT505")
@@ -122,6 +143,7 @@ class Paths:
     def clinical_patient(self) -> Path:
         return self.cbioportal_dir / "data_clinical_patient.txt"
 
+
 # %% ../nbs/00_core.ipynb #5ed4db19
 def load_samplesheet(path: str | Path) -> pd.DataFrame:
     """Load a krewlyzer samplesheet CSV."""
@@ -143,6 +165,7 @@ def get_sample_ids(samplesheet_path: str | Path) -> set[str]:
         )
         raise KeyError("'sample' column missing in samplesheet")
     return set(df["sample"])
+
 
 # %% ../nbs/00_core.ipynb #14489759
 @lru_cache(maxsize=1)
@@ -251,6 +274,7 @@ def clear_cbioportal_caches():
     load_clinical_patient.cache_clear()
     log.info("cbioportal_caches_cleared")
 
+
 # %% ../nbs/00_core.ipynb #703f67bb
 import threading
 
@@ -295,6 +319,7 @@ def discover_available_samples(
 
     log.info("sample_discovery", n_available=len(available), num_dirs=len(results_dirs))
     return available
+
 
 # %% ../nbs/00_core.ipynb #9b1bb0f9
 def load_feature_cohort(
@@ -444,6 +469,7 @@ def load_metadata_cohort(
         ".metadata.parquet", results_dirs, sample_ids, chunk_size=chunk_size
     )
 
+
 # %% ../nbs/00_core.ipynb #6d814a93
 def load_sample_feature(
     sample_id: str,
@@ -477,6 +503,7 @@ def load_sample_metadata(
     except Exception as e:
         log.error("metadata_fetch_failed", sample_id=sample_id, error=str(e))
         return {}
+
 
 # %% ../nbs/00_core.ipynb #d9e1baee
 def make_variant_key(df: pd.DataFrame) -> pd.Series:
