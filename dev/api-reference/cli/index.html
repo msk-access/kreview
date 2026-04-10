@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1464,6 +1464,8 @@
 <a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>                                  [default: 0.01]
 <a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>  --min-variants INTEGER          Min # variants passing VAF for Possible
 <a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>                                  ctDNA+  [default: 1]
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>  --chunk-size INTEGER            Batch size for DuckDB file loading over SFTP
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>                                  network mounts  [default: 500]
 </code></pre></div>
 <h2 id="report">report</h2>
 <p>Re-generate HTML Dashboards from existing matrix parquet files.</p>
@@ -1473,6 +1475,8 @@
 <p>Options:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>  --input-dir PATH  Directory with *_matrix.parquet files  [required]
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  --out-dir PATH    Directory to deposit Quarto reports  [default: reports/]
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  --cvd-safe        Render dashboards and plots using an Okabe-Ito Colorblind-
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>                    Safe palette instead of default neon.
 </code></pre></div>
 <h2 id="run">run</h2>
 <p>Run full pipeline: label → extract → evaluate → report.</p>
@@ -1493,17 +1497,20 @@
 <a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>  --tier INTEGER                  Run features of this tier only
 <a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>  --workers INTEGER               Total processes  [default: 4]
 <a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>  -v, --verbose                   Enable verbose logging
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>  --skip-report / --no-skip-report
-<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>                                  Skip HTML report generation  [default: no-
-<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>                                  skip-report]
-<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>  --cv-folds INTEGER              Number of cross-validation folds (3-20,
-<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>                                  default 5)  [default: 5]
-<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>  --impute-strategy TEXT          Imputation strategy for missing values:
-<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>                                  median, mean, or zero  [default: median]
-<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>  --export-duckdb                 Export a persistent duckdb data lake
-<a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>                                  containing all feature matrices
-<a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>  --chunk-size INTEGER            Batch size for DuckDB file loading over SFTP
-<a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a>                                  network mounts  [default: 500]
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>  --cvd-safe                      Render dashboards and plots using an Okabe-
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>                                  Ito Colorblind-Safe palette instead of
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>                                  default neon.
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>  --skip-report / --no-skip-report
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>                                  Skip HTML report generation  [default: no-
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>                                  skip-report]
+<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>  --cv-folds INTEGER              Number of cross-validation folds (3-20,
+<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>                                  default 5)  [default: 5]
+<a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>  --impute-strategy TEXT          Imputation strategy for missing values:
+<a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>                                  median, mean, or zero  [default: median]
+<a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a>  --export-duckdb                 Export a persistent duckdb data lake
+<a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>                                  containing all feature matrices
+<a id="__codelineno-8-26" name="__codelineno-8-26" href="#__codelineno-8-26"></a>  --chunk-size INTEGER            Batch size for DuckDB file loading over SFTP
+<a id="__codelineno-8-27" name="__codelineno-8-27" href="#__codelineno-8-27"></a>                                  network mounts  [default: 500]
 </code></pre></div>
 
 
