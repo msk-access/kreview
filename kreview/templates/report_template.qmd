@@ -629,9 +629,18 @@ def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
     if model is None or shap_df_samp is None:
         return Markdown("> Model not available.")
     try:    
-        exp = shap.Explainer(model, X_sh)
-        sh_vals = exp(X_sh, check_additivity=False)
-        sv = sh_vals[..., 1] if len(sh_vals.shape) > 2 else sh_vals
+        exp = shap.TreeExplainer(model)
+        sh_vals = exp.shap_values(X_sh)
+        # TreeExplainer returns list [class0, class1] for binary — take class 1
+        if isinstance(sh_vals, list):
+            sv_values = sh_vals[1]
+        else:
+            sv_values = sh_vals
+        # Build an Explanation object for consistent downstream access
+        base_val = exp.expected_value
+        if isinstance(base_val, (list, np.ndarray)):
+            base_val = base_val[1]  # class 1 baseline for binary
+        sv = shap.Explanation(values=sv_values, base_values=base_val, data=X_sh.values, feature_names=X_sh.columns.tolist())
         
         feature_names = X_sh.columns.tolist()
         vals = np.abs(sv.values).mean(axis=0)
