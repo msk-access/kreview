@@ -272,6 +272,11 @@ def run(
         "--chunk-size",
         help="Batch size for DuckDB file loading over SFTP network mounts",
     ),
+    top_n: int = typer.Option(
+        50,
+        "--top-n",
+        help="Max sub-metrics to feed into ML models per evaluator. All sub-metrics are included up to this cap; the model's feature importance ranks them.",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig, load_feature_cohort
@@ -474,15 +479,13 @@ def run(
             .values
         )
         if len(model_df) >= 20 and len(np.unique(y)) == 2:
-            # Use top-5 features by absolute Cohen's d
-            if "cohens_d_true_vs_healthy" in eval_df.columns:
-                top_feats = (
-                    eval_df.dropna(subset=["cohens_d_true_vs_healthy"])
-                    .nlargest(5, "cohens_d_true_vs_healthy")["feature_column"]
-                    .tolist()
-                )
-            else:
-                top_feats = numeric_cols[:5]
+            # Feed all sub-metrics into the model (capped at --top-n) and
+            # let RF/XGBoost feature importance rank them instead of
+            # pre-filtering with a univariate heuristic.
+            top_feats = numeric_cols[:top_n]
+            _echo(
+                f"  Feeding {len(top_feats)}/{len(numeric_cols)} sub-metrics into model (--top-n={top_n})"
+            )
 
             if top_feats:
                 X = model_df[top_feats].fillna(0).values
@@ -494,7 +497,12 @@ def run(
                     a_types = a_types.values
 
                 model_res, lr_model, rf_model, xgb_model = single_feature_model(
-                    X, y, cancer_types=c_types, assays=a_types
+                    X,
+                    y,
+                    feature_names=top_feats,
+                    cancer_types=c_types,
+                    assays=a_types,
+                    n_folds=cv_folds,
                 )
                 model_out = out_path / f"{e.name}_model_results.json"
 

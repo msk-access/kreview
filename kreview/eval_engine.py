@@ -23,24 +23,9 @@ from sklearn.pipeline import Pipeline
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = [
-    "log",
-    "LABEL_ORDER",
-    "NEON_COLORS",
-    "CVD_SAFE_COLORS",
-    "LABEL_COLORS",
-    "FeatureEvaluator",
-    "set_theme",
-    "evaluate_feature",
-    "plot_violin",
-    "plot_density",
-    "plot_feature_vs_vaf",
-    "plot_roc_curves",
-    "plot_feature_importance",
-    "plot_threshold_sensitivity",
-    "single_feature_model",
-]
-
+__all__ = ['log', 'LABEL_ORDER', 'NEON_COLORS', 'CVD_SAFE_COLORS', 'LABEL_COLORS', 'FeatureEvaluator', 'set_theme',
+           'evaluate_feature', 'plot_violin', 'plot_density', 'plot_feature_vs_vaf', 'plot_roc_curves',
+           'plot_feature_importance', 'plot_threshold_sensitivity', 'single_feature_model']
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3
 class FeatureEvaluator:
@@ -59,7 +44,6 @@ class FeatureEvaluator:
         raise NotImplementedError(
             "Feature evaluators must implement the extract() method."
         )
-
 
 # %% ../nbs/02_eval_engine.ipynb #69946ce8
 # Only the 4 ML-relevant tiers. "Insufficient Data" samples are
@@ -88,7 +72,6 @@ def set_theme(cvd_safe: bool = False):
     """Dynamically updates the global label and model colors based on CVD preference."""
     global LABEL_COLORS
     LABEL_COLORS.update(CVD_SAFE_COLORS if cvd_safe else NEON_COLORS)
-
 
 # %% ../nbs/02_eval_engine.ipynb #e48e056e
 def evaluate_feature(
@@ -242,7 +225,6 @@ def evaluate_feature(
     except Exception as e:
         log.error("evaluate_feature_failed", error=str(e), trace=traceback.format_exc())
         return {"error": str(e)}
-
 
 # %% ../nbs/02_eval_engine.ipynb #bf144667
 def plot_violin(
@@ -404,7 +386,6 @@ def plot_threshold_sensitivity(results_df: pd.DataFrame, title: str = "") -> go.
     except Exception as e:
         log.error("plot_threshold_sen_failed", error=str(e))
         return go.Figure()
-
 
 # %% ../nbs/02_eval_engine.ipynb #7a8a3f8d
 def single_feature_model(
