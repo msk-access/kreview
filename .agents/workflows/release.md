@@ -15,9 +15,10 @@ This project strictly utilizes a PR-driven **Git Flow**. Direct merging to `main
    git checkout -b release/vX.Y.Z
    ```
 
-2. **The Double Bump (Configuration Sync)**:
+2. **The Triple Bump (Configuration Sync)**:
    - Bump version identically in `settings.ini`
    - Bump version identically in `nextflow/nextflow.config`
+   - Bump version identically in `kreview/__init__.py`
 
 3. **Nbdev Engine Sync**:
    Execute export *after* bumping `settings.ini` to allow dynamic `__init__.py` hook propagation:
