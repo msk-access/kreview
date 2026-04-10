@@ -149,6 +149,7 @@ else:
 
 # ── Load model results ──
 model_path = Path(matrix_path).parent / f"{feature_name}_model_results.json"
+_shap_display_n = int(shap_features)  # Controls VISUALIZATION only, not computation
 if model_path.exists():
     with open(model_path) as f:
         mres = json.load(f)
@@ -156,15 +157,12 @@ if model_path.exists():
     auc_lr = mres.get('auc_lr', 0)
     auc_xgb = mres.get('auc_xgb', 0)
     
-    # Limit SHAP visualization to top N features by RF importance
-    _shap_n = int(shap_features)
-    all_top = mres.get("top_features", numeric_cols)
-    top_feats = all_top[:_shap_n]
+    # Use ALL features the model was trained on — SHAP requires matching shape
+    top_feats = mres.get("top_features", numeric_cols)
 else:
     mres = None
     auc_rf = auc_lr = auc_xgb = 0
-    _shap_n = int(shap_features)
-    top_feats = numeric_cols[:_shap_n]
+    top_feats = numeric_cols
 
 # Load Models
 import shap
@@ -638,12 +636,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
+def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title="", n_display=10):
     if model is None or shap_df_samp is None:
         return None, None, None, None
     try:    
         exp = shap.TreeExplainer(model)
-        sh_vals = exp.shap_values(X_sh)
+        sh_vals = exp.shap_values(X_sh, check_additivity=False)
 
         # Robust binary output handling: may be list, 3D array, or 2D array
         if isinstance(sh_vals, list):
@@ -667,7 +665,8 @@ def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title=""):
         
         feature_names = X_sh.columns.tolist()
         vals = np.abs(sv.values).mean(axis=0)
-        top_idx = np.argsort(vals)[-10:]
+        # Only display top N features by mean |SHAP|, even though all were computed
+        top_idx = np.argsort(vals)[-n_display:]
         top_features = [feature_names[i] for i in top_idx]
         
         sample_labels = shap_df_samp["label"].values
@@ -778,7 +777,7 @@ def plot_shap_waterfall(sv, probs, feature_names, sample_labels, model_title="")
 
 ```{python}
 #| echo: false
-rf_sv, rf_top, rf_sl, rf_sid = compute_shap_and_plot_beeswarm(rf_model, X_shap, shap_df_sample, "Random Forest") if rf_model is not None else (None, None, None, None)
+rf_sv, rf_top, rf_sl, rf_sid = compute_shap_and_plot_beeswarm(rf_model, X_shap, shap_df_sample, "Random Forest", n_display=_shap_display_n) if rf_model is not None else (None, None, None, None)
 ```
 
 ```{python}
@@ -789,7 +788,7 @@ import gc; gc.collect()  # Reclaim RF SHAP memory before XGB
 
 ```{python}
 #| echo: false
-xgb_sv, xgb_top, xgb_sl, xgb_sid = compute_shap_and_plot_beeswarm(xgb_model, X_shap, shap_df_sample, "XGBoost") if xgb_model is not None else (None, None, None, None)
+xgb_sv, xgb_top, xgb_sl, xgb_sid = compute_shap_and_plot_beeswarm(xgb_model, X_shap, shap_df_sample, "XGBoost", n_display=_shap_display_n) if xgb_model is not None else (None, None, None, None)
 ```
 
 ### Top Feature Dependence
