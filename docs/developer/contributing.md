@@ -10,7 +10,7 @@ We use a simplified **Git Flow** strategy:
 
 ```mermaid
 gitGraph
-    commit id: "v0.0.1"
+    commit id: "v0.0.3"
     branch develop
     commit id: "feat: labels"
     commit id: "feat: eval engine"

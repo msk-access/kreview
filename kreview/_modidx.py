@@ -20,8 +20,13 @@ d = {
             ),
             "kreview.cli.features_list": ("cli.html#features_list", "kreview/cli.py"),
             "kreview.cli.label": ("cli.html#label", "kreview/cli.py"),
+            "kreview.cli.main": ("cli.html#main", "kreview/cli.py"),
             "kreview.cli.report": ("cli.html#report", "kreview/cli.py"),
             "kreview.cli.run": ("cli.html#run", "kreview/cli.py"),
+            "kreview.cli.version_callback": (
+                "cli.html#version_callback",
+                "kreview/cli.py",
+            ),
         },
         "kreview.core": {
             "kreview.core.EvalRun": ("core.html#evalrun", "kreview/core.py"),

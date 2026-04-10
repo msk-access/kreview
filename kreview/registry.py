@@ -11,7 +11,6 @@ import structlog
 
 log = structlog.get_logger()
 
-
 # %% auto #0
 __all__ = ["log", "get_all_evaluators"]
 

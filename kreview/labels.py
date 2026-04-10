@@ -21,7 +21,6 @@ from kreview.core import (
 
 log = structlog.get_logger()
 
-
 # %% auto #0
 __all__ = [
     "log",

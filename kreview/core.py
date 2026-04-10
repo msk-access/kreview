@@ -14,7 +14,6 @@ import time
 
 log = structlog.get_logger()
 
-
 # %% auto #0
 __all__ = [
     "log",
