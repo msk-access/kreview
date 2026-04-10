@@ -26,6 +26,8 @@ execute:
 matrix_path = "output/FSC_gene_matrix.parquet"
 feature_name = "FSC_gene"
 cvd_safe = False
+shap_samples = 500
+shap_features = 10
 ```
 
 ```{python}
@@ -153,11 +155,15 @@ if model_path.exists():
     auc_lr = mres.get('auc_lr', 0)
     auc_xgb = mres.get('auc_xgb', 0)
     
-    top_feats = mres.get("top_features", numeric_cols)[:10]
+    # Limit SHAP visualization to top N features by RF importance
+    _shap_n = int(shap_features)
+    all_top = mres.get("top_features", numeric_cols)
+    top_feats = all_top[:_shap_n]
 else:
     mres = None
     auc_rf = auc_lr = auc_xgb = 0
-    top_feats = numeric_cols[:10]
+    _shap_n = int(shap_features)
+    top_feats = numeric_cols[:_shap_n]
 
 # Load Models
 import shap
@@ -194,8 +200,9 @@ if mres is not None and top_feats:
         X_shap_raw = shap_df[top_feats].fillna(0)
         y_shap_raw = shap_df["label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
         
-        if len(X_shap_raw) > 1000:
-            sample_idx = X_shap_raw.sample(n=1000, random_state=42).index
+        _max_shap = int(shap_samples)
+        if len(X_shap_raw) > _max_shap:
+            sample_idx = X_shap_raw.sample(n=_max_shap, random_state=42).index
             X_shap = X_shap_raw.loc[sample_idx]
             y_shap = y_shap_raw[X_shap_raw.index.get_indexer(sample_idx)]
             shap_df_sample = shap_df.loc[sample_idx]

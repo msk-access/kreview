@@ -180,6 +180,8 @@ def _render_quarto_report(
     report_dir: Path,
     python_exe: str,
     cvd_safe: bool = False,
+    shap_samples: int = 500,
+    shap_features: int = 10,
 ) -> tuple[bool, str]:
     """Render a Quarto HTML dashboard for a single feature matrix."""
     import subprocess
@@ -206,6 +208,10 @@ def _render_quarto_report(
         f"feature_name:{feat_name}",
         "-P",
         f"cvd_safe:{str(cvd_safe).lower()}",
+        "-P",
+        f"shap_samples:{shap_samples}",
+        "-P",
+        f"shap_features:{shap_features}",
         "--output",
         out_html.name,
         "--output-dir",
@@ -219,14 +225,14 @@ def _render_quarto_report(
             capture_output=True,
             text=True,
             check=True,
-            timeout=300,
+            timeout=600,
             cwd=str(template_dir),
         )
         return True, str(out_html)
     except subprocess.CalledProcessError as exc:
         return False, exc.stderr[:500]
     except subprocess.TimeoutExpired:
-        return False, "Timeout (>300s)"
+        return False, "Timeout (>600s)"
 
 
 @app.command()
@@ -276,6 +282,16 @@ def run(
         50,
         "--top-n",
         help="Max sub-metrics to feed into ML models per evaluator. All sub-metrics are included up to this cap; the model's feature importance ranks them.",
+    ),
+    shap_samples: int = typer.Option(
+        500,
+        "--shap-samples",
+        help="Max samples for SHAP explainability computation in dashboards. Lower values reduce memory usage.",
+    ),
+    shap_features: int = typer.Option(
+        10,
+        "--shap-features",
+        help="Max features to visualize in SHAP beeswarm/waterfall plots. The model still trains on --top-n features.",
     ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
@@ -557,7 +573,13 @@ def run(
                 feat_name = Path(p).name.replace("_matrix.parquet", "")
                 _echo(f"  Rendering {feat_name}...")
                 ok, msg = _render_quarto_report(
-                    p, feat_name, report_dir, sys.executable, cvd_safe=cvd_safe
+                    p,
+                    feat_name,
+                    report_dir,
+                    sys.executable,
+                    cvd_safe=cvd_safe,
+                    shap_samples=shap_samples,
+                    shap_features=shap_features,
                 )
                 if ok:
                     _echo(f"  Saved: {msg}")
@@ -604,6 +626,16 @@ def report(
         "--cvd-safe",
         help="Render dashboards and plots using an Okabe-Ito Colorblind-Safe palette instead of default neon.",
     ),
+    shap_samples: int = typer.Option(
+        500,
+        "--shap-samples",
+        help="Max samples for SHAP explainability computation in dashboards.",
+    ),
+    shap_features: int = typer.Option(
+        10,
+        "--shap-features",
+        help="Max features to visualize in SHAP plots.",
+    ),
 ):
     """Re-generate HTML Dashboards from existing matrix parquet files."""
     import glob
@@ -622,7 +654,13 @@ def report(
         feat_name = Path(p).name.replace("_matrix.parquet", "")
         print(f"Rendering dashboard for {feat_name}...", flush=True)
         ok, msg = _render_quarto_report(
-            p, feat_name, out_path, sys.executable, cvd_safe=cvd_safe
+            p,
+            feat_name,
+            out_path,
+            sys.executable,
+            cvd_safe=cvd_safe,
+            shap_samples=shap_samples,
+            shap_features=shap_features,
         )
         if ok:
             print(f"  Saved: {msg}", flush=True)
