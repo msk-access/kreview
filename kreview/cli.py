@@ -479,10 +479,18 @@ def run(
             .values
         )
         if len(model_df) >= 20 and len(np.unique(y)) == 2:
-            # Feed all sub-metrics into the model (capped at --top-n) and
-            # let RF/XGBoost feature importance rank them instead of
-            # pre-filtering with a univariate heuristic.
-            top_feats = numeric_cols[:top_n]
+            # Pre-filter sub-metrics by Cohen's d (noise reduction) then
+            # feed the top --top-n into the model for importance ranking.
+            if "cohens_d_true_vs_healthy" in eval_df.columns:
+                ranked = (
+                    eval_df.dropna(subset=["cohens_d_true_vs_healthy"])
+                    .sort_values("cohens_d_true_vs_healthy", key=abs, ascending=False)
+                    .head(top_n)["feature_column"]
+                    .tolist()
+                )
+                top_feats = ranked if ranked else numeric_cols[:top_n]
+            else:
+                top_feats = numeric_cols[:top_n]
             _echo(
                 f"  Feeding {len(top_feats)}/{len(numeric_cols)} sub-metrics into model (--top-n={top_n})"
             )
