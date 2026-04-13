@@ -9,8 +9,7 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "BreakPointMotifOnTargetEvaluator"]
-
+__all__ = ['log', 'BreakPointMotifOnTargetEvaluator']
 
 # %% ../../nbs/features/22_breakpoint_motif.ipynb #0b410faf
 class BreakPointMotifOnTargetEvaluator(FeatureEvaluator):

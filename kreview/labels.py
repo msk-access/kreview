@@ -22,15 +22,7 @@ from kreview.core import (
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = [
-    "log",
-    "compute_impact_match",
-    "compute_snv_summary",
-    "compute_sv_summary",
-    "compute_cna_summary",
-    "CtDNALabeler",
-]
-
+__all__ = ['log', 'compute_impact_match', 'compute_snv_summary', 'compute_sv_summary', 'compute_cna_summary', 'CtDNALabeler']
 
 # %% ../nbs/01_labels.ipynb #6333e679
 def _build_patient_impact_variants(

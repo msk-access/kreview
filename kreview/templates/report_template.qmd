@@ -1472,12 +1472,79 @@ else:
 ## Row
 
 ```{python}
-#| title: "Full Feature Matrix"
+#| title: "Feature Matrix (Grouped by Family)"
+#| echo: false
+from collections import defaultdict
+
+try:
+    from great_tables import GT, style, loc
+    from great_tables import _tbl_data as _gt  # noqa: F401 — verify import
+
+    # Subsample for display performance (great_tables renders full HTML)
+    display_df = df.head(200).copy()
+
+    # Auto-detect feature families from column prefixes
+    feature_cols = [c for c in display_df.columns if c not in meta_cols]
+    families = defaultdict(list)
+    for c in feature_cols:
+        parts = c.split("_")
+        family = "_".join(parts[:2]) if len(parts) >= 2 else parts[0]
+        families[family].append(c)
+
+    # Build great_tables with spanners
+    gt_table = GT(display_df)
+
+    for family, cols in sorted(families.items()):
+        if len(cols) > 1:
+            gt_table = gt_table.tab_spanner(
+                label=family.replace("_", " ").title(),
+                columns=cols
+            )
+
+    # Dark theme styling to match dashboard
+    gt_table = (
+        gt_table
+        .tab_header(
+            title=f"{feature_name} Feature Matrix",
+            subtitle=f"Showing first {len(display_df)} of {len(df)} samples · {len(families)} feature families"
+        )
+        .tab_options(
+            table_background_color="#121418",
+            heading_background_color="#1a1d23",
+            column_labels_background_color="#1a1d23",
+            table_font_color="#e0e6ed",
+            heading_title_font_color="#ff9b42",
+            heading_subtitle_font_color="#8b949e",
+            column_labels_font_color="#aeb8c4",
+            table_body_border_bottom_color="#2e3440",
+            heading_border_bottom_color="rgba(255, 155, 66, 0.3)",
+            column_labels_border_bottom_color="rgba(255, 155, 66, 0.2)",
+            table_font_size="0.8rem",
+        )
+    )
+
+    display(HTML(gt_table.as_raw_html()))
+
+except Exception as e:
+    # Fallback to itables if great_tables fails
+    display(Markdown(f"> great_tables rendering failed ({e}), falling back to itables."))
+    itables.show(
+        df, classes="display nowrap compact",
+        scrollX=True, scrollY="800px",
+        paging=True, pageLength=50,
+        buttons=["copy", "csv", "excel"],
+        dom="Bfrtip", maxBytes=0
+    )
+```
+
+```{python}
+#| title: "Full Searchable Table (All Rows)"
+#| echo: false
 itables.show(
     df, 
     classes="display nowrap compact",
     scrollX=True, 
-    scrollY="800px",
+    scrollY="600px",
     paging=True,
     pageLength=50,
     buttons=["copy", "csv", "excel"],

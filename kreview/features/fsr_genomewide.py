@@ -10,8 +10,7 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "FSRGenomewideEvaluator"]
-
+__all__ = ['log', 'FSRGenomewideEvaluator']
 
 # %% ../../nbs/features/14b_fsr_genomewide.ipynb #3a85e316
 class FSRGenomewideEvaluator(FeatureEvaluator):

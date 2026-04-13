@@ -9,8 +9,7 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "TFBSOnTargetEvaluator"]
-
+__all__ = ['log', 'TFBSOnTargetEvaluator']
 
 # %% ../../nbs/features/18_tfbs.ipynb #0e39738d
 class TFBSOnTargetEvaluator(FeatureEvaluator):

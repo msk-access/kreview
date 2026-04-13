@@ -9,8 +9,7 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "ATACGenomewideEvaluator"]
-
+__all__ = ['log', 'ATACGenomewideEvaluator']
 
 # %% ../../nbs/features/17b_atac_genomewide.ipynb #874d8529
 class ATACGenomewideEvaluator(FeatureEvaluator):
