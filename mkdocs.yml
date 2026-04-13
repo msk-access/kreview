@@ -74,6 +74,8 @@ nav:
   - Machine Learning & Statistics:
       - Statistical Tests: machine-learning/statistical-tests.md
       - Models & Metrics: machine-learning/models-and-metrics.md
+      - Dashboard Guide: machine-learning/dashboard-guide.md
+      - Decision Curve Analysis: machine-learning/decision-curve-analysis.md
   - Developer Guide:
       - nbdev Workflow: developer/nbdev-workflow.md
       - Adding a Feature: developer/adding-a-feature.md
@@ -90,6 +92,7 @@ nav:
       - Core Operations: api-reference/core.md
       - Labeling Engine: api-reference/labels.md
       - Evaluation Engine: api-reference/eval-engine.md
+      - Feature Cards: api-reference/feature-cards.md
       - Evaluator Registry: api-reference/features.md
   - Changelog: changelog.md
 markdown_extensions:

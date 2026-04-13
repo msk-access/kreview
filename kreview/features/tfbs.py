@@ -9,12 +9,12 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "TFBSEvaluator"]
+__all__ = ["log", "TFBSOnTargetEvaluator"]
 
 
 # %% ../../nbs/features/18_tfbs.ipynb #0e39738d
-class TFBSEvaluator(FeatureEvaluator):
-    """Extracts TFBS footprint metrics."""
+class TFBSOnTargetEvaluator(FeatureEvaluator):
+    """Extracts TFBS footprint metrics for on-target regions."""
 
     name = "TfbsOnTarget"
     source_file = ".TFBS.ontarget.parquet"

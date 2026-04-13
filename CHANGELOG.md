@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.0.7] - 2026-04-13
+### Added
+- **Dashboard Redesign**: Restructured from single-page to 6-page progressive disclosure hierarchy (Executive Summary, Model Validation, Feature Explanation, Biomarker Yield, Cohort & QC, Data Explorer).
+- **XGBoost Integration**: Full XGBoost model evaluation alongside LR and RF in `single_feature_model()`.
+- **Bootstrap AUC CIs**: 95% confidence intervals for all model AUCs using `scipy.stats.bootstrap`.
+- **Decision Curve Analysis (DCA)**: Standalone `decision_curve_analysis()` function computing net clinical benefit across thresholds for RF and XGBoost models.
+- **Precision-Recall Curves**: PR curves and average precision for all three models (LR, RF, XGBoost).
+- **Fold-Level AUC Tracking**: Per-fold AUC tracking via `cross_val_score` for all three models with `*_auc_std` stability metric.
+- **Threshold Sensitivity Sweep**: 50-point sweep of sensitivity, specificity, and PPV across thresholds (0.01–0.99) for RF.
+- **Feature Stability**: CV cross-fold feature importance consistency scoring (0.0–1.0 scale).
+- **QC Metrics**: Per-feature `n_missing`, `pct_missing`, and `is_zero_variance` computed in `evaluate_feature()`.
+- **Feature Cards**: Auto-generated metadata cards from evaluator registry with tier, category, and derived feature type detection.
+- **SHAP Tabbed Interface**: Unified SHAP tabs for RF and XGBoost with consistent layout.
+- **Verdict Value Box**: AUC-threshold verdict (Strong ≥0.80, Moderate ≥0.70, Weak <0.70) in Executive Summary.
+- **Label × Cancer Type Sunburst**: Interactive sunburst visualization replacing static bar chart.
+- **Per-Sample Coverage Histogram**: Histogram of non-null feature percentage per sample.
+- **Per-Chromosome Feature Chart**: Conditional chromosome-level feature bar chart.
+- **Feature Importances Tab**: Top-20 RF Gini importance bar chart in Model Validation.
+- **AUC Deltas**: RF–LR and XGB–RF AUC deltas surfaced in Performance Metrics.
+- **Training Time**: Model training time displayed in Performance Metrics tab.
+- **VAF Scatter**: Re-added tumor burden independence scatter (top feature vs max_vaf, LOWESS trendline).
+- **great_tables Integration**: Column-grouped data explorer using `great_tables` with auto-detected feature family spanners.
+- **Quarto Auto-Discovery**: `_find_quarto()` probes PATH then 7 well-known install locations (Positron, Homebrew, system, conda).
+- **Methods Link**: Sidebar link to API documentation site.
+- **Documentation**: New dashboard guide, DCA methodology doc, feature cards API reference, comprehensive CLI flag docs.
+- **Tests**: 24 new tests (53 total) covering DCA, PR curves, fold AUC, threshold sweep, feature stability, QC metrics, training time, AUC deltas, and feature cards.
+
+### Changed
+- JSON schema expanded from 24 to 44 fields per feature set.
+- Dashboard template: 1,555 lines, 52 balanced code blocks.
+- Language discipline applied across docs and template (removed promotional/overclaiming language).
+- `custom.scss`: bumped font size to 0.95rem, added QC warning class, added `@media print` rules.
+
+### Fixed
+- Silent `except: pass` in calibration code replaced with `log.warning()`.
+- Division by `len(df)` without zero-guard in class balance text.
+- Scoreboard NaN values: sensitivity, specificity, n_samples, n_positive now correctly extracted from `rf_classification_report` dict instead of non-existent top-level keys.
+- QC tab Figure code dump: unsuppressed `fig.update_traces()` return displayed as raw `Figure({...})` text.
+- Dashboard `debug: true` leaked Python output into rendered HTML; replaced with `warning: false`.
+- QC row heights summed to 135%; rebalanced to 100% (10+40+25+25).
+- Undefined `_to_float_array` in `wps_panel.py` and `wps_genomewide.py` replaced with correctly imported `parse_array`.
+- SHAP waterfall rendering stabilized for edge cases with zero feature contributions.
+- Typo `fallsbacks` → `fallbacks` in `pyproject.toml`.
+- `great_tables>=0.15.0` added to `pyproject.toml` dependencies.
+
 ## [0.0.6] - 2026-04-10
 ### Fixed
 - **Bin-Level Extractor Coverage Filtering**: Fixed critical data bug where FSC and FSR on-target extractors computed `median()` across all 28,823 genomic bins, including the 98% with zero coverage. The zero-coverage sentinel values (`-29.897` for log2, `0.0` for ratios) dominated the median, producing constant features and AUC=0.500 for all models. Now filters to `total > 0` bins before aggregation.

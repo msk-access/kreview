@@ -30,6 +30,8 @@ __all__ = [
     "CVD_SAFE_COLORS",
     "LABEL_COLORS",
     "FeatureEvaluator",
+    "parse_array",
+    "univariate_auc",
     "set_theme",
     "evaluate_feature",
     "plot_violin",
@@ -38,6 +40,7 @@ __all__ = [
     "plot_roc_curves",
     "plot_feature_importance",
     "plot_threshold_sensitivity",
+    "decision_curve_analysis",
     "single_feature_model",
 ]
 
@@ -59,6 +62,66 @@ class FeatureEvaluator:
         raise NotImplementedError(
             "Feature evaluators must implement the extract() method."
         )
+
+
+def parse_array(s) -> list[float]:
+    """Parse a string-encoded numeric array into a list of floats.
+
+    Handles formats like '[1.0 2.0 3.0]' from parquet serialization.
+    Returns empty list on any parse failure (no silent corruption).
+    """
+    if not isinstance(s, str) or not s.startswith("["):
+        return []
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
+    try:
+        return [float(x) for x in clean.split()]
+    except (ValueError, TypeError):
+        return []
+
+
+def univariate_auc(
+    feature_col,
+    y,
+    n_folds: int = 5,
+    random_state: int = 42,
+) -> float:
+    """Compute cross-validated AUC for a single feature using univariate LR.
+
+    Args:
+        feature_col: pandas Series or array-like of a single feature.
+        y: binary label array (0/1).
+        n_folds: number of CV folds.
+        random_state: random seed.
+
+    Returns:
+        Cross-validated AUC (float). Returns 0.5 if the feature is constant,
+        there are too few samples per class, or CV fails.
+    """
+    import numpy as np
+
+    X = np.array(feature_col).reshape(-1, 1)
+    # Replace NaN with 0 for safety
+    X = np.nan_to_num(X, nan=0.0)
+    y = np.array(y, dtype=int)
+
+    if np.std(X) == 0:
+        return 0.5
+
+    try:
+        min_class = np.bincount(y).min()
+        folds = min(n_folds, min_class)
+        if folds < 2:
+            return 0.5
+        pipe = Pipeline(
+            [("scaler", StandardScaler()), ("lr", LogisticRegression(max_iter=1000))]
+        )
+        cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
+        proba = cross_val_predict(pipe, X, y, cv=cv, method="predict_proba")[:, 1]
+        return float(roc_auc_score(y, proba))
+    except Exception:
+        return 0.5
 
 
 # %% ../nbs/02_eval_engine.ipynb #69946ce8
@@ -238,6 +301,12 @@ def evaluate_feature(
 
         result["low_power"] = any(len(v) < 10 for v in groups.values())
 
+        # --- Data quality metrics ---
+        result["n_missing"] = int(feature_values.isna().sum())
+        result["pct_missing"] = float(feature_values.isna().mean() * 100)
+        non_null = feature_values.dropna()
+        result["is_zero_variance"] = bool(len(non_null) < 2 or non_null.std() == 0)
+
         return result
     except Exception as e:
         log.error("evaluate_feature_failed", error=str(e), trace=traceback.format_exc())
@@ -406,6 +475,52 @@ def plot_threshold_sensitivity(results_df: pd.DataFrame, title: str = "") -> go.
         return go.Figure()
 
 
+def decision_curve_analysis(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    thresholds: np.ndarray | None = None,
+) -> dict:
+    """Compute Decision Curve Analysis (DCA) net benefit data.
+
+    For each threshold, calculates the net benefit of using the model vs
+    treating all or treating none. This helps clinicians choose an operating
+    threshold that balances false positives against missed detections.
+
+    Args:
+        y_true: Binary ground truth labels (0/1).
+        y_prob: Predicted probabilities for positive class.
+        thresholds: Array of decision thresholds to evaluate.
+            Defaults to ``np.linspace(0.01, 0.99, 99)``.
+
+    Returns:
+        Dictionary with keys ``thresholds``, ``net_benefit_model``, and
+        ``net_benefit_treat_all``.
+    """
+    if thresholds is None:
+        thresholds = np.linspace(0.01, 0.99, 99)
+
+    n = len(y_true)
+    prevalence = float(y_true.mean())
+    net_benefits = []
+    treat_all = []
+
+    for t in thresholds:
+        y_pred = (y_prob >= t).astype(int)
+        tp = int(np.sum((y_pred == 1) & (y_true == 1)))
+        fp = int(np.sum((y_pred == 1) & (y_true == 0)))
+        odds = t / (1 - t) if t < 1 else float("inf")
+        nb = (tp / n) - (fp / n) * odds
+        net_benefits.append(float(nb))
+        ta = prevalence - (1 - prevalence) * odds
+        treat_all.append(float(ta))
+
+    return {
+        "thresholds": thresholds.tolist(),
+        "net_benefit_model": net_benefits,
+        "net_benefit_treat_all": treat_all,
+    }
+
+
 # %% ../nbs/02_eval_engine.ipynb #7a8a3f8d
 def single_feature_model(
     X: np.ndarray,  # shape (n_samples, n_sub_metrics)
@@ -549,8 +664,8 @@ def single_feature_model(
                 "prob_true": prob_true.tolist(),
                 "prob_pred": prob_pred.tolist(),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("calibration_failed", error=str(e))
         rf_opt = get_optimal_threshold(y, rf_probs)
         results["rf_optimal_threshold"] = rf_opt
         rf_rep, rf_cm = safely_get_metrics(y, rf_probs, threshold=rf_opt)
@@ -618,6 +733,94 @@ def single_feature_model(
                 reverse=True,
             )
             results["top_features"] = [f[0] for f in sorted_feats[:10]]
+
+        # ── PR curves (precision-recall) ──
+        try:
+            from sklearn.metrics import precision_recall_curve, average_precision_score
+
+            for prefix, probs in [
+                ("lr", lr_probs),
+                ("rf", rf_probs),
+                ("xgb", xgb_probs),
+            ]:
+                if probs is not None:
+                    prec, rec, _ = precision_recall_curve(y, probs)
+                    results[f"{prefix}_pr_curve"] = {
+                        "precision": prec.tolist(),
+                        "recall": rec.tolist(),
+                    }
+                    results[f"{prefix}_avg_precision"] = float(
+                        average_precision_score(y, probs)
+                    )
+        except Exception as e:
+            log.warning("pr_curve_failed", error=str(e))
+
+        # ── Fold-level AUC tracking (all 3 models) ──
+        try:
+            from sklearn.model_selection import cross_val_score
+
+            for _prefix, _model in [
+                ("lr", lr_pipe),
+                ("rf", rf),
+                ("xgb", xgb),
+            ]:
+                if _model is not None:
+                    _fold_aucs = cross_val_score(_model, X, y, cv=cv, scoring="roc_auc")
+                    results[f"{_prefix}_fold_aucs"] = _fold_aucs.tolist()
+                    results[f"{_prefix}_auc_std"] = float(_fold_aucs.std())
+                    log.debug(
+                        "fold_aucs_computed",
+                        model=_prefix,
+                        mean=f"{_fold_aucs.mean():.3f}",
+                        std=f"{_fold_aucs.std():.3f}",
+                    )
+        except Exception as e:
+            log.warning("fold_auc_tracking_failed", error=str(e))
+
+        # ── Feature stability across CV folds ──
+        if feature_names is not None:
+            try:
+                from collections import Counter
+                from sklearn.base import clone
+
+                fold_top10 = Counter()
+                for train_idx, _ in cv.split(X, y):
+                    fold_rf = clone(rf).fit(X[train_idx], y[train_idx])
+                    top10_idx = np.argsort(fold_rf.feature_importances_)[-10:]
+                    for idx in top10_idx:
+                        fold_top10[feature_names[idx]] += 1
+                results["feature_stability"] = {
+                    k: round(v / folds, 2) for k, v in fold_top10.items()
+                }
+            except Exception as e:
+                log.warning("feature_stability_failed", error=str(e))
+
+        # ── Threshold sensitivity sweep (RF) ──
+        try:
+            thresholds_sweep = np.linspace(0.01, 0.99, 50)
+            sweep_data = []
+            for t in thresholds_sweep:
+                y_pred = (rf_probs >= t).astype(int)
+                tn, fp, fn, tp = confusion_matrix(y, y_pred, labels=[0, 1]).ravel()
+                sweep_data.append(
+                    {
+                        "threshold": round(float(t), 3),
+                        "sensitivity": float(tp / (tp + fn)) if (tp + fn) > 0 else 0.0,
+                        "specificity": float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0,
+                        "ppv": float(tp / (tp + fp)) if (tp + fp) > 0 else 0.0,
+                    }
+                )
+            results["rf_threshold_sweep"] = sweep_data
+        except Exception as e:
+            log.warning("threshold_sweep_failed", error=str(e))
+
+        # ── Decision Curve Analysis ──
+        try:
+            for prefix, probs in [("rf", rf_probs), ("xgb", xgb_probs)]:
+                if probs is not None:
+                    results[f"{prefix}_dca"] = decision_curve_analysis(y, probs)
+        except Exception as e:
+            log.warning("dca_failed", error=str(e))
 
         # ── Subgroup Analysis using OOF predictions (C-02: unbiased) ──
         # Use out-of-fold CV predictions, NOT the retrained model

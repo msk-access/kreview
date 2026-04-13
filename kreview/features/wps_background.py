@@ -13,18 +13,6 @@ __all__ = ["log", "WPSBackgroundEvaluator"]
 
 
 # %% ../../nbs/features/26_wps_background.ipynb #fccdac31
-def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith("["):
-        return []
-    clean = (
-        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
-    )
-    try:
-        return [float(x) for x in clean.split()]
-    except (ValueError, TypeError):
-        return []
-
-
 class WPSBackgroundEvaluator(FeatureEvaluator):
     """Extracts periodicity distances for nucleosomes."""
 

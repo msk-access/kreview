@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 import structlog
-from ..eval_engine import FeatureEvaluator
+from ..eval_engine import FeatureEvaluator, parse_array
 
 log = structlog.get_logger()
 
@@ -14,20 +14,18 @@ __all__ = ["log", "WPSPanelEvaluator"]
 
 
 # %% ../../nbs/features/24_wps_panel.ipynb #cee7b4e4
-def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith("["):
-        return []
-    clean = (
-        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
-    )
-    try:
-        return [float(x) for x in clean.split()]
-    except (ValueError, TypeError):
-        return []
-
-
 class WPSPanelEvaluator(FeatureEvaluator):
-    """Extracts WPS nucleosome binding geometries."""
+    """Extracts WPS nucleosome binding geometries with spectral features.
+
+    For each WPS array, extracts:
+    - mean, std (original)
+    - peak-to-valley amplitude
+    - median absolute deviation
+    - spectral max power and dominant frequency (FFT-based periodicity)
+    - local_depth scalar (if available)
+
+    Handles both numpy array and string columns from krewlyzer parquets.
+    """
 
     name = "WPSPanel"
     source_file = ".WPS.panel.parquet"
@@ -53,15 +51,38 @@ class WPSPanelEvaluator(FeatureEvaluator):
                     )
 
                     for m in float_cols:
-                        if m in cols and pd.notna(row[m]):
-                            extracted[f"{rt}_{m}"] = float(row[m])
+                        if m in cols:
+                            v = row[m]
+                            if v is not None and not (
+                                isinstance(v, float) and np.isnan(v)
+                            ):
+                                extracted[f"{rt}_{m}"] = float(v)
 
                     for a in array_cols:
-                        if a in cols and pd.notna(row[a]):
-                            parsed = _parse_array(str(row[a]))
-                            if len(parsed) > 0:
-                                extracted[f"{rt}_{a}_mean"] = float(np.mean(parsed))
-                                extracted[f"{rt}_{a}_std"] = float(np.std(parsed))
+                        if a in cols:
+                            arr_raw = parse_array(row[a])
+                            if arr_raw is not None and len(arr_raw) > 0:
+                                arr = np.array(arr_raw)
+                                extracted[f"{rt}_{a}_mean"] = float(np.mean(arr))
+                                extracted[f"{rt}_{a}_std"] = float(np.std(arr))
+
+                                extracted[f"{rt}_{a}_peak_valley"] = float(
+                                    np.max(arr) - np.min(arr)
+                                )
+                                extracted[f"{rt}_{a}_mad"] = float(
+                                    np.median(np.abs(arr - np.median(arr)))
+                                )
+
+                                if len(arr) >= 50:
+                                    fft_vals = np.abs(np.fft.rfft(arr - arr.mean()))
+                                    freqs = np.fft.rfftfreq(len(arr))
+                                    if len(fft_vals) > 2:
+                                        extracted[f"{rt}_{a}_spectral_max_power"] = (
+                                            float(np.max(fft_vals[1:]))
+                                        )
+                                        extracted[
+                                            f"{rt}_{a}_spectral_dominant_freq"
+                                        ] = float(freqs[1:][np.argmax(fft_vals[1:])])
 
             return extracted
         except Exception as e:

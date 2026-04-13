@@ -14,6 +14,7 @@ __all__ = [
 
 # %% ../nbs/90_cli.ipynb #27a890c5
 import typer
+import sys
 from pathlib import Path
 from typing import Optional
 import pandas as pd
@@ -114,10 +115,34 @@ def features_list():
 
 # %% ../nbs/90_cli.ipynb #0206e0c1
 import numpy as np
-import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
 import concurrent.futures
+
+
+def _impute(df, strategy: str):
+    """Apply imputation strategy to a feature DataFrame.
+
+    Args:
+        df: DataFrame with numeric features (may contain NaN).
+        strategy: One of 'zero', 'mean', 'median'.
+
+    Returns:
+        DataFrame with NaN values filled according to strategy.
+    """
+    if strategy == "mean":
+        return df.fillna(df.mean())
+    elif strategy == "median":
+        return df.fillna(df.median())
+    elif strategy != "zero":
+        import structlog
+
+        structlog.get_logger().warning(
+            "unknown_impute_strategy",
+            strategy=strategy,
+            fallback="zero",
+        )
+    return df.fillna(0)  # default: zero
 
 
 def _extract_from_dataframe(e_name, df_chunk, verbose=False):
@@ -186,6 +211,39 @@ def _extract_from_dataframe(e_name, df_chunk, verbose=False):
         return e_name, False, str(exc)
 
 
+def _find_quarto() -> str:
+    """Discover the quarto binary from PATH or well-known install locations."""
+    import shutil
+
+    # 1. Check PATH first
+    found = shutil.which("quarto")
+    if found:
+        return found
+
+    # 2. Check well-known install locations
+    candidates = [
+        # macOS Positron bundled Quarto
+        "/Applications/Positron.app/Contents/Resources/app/quarto/bin/quarto",
+        # macOS standalone Quarto install
+        "/Applications/quarto/bin/quarto",
+        # Homebrew (Apple Silicon)
+        "/opt/homebrew/bin/quarto",
+        # Homebrew (Intel)
+        "/usr/local/bin/quarto",
+        # Linux system install
+        "/usr/bin/quarto",
+        # User-local install
+        str(Path.home() / ".local" / "bin" / "quarto"),
+        # Conda env
+        str(Path(sys.executable).parent / "quarto"),
+    ]
+    for c in candidates:
+        if Path(c).is_file():
+            return c
+
+    return "quarto"  # Fall back to bare name (will raise FileNotFoundError)
+
+
 def _render_quarto_report(
     matrix_path: str,
     feat_name: str,
@@ -209,9 +267,10 @@ def _render_quarto_report(
     env = os.environ.copy()
     env["QUARTO_PYTHON"] = str(python_exe)
 
+    quarto_bin = _find_quarto()
     out_html = Path(report_dir) / f"{feat_name}_dashboard.html"
     cmd = [
-        "quarto",
+        quarto_bin,
         "render",
         "report_template.qmd",
         "-P",
@@ -310,6 +369,11 @@ def run(
         "--resume",
         help="Skip evaluators whose model results already exist in the output directory.",
     ),
+    compute_univariate_auc: bool = typer.Option(
+        False,
+        "--compute-univariate-auc",
+        help="Compute per-feature univariate LR AUC (adds ~10s per evaluator).",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig, load_feature_cohort
@@ -354,6 +418,7 @@ def run(
     _echo(f"  --cvd-safe          : {cvd_safe}")
     _echo(f"  --export-duckdb     : {export_duckdb}")
     _echo(f"  --resume            : {resume}")
+    _echo(f"  --compute-univariate-auc : {compute_univariate_auc}")
     _echo(f"  --verbose           : {verbose}")
     _echo("")
 
@@ -520,6 +585,35 @@ def run(
             eval_results.append(res)
 
         eval_df = pd.DataFrame(eval_results)
+
+        # Opt-in: compute univariate AUC per feature column
+        if compute_univariate_auc:
+            from kreview.eval_engine import univariate_auc as _uauc
+
+            _echo(f"  Computing univariate AUC for {len(numeric_cols)} features...")
+            # Build binary target for univariate AUC (same as model target)
+            _model_mask = merged["label"].isin(
+                [
+                    "True ctDNA+",
+                    "Possible ctDNA+",
+                    "Healthy Normal",
+                    "Possible ctDNA-",
+                    "Possible ctDNA\u2212",
+                ]
+            )
+            _m_df = merged[_model_mask]
+            _y_uauc = (
+                _m_df["label"]
+                .isin(["True ctDNA+", "Possible ctDNA+"])
+                .astype(int)
+                .values
+            )
+            uauc_scores = []
+            for col in numeric_cols:
+                auc_val = _uauc(_m_df[col], _y_uauc, n_folds=cv_folds)
+                uauc_scores.append(auc_val)
+            eval_df["univariate_auc"] = uauc_scores
+
         eval_out = out_path / f"{e.name}_eval_stats.parquet"
         eval_df.to_parquet(eval_out, index=False)
         _echo(f"  Eval stats: {eval_df.shape[0]} features -> {eval_out}")
@@ -562,7 +656,7 @@ def run(
             if top_feats:
                 # Variance guard: drop features that are constant across all model samples.
                 # Constant features produce AUC=0.500 and waste compute.
-                X_raw = model_df[top_feats].fillna(0)
+                X_raw = _impute(model_df[top_feats], impute_strategy)
                 nonconst = [c for c in top_feats if X_raw[c].std() > 0]
                 n_dropped = len(top_feats) - len(nonconst)
                 if n_dropped > 0:
@@ -581,7 +675,9 @@ def run(
 
                 warnings.filterwarnings("ignore", message=".*use_label_encoder.*")
 
-                X = model_df[top_feats].fillna(0).values
+                _echo(f"  Imputation: {impute_strategy}")
+
+                X = _impute(model_df[top_feats], impute_strategy).values
                 c_types = model_df.get("CANCER_TYPE", None)
                 if c_types is not None:
                     c_types = c_types.values
@@ -629,6 +725,21 @@ def run(
 
         eval_sec = time.time() - t3
         _echo(f"  Evaluation complete in {eval_sec:.1f}s")
+
+    # ── Step 4b: Build Cross-Evaluator Scoreboard ──
+    from kreview.scoreboard import build_scoreboard
+
+    sb = build_scoreboard(out_path)
+    if not sb.empty:
+        sb.to_parquet(out_path / "scoreboard_combined__all.parquet")
+        sb.to_csv(out_path / "scoreboard_combined__all.csv", index=False)
+        _echo(f"\n  Scoreboard: {len(sb)} evaluators ranked")
+        _echo("  Top 5 by AUC:")
+        for _, row in sb.head(5).iterrows():
+            best = row["best_auc"]
+            auc_str = f"{best:.3f}" if not pd.isna(best) else "N/A"
+            _echo(f"    {row['evaluator']:<30} AUC={auc_str}")
+        _echo("  -> scoreboard_combined__all.parquet")
 
     # ── Step 5: Generate HTML Dashboards ──
     if not skip_report:

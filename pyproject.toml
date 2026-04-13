@@ -22,8 +22,9 @@ dependencies = [
     "structlog>=23.1.0",
     "typer>=0.9.0",
     "plotly>=5.14.0",
-    "kaleido>=0.2.1",  # For static plot fallsbacks
+    "kaleido>=0.2.1",  # For static plot fallbacks
     "itables>=1.7.0",
+    "great_tables>=0.15.0",  # Column-grouped tables (reactable-style)
     "shap>=0.40.0",
     "joblib>=1.3.0",
     "statsmodels>=0.14.0",
@@ -104,6 +105,11 @@ packages = ["kreview", "kreview.features", "kreview.templates"]
 # E741: ambiguous variable name — some short vars are standard in ML code (X, y, e)
 # E701: multiple statements on one line — occasional nbdev pattern
 ignore = ["E402", "F401", "E501", "E712", "E741", "E701"]
+
+[tool.ruff.lint.per-file-ignores]
+# nbdev test cells reference classes from prior export cells (F821),
+# and nbdev splits imports across cells causing redefinitions (F811).
+"nbs/**/*.ipynb" = ["F821", "F811"]
 
 [tool.black]
 target-version = ["py310"]

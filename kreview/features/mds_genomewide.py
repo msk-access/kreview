@@ -9,12 +9,16 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "MDSEvaluator"]
+__all__ = ["log", "MDSGenomewideEvaluator"]
 
 
 # %% ../../nbs/features/19b_mds_genomewide.ipynb #c34b7afe
-class MDSEvaluator(FeatureEvaluator):
-    """Global MDS signature."""
+class MDSGenomewideEvaluator(FeatureEvaluator):
+    """Genomewide MDS signature.
+
+    Extracts ALL numeric columns from the single-row MDS genomewide parquet
+    rather than just the 2 originally hardcoded scalars.
+    """
 
     name = "MdsGenomewide"
     source_file = ".MDS.parquet"
@@ -26,12 +30,13 @@ class MDSEvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
-            cols = set(df.columns)
 
-            if "MDS" in cols:
-                extracted["global_mds"] = float(df["MDS"].mean())
-            if "mds_gw_z" in cols:
-                extracted["global_mds_z"] = float(df["mds_gw_z"].mean())
+            # Extract all numeric columns from the (typically 1-row) MDS parquet
+            for col in df.select_dtypes(include="number").columns:
+                val = df[col].iloc[0]
+                if pd.notna(val):
+                    safe_col = str(col).replace(" ", "_").replace("-", "_")
+                    extracted[f"mds_gw_{safe_col}"] = float(val)
 
             return extracted
         except Exception as e:

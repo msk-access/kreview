@@ -42,19 +42,19 @@ Our pipeline currently supports the high-throughput evaluation of **26 unique `F
 
 ## 📏 Fragment Size Metrics (Tier 1)
 
-Tumor cfDNA is physically shorter than normal cfDNA because tumor cell-death occurs rapidly (necrosis) dodging the clean apoptotic laddering that fragments healthy cells safely on circulating histone boundaries.
+Tumor cfDNA tends to be shorter than normal cfDNA because rapid cell death (necrosis) disrupts the clean apoptotic nucleosome-wrapping that generates uniform ~167bp fragments from healthy cells.
 
 - **FSD (Fragment Size Distribution):** Calculates the raw density profile of all fragment lengths across the sample.
-- **FSC (Fragment Size Coverage):** Measures the specific ratio of short fragments (< 150bp) vs long fragments (150-220bp) at targeted loci across the exome. A high `short_to_long_ratio` powerfully correlates with ctDNA+.
+- **FSC (Fragment Size Coverage):** Measures the specific ratio of short fragments (< 150bp) vs long fragments (150-220bp) at targeted loci across the exome. A high `short_to_long_ratio` is associated with ctDNA+ status.
 - **FSR (Fragment Size Ratio):** Computes a single scalar short-to-long ratio as a global summary metric, both at panel-capture regions and genome-wide.
 
 ## ✂️ Nucleosome & Cleavage Mapping (Tier 2)
 
-These features trace the physical proteins that were bound to the cfDNA right before apoptosis occurred.
+These features trace nucleosome positioning and nuclease cleavage patterns present in the cfDNA at the time of cell death.
 
 - **WPS (Window Protection Score):** Evaluates depth profiles across narrow windows to identify where nucleosomes perfectly protected the DNA helix from circulating nucleases, or where TFBS sat.
 - **TFBS (Transcription Factor Binding Sites):** Specifically measures the nucleosome-depleted regions at known transcription factor binding locations.
-- **EndMotif / BreakPointMotif:** Analyzes the first 4-nucleotide sequence of every read. Some nucleases specifically slice at `CCCA` motifs. Shifts in specific tetramers serve as powerful cancer markers because tumor tissues up/downregulate specific nucleases (e.g. `DNASE1L3`, `DFFB`).
+- **EndMotif / BreakPointMotif:** Analyzes the first 4-nucleotide sequence of every read. Specific nucleases cleave at preferred recognition sites (e.g. `CCCA`). Shifts in tetramer frequencies can serve as cancer markers because tumor tissues up-regulate or down-regulate specific nucleases (e.g. `DNASE1L3`, `DFFB`).
 - **EndMotif1mer:** Single-base resolution motif analysis for maximum granularity.
 
 ## 🔍 Structural Integrity & Accessibility (Tier 2)

@@ -3,6 +3,7 @@
 # %% ../../nbs/features/21_endmotif.ipynb #41821688
 from __future__ import annotations
 import pandas as pd
+import numpy as np
 import structlog
 from ..eval_engine import FeatureEvaluator
 
@@ -13,25 +14,20 @@ __all__ = ["log", "EndMotifOnTargetEvaluator"]
 
 
 # %% ../../nbs/features/21_endmotif.ipynb #b9f55c5c
-def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith("["):
-        return []
-    clean = (
-        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
-    )
-    try:
-        return [float(x) for x in clean.split()]
-    except (ValueError, TypeError):
-        return []
-
-
 class EndMotifOnTargetEvaluator(FeatureEvaluator):
-    """Extracts 4-mer fragment end frequencies."""
+    """Extracts 4-mer fragment end motif frequencies for on-target regions.
+
+    Produces raw 256 4-mer frequencies plus derived summary metrics:
+    - Shannon entropy (cleavage site diversity)
+    - DNASE1L3 signature score (CC-ending motif sum)
+    - Top-10 motif concentration
+    - Purine/pyrimidine asymmetry at terminal base
+    """
 
     name = "EndMotifOnTarget"
     source_file = ".EndMotif.ontarget.parquet"
-    tier = 2
-    category = "epigenetics_and_geometry"
+    tier = 3
+    category = "motifs"
 
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         extracted = {}
@@ -40,13 +36,59 @@ class EndMotifOnTargetEvaluator(FeatureEvaluator):
                 return extracted
             cols = set(df.columns)
 
-            self.tier = 3
-            self.category = "motifs"
+            prefix = "endmotif_ontarget"
+
             if "Motif" in cols and "Frequency" in cols:
                 for row in df.to_dict("records"):
                     m = str(row["Motif"])
                     if pd.notna(row["Frequency"]):
-                        extracted[f"endmotif_ontarget_{m}"] = float(row["Frequency"])
+                        extracted[f"{prefix}_{m}"] = float(row["Frequency"])
+
+            # --- Derived metrics ---
+            motif_freqs = [v for k, v in extracted.items() if k.startswith(prefix)]
+            if motif_freqs:
+                arr = np.array(motif_freqs)
+                pos = arr[arr > 0]
+                if len(pos) > 0:
+                    extracted[f"{prefix}_shannon_entropy"] = float(
+                        -np.sum(pos * np.log2(pos))
+                    )
+
+                # DNASE1L3 signature: sum of CC-ending motif frequencies
+                cc_sum = sum(
+                    v
+                    for k, v in extracted.items()
+                    if k.startswith(prefix)
+                    and len(k) > len(prefix) + 1
+                    and k.endswith("CC")
+                )
+                if cc_sum > 0:
+                    extracted[f"{prefix}_dnase1l3_score"] = float(cc_sum)
+
+                # Top-10 motif concentration
+                if len(motif_freqs) >= 10:
+                    top10 = sorted(motif_freqs, reverse=True)[:10]
+                    extracted[f"{prefix}_top10_concentration"] = float(sum(top10))
+
+                # Purine/pyrimidine asymmetry at terminal base
+                purine_end = sum(
+                    v
+                    for k, v in extracted.items()
+                    if k.startswith(f"{prefix}_")
+                    and len(k) == len(prefix) + 5  # prefix + _ + 4mer
+                    and k[-1] in ("A", "G")
+                )
+                pyrimidine_end = sum(
+                    v
+                    for k, v in extracted.items()
+                    if k.startswith(f"{prefix}_")
+                    and len(k) == len(prefix) + 5
+                    and k[-1] in ("C", "T")
+                )
+                if pyrimidine_end > 0:
+                    extracted[f"{prefix}_purine_pyrimidine_ratio"] = float(
+                        purine_end / pyrimidine_end
+                    )
 
             return extracted
         except Exception as e:
