@@ -31,6 +31,7 @@ __all__ = [
     "LABEL_COLORS",
     "FeatureEvaluator",
     "parse_array",
+    "univariate_auc",
     "set_theme",
     "evaluate_feature",
     "plot_violin",
@@ -77,6 +78,49 @@ def parse_array(s) -> list[float]:
         return [float(x) for x in clean.split()]
     except (ValueError, TypeError):
         return []
+
+
+def univariate_auc(
+    feature_col,
+    y,
+    n_folds: int = 5,
+    random_state: int = 42,
+) -> float:
+    """Compute cross-validated AUC for a single feature using univariate LR.
+
+    Args:
+        feature_col: pandas Series or array-like of a single feature.
+        y: binary label array (0/1).
+        n_folds: number of CV folds.
+        random_state: random seed.
+
+    Returns:
+        Cross-validated AUC (float). Returns 0.5 if the feature is constant,
+        there are too few samples per class, or CV fails.
+    """
+    import numpy as np
+
+    X = np.array(feature_col).reshape(-1, 1)
+    # Replace NaN with 0 for safety
+    X = np.nan_to_num(X, nan=0.0)
+    y = np.array(y, dtype=int)
+
+    if np.std(X) == 0:
+        return 0.5
+
+    try:
+        min_class = np.bincount(y).min()
+        folds = min(n_folds, min_class)
+        if folds < 2:
+            return 0.5
+        pipe = Pipeline(
+            [("scaler", StandardScaler()), ("lr", LogisticRegression(max_iter=1000))]
+        )
+        cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
+        proba = cross_val_predict(pipe, X, y, cv=cv, method="predict_proba")[:, 1]
+        return float(roc_auc_score(y, proba))
+    except Exception:
+        return 0.5
 
 
 # %% ../nbs/02_eval_engine.ipynb #69946ce8

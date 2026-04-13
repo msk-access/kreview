@@ -1,0 +1,89 @@
+"""Cross-evaluator scoreboard aggregation.
+
+Reads all *_model_results.json files from the output directory
+and produces a unified ranking table comparing AUC, sensitivity,
+and specificity across all evaluators.
+"""
+
+from __future__ import annotations
+import json
+import numpy as np
+import pandas as pd
+from pathlib import Path
+import structlog
+
+log = structlog.get_logger()
+
+__all__ = ["log", "build_scoreboard"]
+
+
+def build_scoreboard(output_dir: Path) -> pd.DataFrame:
+    """Aggregate all evaluator model results into a ranked scoreboard.
+
+    Scans for ``*_model_results.json`` files, extracts key metrics, and
+    returns a DataFrame sorted by best AUC descending.
+
+    Args:
+        output_dir: Path containing model result JSON files.
+
+    Returns:
+        DataFrame with one row per evaluator, sorted by ``best_auc``.
+        Empty DataFrame if no results are found.
+    """
+    records = []
+    json_files = sorted(output_dir.glob("*_model_results.json"))
+
+    if not json_files:
+        log.warning("scoreboard_no_results", dir=str(output_dir))
+        return pd.DataFrame()
+
+    for json_path in json_files:
+        evaluator_name = json_path.stem.replace("_model_results", "")
+        try:
+            with open(json_path) as f:
+                data = json.load(f)
+        except Exception as e:
+            log.warning("scoreboard_read_failed", file=str(json_path), error=str(e))
+            continue
+
+        auc_rf = data.get("auc_rf", np.nan)
+        auc_lr = data.get("auc_lr", np.nan)
+        auc_xgb = data.get("auc_xgb", np.nan)
+
+        # Compute best AUC across all model types (ignoring NaN)
+        valid_aucs = [
+            x
+            for x in [auc_rf, auc_lr, auc_xgb]
+            if not (isinstance(x, float) and np.isnan(x))
+        ]
+        best_auc = max(valid_aucs) if valid_aucs else np.nan
+
+        records.append(
+            {
+                "evaluator": evaluator_name,
+                "auc_rf": auc_rf,
+                "auc_lr": auc_lr,
+                "auc_xgb": auc_xgb,
+                "best_auc": best_auc,
+                "n_features": len(data.get("top_features", [])),
+                "cv_folds": data.get("cv_folds_actual", np.nan),
+                "sensitivity_rf": data.get("sensitivity_rf", np.nan),
+                "specificity_rf": data.get("specificity_rf", np.nan),
+                "optimal_threshold_rf": data.get("optimal_threshold_rf", np.nan),
+                "n_samples": data.get("n_samples", np.nan),
+                "n_positive": data.get("n_positive", np.nan),
+            }
+        )
+
+    if not records:
+        log.warning("scoreboard_empty_after_parsing", dir=str(output_dir))
+        return pd.DataFrame()
+
+    df = pd.DataFrame(records).sort_values("best_auc", ascending=False)
+    log.info(
+        "scoreboard_built",
+        n_evaluators=len(df),
+        best_evaluator=df.iloc[0]["evaluator"],
+        best_auc=float(df.iloc[0]["best_auc"]),
+    )
+    return df

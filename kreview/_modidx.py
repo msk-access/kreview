@@ -157,6 +157,10 @@ d = {
                 "eval_engine.html#single_feature_model",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine.univariate_auc": (
+                "eval_engine.html#univariate_auc",
+                "kreview/eval_engine.py",
+            ),
         },
         "kreview.features.atac": {
             "kreview.features.atac.ATACOnTargetEvaluator": (
@@ -484,5 +488,6 @@ d = {
                 "kreview/report.py",
             )
         },
+        "kreview.scoreboard": {},
     },
 }

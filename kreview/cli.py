@@ -327,6 +327,11 @@ def run(
         "--resume",
         help="Skip evaluators whose model results already exist in the output directory.",
     ),
+    compute_univariate_auc: bool = typer.Option(
+        False,
+        "--compute-univariate-auc",
+        help="Compute per-feature univariate LR AUC (adds ~10s per evaluator).",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig, load_feature_cohort
@@ -371,6 +376,7 @@ def run(
     _echo(f"  --cvd-safe          : {cvd_safe}")
     _echo(f"  --export-duckdb     : {export_duckdb}")
     _echo(f"  --resume            : {resume}")
+    _echo(f"  --compute-univariate-auc : {compute_univariate_auc}")
     _echo(f"  --verbose           : {verbose}")
     _echo("")
 
@@ -537,6 +543,35 @@ def run(
             eval_results.append(res)
 
         eval_df = pd.DataFrame(eval_results)
+
+        # Opt-in: compute univariate AUC per feature column
+        if compute_univariate_auc:
+            from kreview.eval_engine import univariate_auc as _uauc
+
+            _echo(f"  Computing univariate AUC for {len(numeric_cols)} features...")
+            # Build binary target for univariate AUC (same as model target)
+            _model_mask = merged["label"].isin(
+                [
+                    "True ctDNA+",
+                    "Possible ctDNA+",
+                    "Healthy Normal",
+                    "Possible ctDNA-",
+                    "Possible ctDNA\u2212",
+                ]
+            )
+            _m_df = merged[_model_mask]
+            _y_uauc = (
+                _m_df["label"]
+                .isin(["True ctDNA+", "Possible ctDNA+"])
+                .astype(int)
+                .values
+            )
+            uauc_scores = []
+            for col in numeric_cols:
+                auc_val = _uauc(_m_df[col], _y_uauc, n_folds=cv_folds)
+                uauc_scores.append(auc_val)
+            eval_df["univariate_auc"] = uauc_scores
+
         eval_out = out_path / f"{e.name}_eval_stats.parquet"
         eval_df.to_parquet(eval_out, index=False)
         _echo(f"  Eval stats: {eval_df.shape[0]} features -> {eval_out}")
@@ -648,6 +683,21 @@ def run(
 
         eval_sec = time.time() - t3
         _echo(f"  Evaluation complete in {eval_sec:.1f}s")
+
+    # ── Step 4b: Build Cross-Evaluator Scoreboard ──
+    from kreview.scoreboard import build_scoreboard
+
+    sb = build_scoreboard(out_path)
+    if not sb.empty:
+        sb.to_parquet(out_path / "scoreboard_combined__all.parquet")
+        sb.to_csv(out_path / "scoreboard_combined__all.csv", index=False)
+        _echo(f"\n  Scoreboard: {len(sb)} evaluators ranked")
+        _echo(f"  Top 5 by AUC:")
+        for _, row in sb.head(5).iterrows():
+            best = row["best_auc"]
+            auc_str = f"{best:.3f}" if not pd.isna(best) else "N/A"
+            _echo(f"    {row['evaluator']:<30} AUC={auc_str}")
+        _echo(f"  -> scoreboard_combined__all.parquet")
 
     # ── Step 5: Generate HTML Dashboards ──
     if not skip_report:
