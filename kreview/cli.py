@@ -115,7 +115,6 @@ def features_list():
 
 # %% ../nbs/90_cli.ipynb #0206e0c1
 import numpy as np
-import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
 import concurrent.futures
