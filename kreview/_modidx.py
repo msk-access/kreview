@@ -14,6 +14,7 @@ d = {
                 "cli.html#_extract_from_dataframe",
                 "kreview/cli.py",
             ),
+            "kreview.cli._find_quarto": ("cli.html#_find_quarto", "kreview/cli.py"),
             "kreview.cli._impute": ("cli.html#_impute", "kreview/cli.py"),
             "kreview.cli._render_quarto_report": (
                 "cli.html#_render_quarto_report",
