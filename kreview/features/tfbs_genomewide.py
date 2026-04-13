@@ -9,7 +9,8 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'TFBSGenomewideEvaluator']
+__all__ = ["log", "TFBSGenomewideEvaluator"]
+
 
 # %% ../../nbs/features/18b_tfbs_genomewide.ipynb #0e39738d
 class TFBSGenomewideEvaluator(FeatureEvaluator):

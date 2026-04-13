@@ -10,7 +10,8 @@ from ..eval_engine import FeatureEvaluator, parse_array
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'WPSGenomeEvaluator']
+__all__ = ["log", "WPSGenomeEvaluator"]
+
 
 # %% ../../nbs/features/25_wps_genomewide.ipynb #86f68672
 class WPSGenomeEvaluator(FeatureEvaluator):
@@ -48,8 +49,9 @@ class WPSGenomeEvaluator(FeatureEvaluator):
                     )
                     for a in array_cols:
                         if a in cols:
-                            arr = _to_float_array(row[a])
-                            if arr is not None and len(arr) > 0:
+                            arr_raw = parse_array(row[a])
+                            if arr_raw is not None and len(arr_raw) > 0:
+                                arr = np.array(arr_raw)
                                 extracted[f"{rt}_{a}_mean"] = float(np.mean(arr))
                                 extracted[f"{rt}_{a}_std"] = float(np.std(arr))
 

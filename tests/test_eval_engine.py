@@ -405,4 +405,3 @@ class TestAUCDeltas:
         results, *_ = single_feature_model(X, y)
         expected = results["auc_rf"] - results["auc_lr"]
         assert abs(results["auc_delta_rf_lr"] - expected) < 1e-10
-

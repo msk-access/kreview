@@ -32,9 +32,9 @@ class TestBuildFeatureCards:
         cards = build_feature_cards()
         valid_labels = set(TIER_LABELS.values())
         for name, card in cards.items():
-            assert card["tier_label"] in valid_labels, (
-                f"Card '{name}' has invalid tier_label: {card['tier_label']}"
-            )
+            assert (
+                card["tier_label"] in valid_labels
+            ), f"Card '{name}' has invalid tier_label: {card['tier_label']}"
 
     def test_derived_types_is_list(self):
         """derived_types should be a list (possibly empty)."""

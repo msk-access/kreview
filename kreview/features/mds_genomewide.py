@@ -9,7 +9,8 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'MDSGenomewideEvaluator']
+__all__ = ["log", "MDSGenomewideEvaluator"]
+
 
 # %% ../../nbs/features/19b_mds_genomewide.ipynb #c34b7afe
 class MDSGenomewideEvaluator(FeatureEvaluator):

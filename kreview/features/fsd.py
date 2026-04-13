@@ -10,7 +10,8 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'FSDOnTargetEvaluator']
+__all__ = ["log", "FSDOnTargetEvaluator"]
+
 
 # %% ../../nbs/features/13_fsd.ipynb #3253d621
 class FSDOnTargetEvaluator(FeatureEvaluator):
