@@ -166,6 +166,7 @@ d = {
                 "kreview/eval_engine.py",
             ),
         },
+        "kreview.feature_cards": {},
         "kreview.features.atac": {
             "kreview.features.atac.ATACOnTargetEvaluator": (
                 "features/atac.html#atacontargetevaluator",
