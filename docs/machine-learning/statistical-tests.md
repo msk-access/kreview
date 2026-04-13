@@ -22,7 +22,7 @@ We group the sample's generated feature matrices by the 4 primary `CtDNALabeler`
 
 Because we are checking more than two independent samples to determine if they originate from the same distribution, we employ the **Kruskal-Wallis H-test** (`stats.kruskal`).
 
-If the omnibus \(p\)-value returns significant (\(p < 0.05\)), it proves that the feature is successfully stratifying *at least one* label. We then move to pairwise analysis to figure out which ones.
+If the omnibus $p$-value is significant ($p < 0.05$), it suggests that the feature is stratifying *at least one* label group. Pairwise analysis then identifies which groups differ.
 
 ## Pairwise Separation (Mann-Whitney U)
 
@@ -66,3 +66,15 @@ To prevent this, `evaluate_feature` independently extracts **Spearman Rank Corre
 
 !!! warning "High Spearman Depth Correlation"
     If `spearman_depth_r > 0.5`, the feature may be a sequencing artifact rather than a true biological signal. Interpret its AUC with caution.
+
+## Per-Feature QC Metrics
+
+In addition to statistical tests, `evaluate_feature()` computes three data quality fields for each feature:
+
+| Metric | Field | Purpose |
+|--------|-------|---------|
+| Missing count | `n_missing` | Number of NaN values in the feature column |
+| Missing percentage | `pct_missing` | Percentage of samples with NaN (0–100) |
+| Zero variance | `is_zero_variance` | Whether `std == 0` after dropping NaN (constant feature) |
+
+These metrics are saved to `*_eval_stats.parquet` and surfaced in the dashboard's [Cohort & QC page](../machine-learning/dashboard-guide.md#page-5-cohort--qc).
