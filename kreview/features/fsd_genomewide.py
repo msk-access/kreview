@@ -3,6 +3,7 @@
 # %% ../../nbs/features/13b_fsd_genomewide.ipynb #3f0567e4
 from __future__ import annotations
 import pandas as pd
+import numpy as np
 import structlog
 from ..eval_engine import FeatureEvaluator
 
@@ -14,7 +15,14 @@ __all__ = ["log", "FSDGenomewideEvaluator"]
 
 # %% ../../nbs/features/13b_fsd_genomewide.ipynb #3253d621
 class FSDGenomewideEvaluator(FeatureEvaluator):
-    """Extracts normalized densities for genomewide fragment size buckets."""
+    """Extracts normalized densities for genomewide fragment size buckets.
+
+    Derived metrics:
+    - Bimodality index: mono-nucleosomal peak / di-nucleosomal valley
+    - Shannon entropy of the size distribution
+    - 143/166 ratio (classic cfDNA short-fragment proxy)
+    - Per-chromosome 143/166 ratio (if chrom/region column available)
+    """
 
     name = "FsdGenomewide"
     source_file = ".FSD.parquet"
@@ -28,28 +36,63 @@ class FSDGenomewideEvaluator(FeatureEvaluator):
                 return extracted
 
             cols = set(df.columns)
+            prefix = "fsd_gw"
 
             if "total" not in cols:
                 log.warning("fsd_gw_missing_total_col")
                 return extracted
 
-            # FSD has multiple rows for groups (e.g. per-chromosome or total), we will just aggregate globally first
             total_reads = df["total"].sum()
             if total_reads == 0:
                 return extracted
 
+            skip_cols = {"region", "total", "chrom"}
             for c in df.columns:
-                if c not in ["region", "total", "chrom"]:
+                if c not in skip_cols:
                     bucket_sum = df[c].sum()
-                    extracted[f"fsd_gw_density_{c}"] = float(bucket_sum / total_reads)
+                    extracted[f"{prefix}_density_{c}"] = float(bucket_sum / total_reads)
 
-            # Special 143/166 proxy
-            # 143 falls in "140-144", 166 falls in "165-169"
             if "140-144" in cols and "165-169" in cols:
                 v143 = df["140-144"].sum()
                 v166 = df["165-169"].sum()
                 if v166 > 0:
-                    extracted["fsd_gw_143_166_ratio"] = float(v143 / v166)
+                    extracted[f"{prefix}_143_166_ratio"] = float(v143 / v166)
+
+            # --- Derived: bimodality index ---
+            peak_bins = ["140-144", "145-149", "150-154", "155-159"]
+            valley_bins = [
+                "170-174",
+                "175-179",
+                "180-184",
+                "185-189",
+                "190-194",
+                "195-199",
+            ]
+            peak_sum = sum(df[b].sum() for b in peak_bins if b in cols)
+            valley_sum = sum(df[b].sum() for b in valley_bins if b in cols)
+            if valley_sum > 0:
+                extracted[f"{prefix}_bimodality_index"] = float(peak_sum / valley_sum)
+
+            # --- Derived: Shannon entropy ---
+            densities = [v for k, v in extracted.items() if f"{prefix}_density_" in k]
+            if densities:
+                arr = np.array(densities)
+                pos = arr[arr > 0]
+                if len(pos) > 0:
+                    extracted[f"{prefix}_entropy"] = float(-np.sum(pos * np.log2(pos)))
+
+            # --- Per-chromosome 143/166 ratio ---
+            chrom_col = (
+                "chrom" if "chrom" in cols else ("region" if "region" in cols else None)
+            )
+            if chrom_col and "140-144" in cols and "165-169" in cols:
+                for chrom, grp in df.groupby(chrom_col):
+                    ch = str(chrom).replace(" ", "_")
+                    v166_chr = grp["165-169"].sum()
+                    if v166_chr > 0:
+                        extracted[f"{prefix}_{ch}_143_166_ratio"] = float(
+                            grp["140-144"].sum() / v166_chr
+                        )
 
             return extracted
         except Exception as e:

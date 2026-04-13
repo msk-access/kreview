@@ -15,7 +15,15 @@ __all__ = ["log", "WPSPanelEvaluator"]
 
 # %% ../../nbs/features/24_wps_panel.ipynb #cee7b4e4
 class WPSPanelEvaluator(FeatureEvaluator):
-    """Extracts WPS nucleosome binding geometries."""
+    """Extracts WPS nucleosome binding geometries with spectral features.
+
+    For each WPS array, extracts:
+    - mean, std (original)
+    - peak-to-valley amplitude
+    - median absolute deviation
+    - spectral max power and dominant frequency (FFT-based periodicity)
+    - local_depth scalar (if available)
+    """
 
     name = "WPSPanel"
     source_file = ".WPS.panel.parquet"
@@ -48,8 +56,27 @@ class WPSPanelEvaluator(FeatureEvaluator):
                         if a in cols and pd.notna(row[a]):
                             parsed = parse_array(str(row[a]))
                             if len(parsed) > 0:
-                                extracted[f"{rt}_{a}_mean"] = float(np.mean(parsed))
-                                extracted[f"{rt}_{a}_std"] = float(np.std(parsed))
+                                arr = np.array(parsed)
+                                extracted[f"{rt}_{a}_mean"] = float(np.mean(arr))
+                                extracted[f"{rt}_{a}_std"] = float(np.std(arr))
+
+                                extracted[f"{rt}_{a}_peak_valley"] = float(
+                                    np.max(arr) - np.min(arr)
+                                )
+                                extracted[f"{rt}_{a}_mad"] = float(
+                                    np.median(np.abs(arr - np.median(arr)))
+                                )
+
+                                if len(arr) >= 50:
+                                    fft_vals = np.abs(np.fft.rfft(arr - arr.mean()))
+                                    freqs = np.fft.rfftfreq(len(arr))
+                                    if len(fft_vals) > 2:
+                                        extracted[f"{rt}_{a}_spectral_max_power"] = (
+                                            float(np.max(fft_vals[1:]))
+                                        )
+                                        extracted[
+                                            f"{rt}_{a}_spectral_dominant_freq"
+                                        ] = float(freqs[1:][np.argmax(fft_vals[1:])])
 
             return extracted
         except Exception as e:

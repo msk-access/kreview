@@ -14,7 +14,13 @@ __all__ = ["log", "EndMotif1merEvaluator"]
 
 # %% ../../nbs/features/23_endmotif_1mer.ipynb #b74ea526
 class EndMotif1merEvaluator(FeatureEvaluator):
-    """Extracts 1-mer fragment end base frequencies."""
+    """Extracts 1-mer fragment end base frequencies with strand bias metrics.
+
+    Derived metrics:
+    - Purine/pyrimidine asymmetry: (A+G) - (C+T)
+    - A/T strand bias: A / (A+T)
+    - C/G strand bias: C / (C+G)
+    """
 
     name = "EndMotif1mer"
     source_file = ".EndMotif1mer.parquet"
@@ -33,6 +39,20 @@ class EndMotif1merEvaluator(FeatureEvaluator):
                     b = str(row["base"])
                     if pd.notna(row["fraction"]):
                         extracted[f"base_1mer_{b}"] = float(row["fraction"])
+
+            # --- Derived: strand bias metrics ---
+            a = extracted.get("base_1mer_A", 0.0)
+            t = extracted.get("base_1mer_T", 0.0)
+            c = extracted.get("base_1mer_C", 0.0)
+            g = extracted.get("base_1mer_G", 0.0)
+            total = a + t + c + g
+
+            if total > 0:
+                extracted["purine_pyrimidine_asymmetry"] = float((a + g) - (c + t))
+                if (a + t) > 0:
+                    extracted["at_strand_bias"] = float(a / (a + t))
+                if (c + g) > 0:
+                    extracted["cg_strand_bias"] = float(c / (c + g))
 
             return extracted
         except Exception as e:

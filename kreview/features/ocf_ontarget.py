@@ -3,6 +3,7 @@
 # %% ../../nbs/features/15_ocf_ontarget.ipynb #65eabcec
 from __future__ import annotations
 import pandas as pd
+import numpy as np
 import structlog
 from ..eval_engine import FeatureEvaluator
 
@@ -14,7 +15,13 @@ __all__ = ["log", "OCFOntargetEvaluator"]
 
 # %% ../../nbs/features/15_ocf_ontarget.ipynb #c058c00a
 class OCFOntargetEvaluator(FeatureEvaluator):
-    """Extracts on-target OCF metrics per tissue."""
+    """Extracts on-target OCF metrics per tissue with cross-tissue aggregates.
+
+    Cross-tissue derived metrics:
+    - max_ocf_z: highest z-score across all tissues
+    - n_tissues_elevated: count of tissues with z > 2.0
+    - ocf_entropy: Shannon entropy of positive z-score distribution
+    """
 
     name = "OCFOntarget"
     source_file = ".OCF.ontarget.parquet"
@@ -28,6 +35,7 @@ class OCFOntargetEvaluator(FeatureEvaluator):
                 return extracted
             cols = set(df.columns)
 
+            # Per-tissue extraction
             if "tissue" in cols:
                 for row in df.to_dict("records"):
                     t = str(row["tissue"]).replace(" ", "_")
@@ -35,6 +43,19 @@ class OCFOntargetEvaluator(FeatureEvaluator):
                         extracted[f"{t}_OCF"] = float(row["OCF"])
                     if "ocf_z" in cols and pd.notna(row["ocf_z"]):
                         extracted[f"{t}_ocf_z"] = float(row["ocf_z"])
+
+            # --- Cross-tissue aggregate metrics ---
+            z_vals = {k: v for k, v in extracted.items() if k.endswith("_ocf_z")}
+            if z_vals:
+                z_arr = np.array(list(z_vals.values()))
+                extracted["max_ocf_z"] = float(np.max(z_arr))
+                extracted["n_tissues_elevated"] = float(np.sum(z_arr > 2.0))
+
+                # Shannon entropy of positive z-scores
+                z_pos = z_arr[z_arr > 0]
+                if len(z_pos) > 1:
+                    p = z_pos / z_pos.sum()
+                    extracted["ocf_entropy"] = float(-np.sum(p * np.log2(p + 1e-10)))
 
             return extracted
         except Exception as e:

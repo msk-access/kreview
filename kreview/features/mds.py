@@ -14,7 +14,11 @@ __all__ = ["log", "MDSOnTargetEvaluator"]
 
 # %% ../../nbs/features/19_mds.ipynb #c34b7afe
 class MDSOnTargetEvaluator(FeatureEvaluator):
-    """On-target MDS signature."""
+    """On-target MDS signature.
+
+    Extracts ALL numeric columns from the single-row MDS on-target parquet
+    rather than just the 2 originally hardcoded scalars.
+    """
 
     name = "MdsOnTarget"
     source_file = ".MDS.ontarget.parquet"
@@ -26,12 +30,13 @@ class MDSOnTargetEvaluator(FeatureEvaluator):
         try:
             if df.empty:
                 return extracted
-            cols = set(df.columns)
 
-            if "MDS" in cols:
-                extracted["global_mds"] = float(df["MDS"].mean())
-            if "mds_ontarget_z" in cols:
-                extracted["global_mds_z"] = float(df["mds_ontarget_z"].mean())
+            # Extract all numeric columns from the (typically 1-row) MDS parquet
+            for col in df.select_dtypes(include="number").columns:
+                val = df[col].iloc[0]
+                if pd.notna(val):
+                    safe_col = str(col).replace(" ", "_").replace("-", "_")
+                    extracted[f"mds_ontarget_{safe_col}"] = float(val)
 
             return extracted
         except Exception as e:
