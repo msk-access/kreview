@@ -17,7 +17,7 @@ jupyter: python3
 execute:
   cache: false
   echo: false
-  debug: true
+  warning: false
 ---
 
 ```{python}
@@ -63,7 +63,7 @@ def show_plotly(fig, filename=None):
                 fig.write_image(f"static_plots/{filename}.png", scale=2)
             except Exception:
                 pass
-        fig.update_layout(margin=dict(b=150, t=50, l=10, r=10))
+        fig.update_layout(margin=dict(b=40, t=30, l=10, r=10))
         html_str = fig.to_html(
             full_html=False,
             include_plotlyjs='cdn' if not _plotly_loaded else False,
@@ -1287,7 +1287,7 @@ if eval_df is not None:
 
 # Cohort & QC {orientation="rows" scrolling="true"}
 
-## Row {height="15%"}
+## Row {height="10%"}
 
 ```{python}
 #| content: valuebox
@@ -1317,7 +1317,7 @@ if eval_df is not None and "is_zero_variance" in eval_df.columns:
 dict(value=f"{zv}", color="danger" if zv > 0 else "success", icon="exclamation-triangle" if zv > 0 else "check-circle")
 ```
 
-## Row {height="45%"}
+## Row {height="40%"}
 
 ### Column {width="50%"}
 
@@ -1376,7 +1376,7 @@ if "CANCER_TYPE" in df.columns:
     show_plotly(fig_dc, filename="cancer_types")
 ```
 
-## Row {height="40%"}
+## Row {height="25%"}
 
 ### Column {width="50%"}
 
@@ -1421,7 +1421,7 @@ else:
     display(Markdown("> Panel information not available."))
 ```
 
-## Row {height="35%"}
+## Row {height="25%"}
 
 ### Column {width="50%"}
 
