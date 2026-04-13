@@ -1335,7 +1335,7 @@ _ = fig_bal.update_layout(
     margin=dict(l=10, r=10, t=10, b=10),
     xaxis_title="", yaxis_title="Samples"
 )
-fig_bal.update_traces(textposition="outside")
+_ = fig_bal.update_traces(textposition="outside")
 show_plotly(fig_bal, filename="class_balance")
 ```
 

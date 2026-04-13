@@ -58,6 +58,23 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
         ]
         best_auc = max(valid_aucs) if valid_aucs else np.nan
 
+        # Extract sensitivity/specificity from classification report
+        # sensitivity = recall of positive class (1)
+        # specificity = recall of negative class (0)
+        cr = data.get("rf_classification_report", {})
+        sensitivity_rf = np.nan
+        specificity_rf = np.nan
+        n_samples = np.nan
+        n_positive = np.nan
+        if isinstance(cr, dict):
+            pos_class = cr.get("1", cr.get("1.0", {}))
+            neg_class = cr.get("0", cr.get("0.0", {}))
+            sensitivity_rf = pos_class.get("recall", np.nan) if pos_class else np.nan
+            specificity_rf = neg_class.get("recall", np.nan) if neg_class else np.nan
+            weighted = cr.get("weighted avg", {})
+            n_samples = weighted.get("support", np.nan) if weighted else np.nan
+            n_positive = pos_class.get("support", np.nan) if pos_class else np.nan
+
         records.append(
             {
                 "evaluator": evaluator_name,
@@ -67,11 +84,11 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
                 "best_auc": best_auc,
                 "n_features": len(data.get("top_features", [])),
                 "cv_folds": data.get("cv_folds_actual", np.nan),
-                "sensitivity_rf": data.get("sensitivity_rf", np.nan),
-                "specificity_rf": data.get("specificity_rf", np.nan),
-                "optimal_threshold_rf": data.get("optimal_threshold_rf", np.nan),
-                "n_samples": data.get("n_samples", np.nan),
-                "n_positive": data.get("n_positive", np.nan),
+                "sensitivity_rf": sensitivity_rf,
+                "specificity_rf": specificity_rf,
+                "optimal_threshold_rf": data.get("rf_optimal_threshold", np.nan),
+                "n_samples": n_samples,
+                "n_positive": n_positive,
             }
         )
 
