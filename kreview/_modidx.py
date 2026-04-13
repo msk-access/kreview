@@ -117,6 +117,10 @@ d = {
                 "eval_engine.html#featureevaluator.extract",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine.decision_curve_analysis": (
+                "eval_engine.html#decision_curve_analysis",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine.evaluate_feature": (
                 "eval_engine.html#evaluate_feature",
                 "kreview/eval_engine.py",
@@ -162,6 +166,7 @@ d = {
                 "kreview/eval_engine.py",
             ),
         },
+        "kreview.feature_cards": {},
         "kreview.features.atac": {
             "kreview.features.atac.ATACOnTargetEvaluator": (
                 "features/atac.html#atacontargetevaluator",

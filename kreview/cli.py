@@ -700,12 +700,12 @@ def run(
         sb.to_parquet(out_path / "scoreboard_combined__all.parquet")
         sb.to_csv(out_path / "scoreboard_combined__all.csv", index=False)
         _echo(f"\n  Scoreboard: {len(sb)} evaluators ranked")
-        _echo(f"  Top 5 by AUC:")
+        _echo("  Top 5 by AUC:")
         for _, row in sb.head(5).iterrows():
             best = row["best_auc"]
             auc_str = f"{best:.3f}" if not pd.isna(best) else "N/A"
             _echo(f"    {row['evaluator']:<30} AUC={auc_str}")
-        _echo(f"  -> scoreboard_combined__all.parquet")
+        _echo("  -> scoreboard_combined__all.parquet")
 
     # ── Step 5: Generate HTML Dashboards ──
     if not skip_report:

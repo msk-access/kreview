@@ -1,26 +1,23 @@
 # Sklearn Models & Metrics
 
-Every feature evaluator is pushed from non-parametric statistical checking into a brute-force Machine Learning predictor.
+Every feature evaluator undergoes automated ensemble classification to measure how well a cfDNA feature set discriminates ctDNA-positive from ctDNA-negative samples.
 
-Inside `single_feature_model()`, we orchestrate an automated ensemble tournament to see how well a physical cfDNA feature can classify cancer mathematically.
+Inside `single_feature_model()`, three classifier families are evaluated using stratified cross-validation against a binary label derived from the [ctDNA labeling engine](../biology/ctdna-labeling.md).
 
 ---
 
-## 🏗️ The Predictive Ensemble
+## The Predictive Ensemble
 
-We run three distinctly bounded classification models against every feature:
+Three classifier families are trained on every feature set:
 
 ```python
 # 1. Linear Baseline (Logistic Regression)
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-
 lr = Pipeline([
     ('scaler', StandardScaler()),
     ('clf', LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced"))
 ])
 
-# 2. Decision Tree Bounds (Random Forest)
+# 2. Tree-Based (Random Forest)
 rf = RandomForestClassifier(
     n_estimators=100,
     max_depth=5,
@@ -41,62 +38,127 @@ xgb = XGBClassifier(
 ```
 
 !!! note "Graceful Degradation"
-    Because XGBoost binaries can occasionally break in rigid HPC environments, the code uses a `try / except` to import it dynamically. If `xgboost` fails to import, the engine safely degrades to Random Forest only.
+    XGBoost is imported dynamically with a `try/except`. If `xgboost` is unavailable (common in restricted HPC environments), the engine safely falls back to Random Forest and Logistic Regression only.
 
 ### Class Imbalance & CV Strategy
 
-Often, we have 4,000 cancer patient samples but only 300 healthy normal controls. To prevent the models from blindly predicting cancer 100% of the time, we enforce **Stratified K-Fold Cross Validation**:
+Clinical cohorts are typically imbalanced (e.g. 4,000 cancer patients vs 300 healthy controls). To prevent majority-class bias, the pipeline uses **Stratified K-Fold Cross Validation**:
 
 ```python
 cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
 rf_probs = cross_val_predict(rf, X, y, cv=cv, method="predict_proba")
 ```
 
-The number of folds is dynamically bounded by the minimum class size to prevent `n_splits` errors.
+The number of folds is dynamically bounded by the minimum class size to prevent `n_splits` errors. All downstream metrics use **out-of-fold predictions** — the model never evaluates samples it trained on.
 
 ---
 
-## 📈 Metric Outputs
+## Metric Categories (9 total)
 
 ### 1. ROC-AUC & Bootstrap CIs
 
-The core scoring mechanism is the Area Under the ROC Curve. To properly gauge stability, `kreview` calculates rigorous **Bootstrap 95% Confidence Intervals** across `n_resamples=1000` for every generated AUC score. You will see `.auc_lr`, `.auc_rf`, as well as `.auc_rf_ci_lower`/`upper`.
+The primary scoring metric. To quantify uncertainty, kreview computes **bootstrap 95% confidence intervals** (`n_resamples=1000`) for every AUC score. Results are stored as `auc_rf`, `auc_rf_ci_lower`, `auc_rf_ci_upper`.
 
-### 2. Probability Calibration
-Because tree-based models (like RandomForest) are notorious for pushing probabilities away from 0 and 1, `kreview` natively calculates `sklearn` Calibration Curves `(prob_true, prob_pred)` spanning 10 uniform bins. This allows you to verify if a feature model is over-confident before deploying it clinically.
+### 2. Precision-Recall (PR) Curves
 
-### 3. Optimal Thresholding (Youden's J)
+PR curves are more informative than ROC when the positive class is rare. kreview computes precision-recall curves and average precision (AP) for all three models. PR data is stored as `{prefix}_pr_curve` and `{prefix}_avg_precision`.
 
-A continuous probability threshold doesn't help an oncologist. We dynamically calculate the binary cutoff that maximizes the separation between True Positive Rate and False Positive Rate:
+### 3. Probability Calibration
 
-```math
-J = \max(TPR - FPR)
-```
+Tree-based models (RF, XGBoost) tend to produce poorly calibrated probabilities. kreview computes `sklearn` calibration curves (`prob_true` vs `prob_pred`) in 10 uniform bins. Stored as `rf_calibration`.
+
+### 4. Optimal Thresholding (Youden's J)
+
+A continuous probability doesn't translate to a clinical decision. kreview calculates the binary cutoff that maximizes the separation between True Positive Rate and False Positive Rate:
+
+$$J = \max(TPR - FPR)$$
 
 ```python
 optimal_idx = np.argmax(tpr - fpr)  # Youden's J Statistic
 optimal_threshold = float(thresholds[optimal_idx])
 ```
 
-This threshold is then used to generate the `classification_report` and `confusion_matrix`.
+This threshold generates the `classification_report` and `confusion_matrix` for each model.
 
-### 4. SHAP Explainability
+### 5. Threshold Sensitivity Sweep
 
-For both RF and XGB, `kreview` generates **SHAP (SHapley Additive exPlanations)** visualizations:
+A single optimal threshold may be fragile. kreview evaluates sensitivity, specificity, and PPV across 50 thresholds (0.01–0.99) for the RF model. This helps clinicians choose an operating point based on their risk tolerance. Stored as `rf_threshold_sweep`.
 
-- **Beeswarm Plot:** Shows the global importance of each sub-metric and how it pushes predictions positive or negative.
-- **Dependence Scatter:** Shows how a single feature interacts with color-coded label groups.
-- **Waterfall Plots:** Side-by-side visualization of the highest True Positive and highest False Positive patients, revealing exactly which sub-metrics drove the model's decision.
+### 6. Decision Curve Analysis (DCA)
 
-!!! tip "Okabe-Ito CVD-Safe Palette"
-    Because these dashboards often hit clinical tumor boards, every Quarto output utilizes the Okabe-Ito Color-Vision-Deficiency (CVD) safe palette (e.g. vibrant orange, sky blue, vermillion) ensuring accessibility for red-green colorblindness.
+DCA computes the **net clinical benefit** of using the model vs treating all or treating none. See the [full DCA methodology guide](decision-curve-analysis.md).
 
-### 5. Subgroup Analysis (Out-Of-Fold)
+Stored as `rf_dca` and `xgb_dca`.
 
-After training, the pipeline evaluates model sensitivity across biological subgroups (Cancer Type, Assay Panels). 
-Crucially, `kreview` strictly uses **Out-Of-Fold (OOF)** CV predictions for these subgroups. Doing this prevents optimistic sampling bias where a model accidentally trains on a sub-population before predicting its sensitivity.
+### 7. Fold-Level AUC Tracking
 
-- **Cancer Type Stats:** Sensitivity per cancer type (top 10 by sample count).
-- **Assay Stats:** Sensitivity stratified by ACCESS panel version (e.g., ACCESS129 vs ACCESS146).
+To assess model stability, kreview runs `cross_val_score` separately and stores per-fold AUC for all three models. A high standard deviation (>0.05) suggests the model is data-sensitive. Stored as `{prefix}_fold_aucs` and `{prefix}_auc_std`.
 
-These are serialized into the `stats.json` output under `cancer_type_stats` and `assay_stats`.
+### 8. SHAP Explainability
+
+For RF and XGBoost, kreview generates **SHAP (SHapley Additive exPlanations)** values using `TreeExplainer`:
+
+- **Beeswarm Plot:** Global feature importance ranked by mean |SHAP|, colored by feature value
+- **Dependence Scatter:** Feature value vs SHAP impact, colored by an interacting feature
+- **Waterfall Plots:** Per-sample prediction decomposition for the most confident TP and FP
+
+!!! warning "Interpretation"
+    SHAP explains how the model decides, not biological causality. A feature with high SHAP impact may reflect a data artifact rather than a biological mechanism.
+
+### 9. Subgroup Analysis (Out-Of-Fold)
+
+After training, the pipeline evaluates model sensitivity across biological subgroups using **out-of-fold predictions** (preventing optimistic bias):
+
+- **Cancer Type Stats:** Sensitivity per cancer type (top 10 by sample count)
+- **Assay Stats:** Sensitivity stratified by ACCESS panel version (e.g. ACCESS129 vs ACCESS146)
+
+Serialized into the results JSON under `cancer_type_stats` and `assay_stats`.
+
+---
+
+## QC Metrics
+
+For every feature, `evaluate_feature()` also computes data quality metrics:
+
+| Metric | Field | Purpose |
+|--------|-------|---------|
+| Missing count | `n_missing` | Number of NaN values |
+| Missing percentage | `pct_missing` | Percentage of samples with NaN |
+| Zero variance | `is_zero_variance` | Whether `std == 0` (constant feature) |
+
+These are surfaced in the dashboard's **Cohort & QC** page and the statistical ledger.
+
+---
+
+## Feature Stability
+
+To assess whether the same features are consistently ranked as important across different data splits, kreview trains a fresh RF on each CV fold's training set and records which features appear in the top-10 by Gini importance. The result is a score from 0.0 (never in top-10) to 1.0 (always in top-10). Stored as `feature_stability`.
+
+---
+
+## Visualization Themes
+
+!!! tip "CVD-Safe Mode"
+    Use the `--cvd-safe` flag to switch from the default neon palette to the Okabe-Ito color scheme, which is accessible for red-green colorblindness. The default palette uses curated colors optimized for dark backgrounds.
+
+---
+
+## JSON Output Schema Summary
+
+`single_feature_model()` produces **44 JSON fields** per feature set:
+
+| Category | Fields | Count |
+|----------|--------|-------|
+| AUC & CI | `auc_{lr,rf,xgb}`, `auc_*_ci_lower`, `auc_*_ci_upper` | 9 |
+| Classification | `*_classification_report`, `*_confusion_matrix` | 6 |
+| Thresholds | `*_optimal_threshold` | 3 |
+| PR Curves | `*_pr_curve`, `*_avg_precision` | 6 |
+| DCA | `rf_dca`, `xgb_dca` | 2 |
+| Fold AUCs | `*_fold_aucs`, `*_auc_std` | 6 |
+| Calibration | `rf_calibration` | 1 |
+| Threshold Sweep | `rf_threshold_sweep` | 1 |
+| Feature Stability | `feature_stability` | 1 |
+| Training Time | `*_training_time_sec` | 3 |
+| Feature Importances | `rf_feature_importances`, `top_features` | 2 |
+| AUC Deltas | `auc_delta_rf_lr`, `auc_delta_xgb_rf` | 2 |
+| Subgroups | `cancer_type_stats`, `assay_stats` | 2 |

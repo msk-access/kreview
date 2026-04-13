@@ -2,7 +2,7 @@
 
 // Typography — modern, clean sans-serif
 $font-family-sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !default;
-$font-size-root: 0.9rem !default;
+$font-size-root: 0.95rem !default;
 $headings-font-weight: 600 !default;
 $h2-font-size: 1.4rem !default;
 
@@ -65,4 +65,35 @@ table.dataTable tbody tr:hover {
 }
 g.legend rect.bg {
   fill-opacity: 0 !important;
+}
+
+// QC warning highlight for zero-variance or high-missingness features
+.qc-warning {
+  border-left: 3px solid #E53935 !important;
+  background-color: rgba(229, 57, 53, 0.08) !important;
+}
+
+// Print / PDF mode — light background, dark text, single column
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #1a1a1a !important;
+    font-size: 10pt !important;
+  }
+  .card {
+    background-color: #ffffff !important;
+    border: 1px solid #cccccc !important;
+    break-inside: avoid;
+  }
+  .card-header {
+    background-color: #f5f5f5 !important;
+    color: #333333 !important;
+  }
+  table.dataTable {
+    color: #1a1a1a !important;
+    background-color: #ffffff !important;
+  }
+  .sidebar {
+    display: none !important;
+  }
 }

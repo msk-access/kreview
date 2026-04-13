@@ -50,7 +50,7 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 
 === "Machine Learning Tuning"
 
-    Control statistical parameters and cross-validation natively:
+    Control statistical parameters and cross-validation:
 
     ```bash
     kreview run \
@@ -60,6 +60,50 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       --impute-strategy median
     ```
     *Options for imputation: `median`, `mean`, `zero`. Folds must be `3-20`.*
+
+=== "SHAP & Visualization"
+
+    Control SHAP explainability and display:
+
+    ```bash
+    kreview run \
+      --cancer-samplesheet ... \
+      --krewlyzer-dir ... \
+      --shap-samples 5000 \
+      --shap-features 10 \
+      --top-n 50
+    ```
+
+    | Flag | Default | Description |
+    |------|---------|-------------|
+    | `--shap-samples` | 500 | Max samples for SHAP computation (higher = slower but more stable) |
+    | `--shap-features` | 10 | Number of features to show in SHAP beeswarm/waterfall |
+    | `--top-n` | 50 | Number of top features (by importance) to include in model training |
+
+=== "Accessibility & Theme"
+
+    ```bash
+    kreview run \
+      --cancer-samplesheet ... \
+      --krewlyzer-dir ... \
+      --cvd-safe
+    ```
+
+    The `--cvd-safe` flag switches all dashboard visualizations to the Okabe-Ito color palette, which is accessible for red-green colorblindness. By default, kreview uses a curated neon palette optimized for dark backgrounds.
+
+=== "Advanced Analytics"
+
+    ```bash
+    kreview run \
+      --cancer-samplesheet ... \
+      --krewlyzer-dir ... \
+      --compute-univariate-auc
+    ```
+
+    The `--compute-univariate-auc` flag computes a standalone ROC-AUC for each individual feature column (not just the ensemble model). This is computationally expensive but enables:
+    
+    - Univariate AUC badges in the dashboard's statistical ledger
+    - Marker size encoding in the volcano plot (larger = better univariate AUC)
 
 === "Safe Load Mode (I/O Constraints)"
 
@@ -105,7 +149,18 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       ...
       --skip-report
     ```
-    *Note: When `--skip-report` is omitted, `kreview` natively generates both interactive Plotly `output/reports/*.html` dashboards and a `static_plots/` subdirectory containing 2x-scaled `.png` versions of every chart for clinical PDF insertion.*
+    *Note: When `--skip-report` is omitted, `kreview` generates both interactive Plotly `output/reports/*.html` dashboards and a `static_plots/` subdirectory containing 2x-scaled `.png` versions of every chart.*
+
+=== "Resume Mode"
+
+    Skip evaluators that already have model results (useful for incremental HPC re-runs):
+
+    ```bash
+    kreview run \
+      ...
+      --resume
+    ```
+    *This checks for existing `*_model_results.json` files and skips extractors that have already completed.*
 
 ---
 
@@ -136,7 +191,7 @@ kreview run \
   --export-duckdb
 ```
 
-This creates or merges an immutable `kreview_lake.duckdb` file in your `output/` directory. Downstream researchers can then query it directly with DuckDB or Pandas without re-running the pipeline!
+This creates or merges an immutable `kreview_lake.duckdb` file in your `output/` directory. Downstream researchers can then query it directly with DuckDB or Pandas without re-running the pipeline.
 
 ---
 
@@ -149,3 +204,5 @@ kreview report \
   --results-dir output/BreakPointMotifOnTarget/ \
   --output-dir output/reports/
 ```
+
+For a guide to interpreting the generated dashboard, see the [Dashboard Interpretation Guide](../machine-learning/dashboard-guide.md).

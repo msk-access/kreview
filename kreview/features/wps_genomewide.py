@@ -49,8 +49,9 @@ class WPSGenomeEvaluator(FeatureEvaluator):
                     )
                     for a in array_cols:
                         if a in cols:
-                            arr = _to_float_array(row[a])
-                            if arr is not None and len(arr) > 0:
+                            arr_raw = parse_array(row[a])
+                            if arr_raw is not None and len(arr_raw) > 0:
+                                arr = np.array(arr_raw)
                                 extracted[f"{rt}_{a}_mean"] = float(np.mean(arr))
                                 extracted[f"{rt}_{a}_std"] = float(np.std(arr))
 
