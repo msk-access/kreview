@@ -222,3 +222,187 @@ class TestSingleFeatureModel:
         _, lr_pipe, rf, _ = single_feature_model(X, y)
         assert lr_pipe.named_steps["lr"].class_weight == "balanced"
         assert rf.class_weight == "balanced"
+
+
+# ── v0.0.8 new metric tests ────────────────────────────────────────────────────
+
+
+class TestPRCurves:
+    """Precision-Recall curves and average precision (v0.0.8)."""
+
+    def test_pr_curve_present(self, binary_Xy):
+        """PR curve data should be present for all models."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        for prefix in ["lr", "rf", "xgb"]:
+            key = f"{prefix}_pr_curve"
+            assert key in results, f"Missing {key}"
+            assert "precision" in results[key]
+            assert "recall" in results[key]
+
+    def test_avg_precision_range(self, binary_Xy):
+        """Average precision should be between 0 and 1."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        for prefix in ["lr", "rf", "xgb"]:
+            key = f"{prefix}_avg_precision"
+            assert key in results, f"Missing {key}"
+            assert 0 <= results[key] <= 1, f"{key}={results[key]} out of range"
+
+
+class TestDCA:
+    """Decision Curve Analysis (v0.0.8)."""
+
+    def test_dca_function_standalone(self):
+        """decision_curve_analysis should return thresholds and net benefits."""
+        from kreview.eval_engine import decision_curve_analysis
+
+        np.random.seed(42)
+        y = np.random.binomial(1, 0.3, 100)
+        probs = np.random.uniform(0, 1, 100)
+        result = decision_curve_analysis(y, probs)
+
+        assert "thresholds" in result
+        assert "net_benefit_model" in result
+        assert "net_benefit_treat_all" in result
+        assert len(result["thresholds"]) == len(result["net_benefit_model"])
+
+    def test_dca_in_model_results(self, binary_Xy):
+        """DCA should be present in model results for RF and XGB."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        assert "rf_dca" in results
+        assert "xgb_dca" in results
+        assert "thresholds" in results["rf_dca"]
+
+
+class TestFoldAUC:
+    """Fold-level AUC tracking for all 3 models (v0.0.8)."""
+
+    def test_fold_aucs_all_models(self, binary_Xy):
+        """Fold AUCs should be tracked for LR, RF, and XGBoost."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        for prefix in ["lr", "rf", "xgb"]:
+            key = f"{prefix}_fold_aucs"
+            assert key in results, f"Missing {key}"
+            assert isinstance(results[key], list)
+            assert len(results[key]) >= 3  # at least 3 folds
+
+    def test_auc_std_present(self, binary_Xy):
+        """AUC standard deviation should be computed."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        for prefix in ["lr", "rf", "xgb"]:
+            key = f"{prefix}_auc_std"
+            assert key in results, f"Missing {key}"
+            assert results[key] >= 0  # std is non-negative
+
+
+class TestThresholdSweep:
+    """Threshold sensitivity sweep (v0.0.8)."""
+
+    def test_sweep_present(self, binary_Xy):
+        """Threshold sweep should be in RF results."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        assert "rf_threshold_sweep" in results
+
+    def test_sweep_structure(self, binary_Xy):
+        """Sweep should have thresholds, sensitivity, specificity, ppv."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        sweep = results["rf_threshold_sweep"]
+        assert isinstance(sweep, list)
+        assert len(sweep) > 0
+        # Check first entry has required keys
+        entry = sweep[0]
+        assert "threshold" in entry
+        assert "sensitivity" in entry
+        assert "specificity" in entry
+        assert "ppv" in entry
+
+
+class TestFeatureStability:
+    """Feature stability across CV folds (v0.0.8)."""
+
+    def test_stability_present(self, binary_Xy):
+        """Feature stability dict should be computed."""
+        X, y = binary_Xy
+        names = [f"feat_{i}" for i in range(X.shape[1])]
+        results, *_ = single_feature_model(X, y, feature_names=names)
+        assert "feature_stability" in results
+
+    def test_stability_values(self, binary_Xy):
+        """Stability scores should be between 0 and 1."""
+        X, y = binary_Xy
+        names = [f"feat_{i}" for i in range(X.shape[1])]
+        results, *_ = single_feature_model(X, y, feature_names=names)
+        stability = results["feature_stability"]
+        assert isinstance(stability, dict)
+        for feat, score in stability.items():
+            assert 0 <= score <= 1, f"{feat}={score} out of [0,1]"
+
+
+class TestQCMetrics:
+    """Per-feature QC metrics: missingness and zero-variance (v0.0.8)."""
+
+    def test_missing_metrics_zero(self, synthetic_feature, synthetic_labels):
+        """Clean data should have 0 missingness."""
+        result = evaluate_feature(synthetic_feature, synthetic_labels)
+        assert "n_missing" in result
+        assert "pct_missing" in result
+        assert result["n_missing"] == 0
+        assert result["pct_missing"] == 0.0
+
+    def test_missing_metrics_with_nans(self, synthetic_labels):
+        """Data with NaNs should report non-zero missingness."""
+        values = pd.Series(np.random.randn(len(synthetic_labels)))
+        values.iloc[:10] = np.nan
+        result = evaluate_feature(values, synthetic_labels)
+        assert result["n_missing"] == 10
+        assert result["pct_missing"] > 0
+
+    def test_zero_variance_flag(self, synthetic_labels):
+        """Constant feature should be flagged as zero-variance."""
+        constant = pd.Series(np.ones(len(synthetic_labels)))
+        result = evaluate_feature(constant, synthetic_labels)
+        assert "is_zero_variance" in result
+        assert result["is_zero_variance"] is True
+
+    def test_non_constant_not_flagged(self, synthetic_feature, synthetic_labels):
+        """Normal feature should NOT be flagged as zero-variance."""
+        result = evaluate_feature(synthetic_feature, synthetic_labels)
+        assert result["is_zero_variance"] is False
+
+
+class TestTrainingTime:
+    """Training time tracking (v0.0.8)."""
+
+    def test_training_times_present(self, binary_Xy):
+        """Training time should be recorded for all models."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        for prefix in ["lr", "rf", "xgb"]:
+            key = f"{prefix}_training_time_sec"
+            assert key in results, f"Missing {key}"
+            assert results[key] > 0, f"{key} should be positive"
+
+
+class TestAUCDeltas:
+    """AUC delta comparisons between models (v0.0.8)."""
+
+    def test_deltas_present(self, binary_Xy):
+        """AUC deltas should be computed between model pairs."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        assert "auc_delta_rf_lr" in results
+        assert "auc_delta_xgb_rf" in results
+
+    def test_deltas_consistency(self, binary_Xy):
+        """RF-LR delta should equal auc_rf - auc_lr."""
+        X, y = binary_Xy
+        results, *_ = single_feature_model(X, y)
+        expected = results["auc_rf"] - results["auc_lr"]
+        assert abs(results["auc_delta_rf_lr"] - expected) < 1e-10
+
