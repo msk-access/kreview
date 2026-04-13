@@ -24,6 +24,7 @@ process KREVIEW_RUN {
     def resume_flag   = params.resume_eval  ? "--resume"                          : ""
     def skip_rpt_flag = params.skip_report  ? "--skip-report"                     : ""
     def cvd_flag      = params.cvd_safe     ? "--cvd-safe"                        : ""
+    def uauc_flag     = params.compute_univariate_auc ? "--compute-univariate-auc" : ""
     
     """
     # 1. Ensure output skeleton exists
@@ -49,6 +50,7 @@ process KREVIEW_RUN {
         ${resume_flag} \\
         ${skip_rpt_flag} \\
         ${cvd_flag} \\
+        ${uauc_flag} \\
         --export-duckdb \\
         --output output/
     """

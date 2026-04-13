@@ -50,11 +50,11 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
         auc_lr = data.get("auc_lr", np.nan)
         auc_xgb = data.get("auc_xgb", np.nan)
 
-        # Compute best AUC across all model types (ignoring NaN)
+        # Compute best AUC across all model types (ignoring NaN and None)
         valid_aucs = [
             x
             for x in [auc_rf, auc_lr, auc_xgb]
-            if not (isinstance(x, float) and np.isnan(x))
+            if x is not None and not (isinstance(x, float) and np.isnan(x))
         ]
         best_auc = max(valid_aucs) if valid_aucs else np.nan
 

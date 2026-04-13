@@ -134,6 +134,14 @@ def _impute(df, strategy: str):
         return df.fillna(df.mean())
     elif strategy == "median":
         return df.fillna(df.median())
+    elif strategy != "zero":
+        import structlog
+
+        structlog.get_logger().warning(
+            "unknown_impute_strategy",
+            strategy=strategy,
+            fallback="zero",
+        )
     return df.fillna(0)  # default: zero
 
 

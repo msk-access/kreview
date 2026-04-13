@@ -4,7 +4,7 @@
 from __future__ import annotations
 import pandas as pd
 import structlog
-from ..eval_engine import FeatureEvaluator, parse_array
+from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
 
