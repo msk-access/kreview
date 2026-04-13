@@ -11,7 +11,7 @@
         <link rel="prev" href="../labels/">
       
       
-        <link rel="next" href="../features/">
+        <link rel="next" href="../feature-cards/">
       
       
         
@@ -589,6 +589,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -679,6 +683,62 @@
     
   
     Models &amp; Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../machine-learning/dashboard-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dashboard Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../machine-learning/decision-curve-analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision Curve Analysis
   
 
     
@@ -1116,6 +1176,8 @@
       
         
       
+        
+      
     
     
     
@@ -1352,6 +1414,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.parse_array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parse_array
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.univariate_auc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        univariate_auc
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.set_theme" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1440,6 +1524,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.decision_curve_analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        decision_curve_analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.single_feature_model" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1459,6 +1554,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../feature-cards/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Cards
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1593,6 +1716,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.parse_array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        parse_array
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.univariate_auc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        univariate_auc
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.set_theme" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1674,6 +1819,17 @@
     <span class="md-ellipsis">
       
         plot_threshold_sensitivity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.decision_curve_analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        decision_curve_analysis
       
     </span>
   </a>
@@ -1765,11 +1921,14 @@
 
 
 <h1 id="evaluation-engine-api-reference">Evaluation Engine API Reference</h1>
-<p>The <code>kreview.eval_engine</code> module contains the statistical testing functions, ML model training, and all Plotly visualization generators.</p>
+<p>The <code>kreview.eval_engine</code> module contains the statistical testing functions, ML model training, visualization generators, and clinical utility computations.</p>
 <p>For conceptual explanations, see:</p>
 <ul>
 <li><a href="../../machine-learning/statistical-tests/">Statistical Tests</a></li>
 <li><a href="../../machine-learning/models-and-metrics/">Models &amp; Metrics</a></li>
+<li><a href="../../machine-learning/decision-curve-analysis/">Decision Curve Analysis</a></li>
+<li><a href="../../machine-learning/dashboard-guide/">Dashboard Interpretation Guide</a></li>
+<li><a href="../feature-cards/">Feature Cards</a></li>
 </ul>
 <hr>
 
@@ -1871,6 +2030,154 @@ Called per sample-group or per sample.</p>
 
 </div>
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.parse_array" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">parse_array</span><span class="p">(</span><span class="n">s</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Parse a string-encoded numeric array into a list of floats.</p>
+<p>Handles formats like '[1.0 2.0 3.0]' from parquet serialization.
+Returns empty list on any parse failure (no silent corruption).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.univariate_auc" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">univariate_auc</span><span class="p">(</span><span class="n">feature_col</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute cross-validated <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> for a single feature using univariate <abbr title="Logistic Regression">LR</abbr>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>feature_col</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>pandas Series or array-like of a single feature.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>binary label array (0/1).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>n_folds</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>number of <abbr title="Cross-Validation">CV</abbr> folds.</p>
+              </div>
+            </td>
+            <td>
+                  <code>5</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>random_state</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>random seed.</p>
+              </div>
+            </td>
+            <td>
+                  <code>42</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Cross-validated <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> (float). Returns 0.5 if the feature is constant,</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>there are too few samples per class, or <abbr title="Cross-Validation">CV</abbr> fails.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -2020,6 +2327,124 @@ Outputs metrics directly to scoring dict.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="kreview.eval_engine.decision_curve_analysis" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">decision_curve_analysis</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_prob</span><span class="p">,</span> <span class="n">thresholds</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute Decision Curve Analysis (DCA) net benefit data.</p>
+<p>For each threshold, calculates the net benefit of using the model vs
+treating all or treating none. This helps clinicians choose an operating
+threshold that balances false positives against missed detections.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>y_true</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Binary ground truth labels (0/1).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y_prob</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Predicted probabilities for positive class.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>thresholds</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Array of decision thresholds to evaluate.
+Defaults to <code>np.linspace(0.01, 0.99, 99)</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dictionary with keys <code>thresholds</code>, <code>net_benefit_model</code>, and</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>net_benefit_treat_all</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="kreview.eval_engine.single_feature_model" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">single_feature_model</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cancer_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span></code>
 
@@ -2071,7 +2496,7 @@ Outputs metrics directly to scoring dict.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 02:58:05 UTC"><span class="timeago" datetime="2026-04-09T02:58:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 02:58:05 UTC">2026-04-09</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 13, 2026 17:37:14 UTC"><span class="timeago" datetime="2026-04-13T17:37:14+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 13, 2026 17:37:14 UTC">2026-04-13</span>
   </span>
 
     

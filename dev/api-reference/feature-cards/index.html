@@ -5,13 +5,13 @@
       
       
       
-        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/developer/adding-a-feature/">
+        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/api-reference/feature-cards/">
       
       
-        <link rel="prev" href="../nbdev-workflow/">
+        <link rel="prev" href="../eval-engine/">
       
       
-        <link rel="next" href="../duckdb-architecture/">
+        <link rel="next" href="../features/">
       
       
         
@@ -22,7 +22,7 @@
     
     
       
-        <title>Adding a Feature - Kreview</title>
+        <title>Feature Cards - Kreview</title>
       
     
     
@@ -92,7 +92,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#adding-a-feature" class="md-skip">
+        <a href="#feature-cards-api-reference" class="md-skip">
           Skip to content
         </a>
       
@@ -132,7 +132,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Adding a Feature
+              Feature Cards
             
           </span>
         </div>
@@ -763,10 +763,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -789,11 +787,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked="">
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5">
         
           
           <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
@@ -814,7 +814,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -832,7 +832,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../nbdev-workflow/" class="md-nav__link">
+      <a href="../../developer/nbdev-workflow/" class="md-nav__link">
         
   
   
@@ -857,37 +857,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Adding a Feature
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../developer/adding-a-feature/" class="md-nav__link">
         
   
   
@@ -903,59 +876,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
-      
-        <li class="md-nav__item">
-  <a href="#1-create-the-notebook" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1. Create the Notebook
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#2-inherit-from-featureevaluator" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. Inherit from FeatureEvaluator
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-thats-it" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. That's It!
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -968,7 +888,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../duckdb-architecture/" class="md-nav__link">
+      <a href="../../developer/duckdb-architecture/" class="md-nav__link">
         
   
   
@@ -996,7 +916,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+      <a href="../../developer/contributing/" class="md-nav__link">
         
   
   
@@ -1024,7 +944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../release-guide/" class="md-nav__link">
+      <a href="../../developer/release-guide/" class="md-nav__link">
         
   
   
@@ -1239,8 +1159,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -1265,13 +1187,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7">
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked="">
         
           
           <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
@@ -1292,7 +1212,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1310,7 +1230,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/cli/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
@@ -1338,7 +1258,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/core/" class="md-nav__link">
+      <a href="../core/" class="md-nav__link">
         
   
   
@@ -1366,7 +1286,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/labels/" class="md-nav__link">
+      <a href="../labels/" class="md-nav__link">
         
   
   
@@ -1394,7 +1314,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/eval-engine/" class="md-nav__link">
+      <a href="../eval-engine/" class="md-nav__link">
         
   
   
@@ -1419,10 +1339,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../api-reference/feature-cards/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Cards
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1438,6 +1385,104 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+      
+        <li class="md-nav__item">
+  <a href="#functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build_feature_cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_feature_cards()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_card_for_featurefeature_name-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_card_for_feature(feature_name, cards)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#constants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constants
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Constants">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tier_labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TIER_LABELS
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1450,7 +1495,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/features/" class="md-nav__link">
+      <a href="../features/" class="md-nav__link">
         
   
   
@@ -1532,10 +1577,49 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
       
         <li class="md-nav__item">
-  <a href="#1-create-the-notebook" class="md-nav__link">
+  <a href="#functions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Create the Notebook
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build_feature_cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_feature_cards()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_card_for_featurefeature_name-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_card_for_feature(feature_name, cards)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
       
     </span>
   </a>
@@ -1543,24 +1627,30 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-inherit-from-featureevaluator" class="md-nav__link">
+  <a href="#constants" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Inherit from FeatureEvaluator
+        Constants
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Constants">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tier_labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TIER_LABELS
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#3-thats-it" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. That's It!
-      
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1607,10 +1697,10 @@
     
     
       <li class="md-path__item">
-        <a href="../nbdev-workflow/" class="md-path__link">
+        <a href="../cli/" class="md-path__link">
           
   <span class="md-ellipsis">
-    Developer Guide
+    API Reference
   </span>
 
         </a>
@@ -1632,50 +1722,93 @@
   
 
 
-<h1 id="adding-a-feature">Adding a Feature</h1>
-<p>Extending the pipeline is incredibly easy! Thanks to our dynamic class registry (<code>registry.get_all_evaluators</code>), any feature you construct will be automatically mapped, tested, and reported upon by <code>kreview run</code> globally.</p>
+<h1 id="feature-cards-api-reference">Feature Cards API Reference</h1>
+<p>The <code>kreview.feature_cards</code> module auto-generates metadata cards for each evaluator registered in the kreview system. These cards provide structured clinical context that enriches the dashboard's Feature Explanation page.</p>
+<p>For the dashboard rendering context, see <a href="../../machine-learning/dashboard-guide/#page-3-feature-explanation-shap">Dashboard Guide</a>.</p>
 <hr>
-<h2 id="1-create-the-notebook">1. Create the Notebook</h2>
-<p>To prevent destroying Jupyter JSON metadata structures by creating blank files, always duplicate the core template notebook. By convention, label it sequentially. Let's build a dummy "GC Content Feature".</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>cp<span class="w"> </span>nbs/features/_template.ipynb<span class="w"> </span>nbs/features/27_gc_content.ipynb
+<h2 id="functions">Functions</h2>
+<h3 id="build_feature_cards"><code>build_feature_cards()</code></h3>
+<p>Auto-generates feature metadata from the evaluator registry.</p>
+<p><strong>Returns:</strong> <code>dict[str, dict]</code> — Dictionary keyed by evaluator name, with values containing:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>display_name</code></td>
+<td><code>str</code></td>
+<td>Human-readable evaluator name</td>
+</tr>
+<tr>
+<td><code>source_file</code></td>
+<td><code>str</code></td>
+<td>Parquet file suffix (e.g. <code>.FSR.ontarget.parquet</code>)</td>
+</tr>
+<tr>
+<td><code>tier</code></td>
+<td><code>int</code></td>
+<td>Feature tier (1=Core Fragmentation, 2=Epigenetics &amp; Geometry, 3=Motif Sequence)</td>
+</tr>
+<tr>
+<td><code>tier_label</code></td>
+<td><code>str</code></td>
+<td>Human-readable tier label</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td><code>str</code></td>
+<td>Feature family (fragmentation, epigenetics_and_geometry, motifs)</td>
+</tr>
+<tr>
+<td><code>has_derived</code></td>
+<td><code>bool</code></td>
+<td>Whether the evaluator computes derived features</td>
+</tr>
+<tr>
+<td><code>derived_types</code></td>
+<td><code>list[str]</code></td>
+<td>Detected derived feature types (entropy, spectral, bimodality, etc.)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Derived feature detection</strong> uses source code introspection (<code>inspect.getsource()</code>) to search for keywords in the evaluator's <code>extract()</code> method.</p>
+<hr>
+<h3 id="get_card_for_featurefeature_name-cards"><code>get_card_for_feature(feature_name, cards)</code></h3>
+<p>Looks up the most likely card for a feature column name.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>feature_name</code> (<code>str</code>) — Column name from the feature matrix (e.g. <code>fsrontarget_chr1_fsr_median</code>)</li>
+<li><code>cards</code> (<code>dict</code>) — Dictionary returned by <code>build_feature_cards()</code></li>
+</ul>
+<p><strong>Returns:</strong> <code>dict | None</code> — The matching card, or <code>None</code> if no match found.</p>
+<p>Matching uses case-insensitive prefix comparison between the feature column name and evaluator names.</p>
+<hr>
+<h2 id="example">Example</h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">kreview.feature_cards</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_feature_cards</span><span class="p">,</span> <span class="n">get_card_for_feature</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">cards</span> <span class="o">=</span> <span class="n">build_feature_cards</span><span class="p">()</span>  <span class="c1"># 26 cards from registry</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># Look up a specific feature column</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">card</span> <span class="o">=</span> <span class="n">get_card_for_feature</span><span class="p">(</span><span class="s2">"fsrontarget_chr1_fsr_median"</span><span class="p">,</span> <span class="n">cards</span><span class="p">)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nb">print</span><span class="p">(</span><span class="n">card</span><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># {'display_name': 'FsrOnTarget', 'source_file': '.FSR.ontarget.parquet',</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1">#  'tier': 1, 'tier_label': 'Core Fragmentation', 'category': 'fragmentation',</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1">#  'has_derived': True, 'derived_types': ['bimodality', 'chrom_cv']}</span>
 </code></pre></div>
-<p>Open the new notebook in Jupyter Lab. In the very first cell, map the export location by changing the default export directive:
-</p><div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1">#| default_exp features.gc_evaluator</span>
-</code></pre></div><p></p>
-<h2 id="2-inherit-from-featureevaluator">2. Inherit from <code>FeatureEvaluator</code></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1">#| export</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">kreview.eval_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureEvaluator</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">GCEvaluator</span><span class="p">(</span><span class="n">FeatureEvaluator</span><span class="p">):</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="sd">"""Calculates GC% metrics from sequencing data."""</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="c1"># 1. Define Standard Metadata</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"GC_Coverage"</span> 
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">source_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".gc.parquet"</span> <span class="c1"># The suffix from MSK Krewlyzer parquet drops</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="n">tier</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="n">category</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"coverage"</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="c1"># 2. Implement the mandatory extraction contract!</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">extract</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">        </span><span class="sd">"""Convert standard DuckDB parquet loads into scalar ML features."""</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>        <span class="c1"># If your DuckDB query failed and pushed an empty DF, escape safely</span>
-<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>        <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
-<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>            <span class="k">return</span> <span class="p">{}</span>
-<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>
-<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>        <span class="n">metrics</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>
-<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>        <span class="c1"># Pull your metrics</span>
-<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>        <span class="n">metrics</span><span class="p">[</span><span class="s2">"median_gc"</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">"gc_ratio"</span><span class="p">]</span><span class="o">.</span><span class="n">median</span><span class="p">()</span>
-<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>        <span class="n">metrics</span><span class="p">[</span><span class="s2">"max_gc_shift"</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">"gc_ratio"</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
-<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>
-<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>        <span class="k">return</span> <span class="n">metrics</span>
+<hr>
+<h2 id="constants">Constants</h2>
+<h3 id="tier_labels"><code>TIER_LABELS</code></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">TIER_LABELS</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="mi">1</span><span class="p">:</span> <span class="s2">"Core Fragmentation"</span><span class="p">,</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="mi">2</span><span class="p">:</span> <span class="s2">"Epigenetics &amp; Geometry"</span><span class="p">,</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="mi">3</span><span class="p">:</span> <span class="s2">"Motif Sequence"</span><span class="p">,</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="p">}</span>
 </code></pre></div>
-<h2 id="3-thats-it">3. That's It!</h2>
-<p>Run <code>nbdev-export</code>. Your class will be scraped and published into <code>kreview/features/gc_evaluator.py</code>.</p>
-<p>Because <code>GCEvaluator</code> subclasses our root <code>FeatureEvaluator</code>, <code>registry.py</code> will actively discover it the next time you call <code>kreview run</code>, bind it to the CLI tree, build the biological <abbr title="Circulating Tumor DNA">ctDNA</abbr> cohorts, inject it into the DuckDB data lake aggregator, run Sklearn metrics across it, and publish an HTML dashboard for it!</p>
 
 
 
@@ -1698,7 +1831,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 02:22:12 UTC"><span class="timeago" datetime="2026-04-09T02:22:12+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 02:22:12 UTC">2026-04-09</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 13, 2026 17:37:14 UTC"><span class="timeago" datetime="2026-04-13T17:37:14+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 13, 2026 17:37:14 UTC">2026-04-13</span>
   </span>
 
     
@@ -1708,7 +1841,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 8, 2026 16:27:54 UTC"><span class="timeago" datetime="2026-04-08T16:27:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 8, 2026 16:27:54 UTC">2026-04-08</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 13, 2026 17:37:14 UTC"><span class="timeago" datetime="2026-04-13T17:37:14+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 13, 2026 17:37:14 UTC">2026-04-13</span>
   </span>
 
     

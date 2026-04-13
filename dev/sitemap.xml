@@ -2,98 +2,110 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://msk-access.github.io/kreview/dev/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/changelog/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/api-reference/cli/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/api-reference/core/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/api-reference/eval-engine/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
+    </url>
+    <url>
+         <loc>https://msk-access.github.io/kreview/dev/api-reference/feature-cards/</loc>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/api-reference/features/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/api-reference/labels/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/biology/ctdna-labeling/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/biology/fragmentomics-features/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/developer/adding-a-feature/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/developer/contributing/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/developer/duckdb-architecture/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/developer/nbdev-workflow/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/developer/release-guide/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/getting-started/configuration/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/getting-started/installation/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/getting-started/pipeline-cli/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/includes/abbreviations/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
+    </url>
+    <url>
+         <loc>https://msk-access.github.io/kreview/dev/machine-learning/dashboard-guide/</loc>
+         <lastmod>2026-04-13</lastmod>
+    </url>
+    <url>
+         <loc>https://msk-access.github.io/kreview/dev/machine-learning/decision-curve-analysis/</loc>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/machine-learning/models-and-metrics/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/machine-learning/statistical-tests/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/operations/ci-cd/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/operations/docker/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/operations/nextflow/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
     <url>
          <loc>https://msk-access.github.io/kreview/dev/operations/troubleshooting/</loc>
-         <lastmod>2026-04-10</lastmod>
+         <lastmod>2026-04-13</lastmod>
     </url>
 </urlset>

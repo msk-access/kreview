@@ -702,6 +702,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -792,6 +796,62 @@
     
   
     Models &amp; Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../machine-learning/dashboard-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dashboard Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../machine-learning/decision-curve-analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision Curve Analysis
   
 
     
@@ -1227,6 +1287,8 @@
       
         
       
+        
+      
     
     
     
@@ -1373,6 +1435,34 @@
     
   
     Evaluation Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/feature-cards/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Cards
   
 
     
@@ -1645,7 +1735,7 @@
 <p class="admonition-title">Disable Python Buffering</p>
 <p>When running over terminal orchestrators (like <code>nohup</code>, standard piping, or SLURM), it is critical to run Python with <code>PYTHONUNBUFFERED=1</code> so that the <code>structlog</code> progress output streams in real-time.</p>
 </div>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:4"><input checked="" id="__tabbed_1_1" name="__tabbed_1" type="radio"><input id="__tabbed_1_2" name="__tabbed_1" type="radio"><input id="__tabbed_1_3" name="__tabbed_1" type="radio"><input id="__tabbed_1_4" name="__tabbed_1" type="radio"><div class="tabbed-labels"><label for="__tabbed_1_1">Standard Run (All Features)</label><label for="__tabbed_1_2">Using a Manifest File</label><label for="__tabbed_1_3">Machine Learning Tuning</label><label for="__tabbed_1_4">Safe Load Mode (I/O Constraints)</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:7"><input checked="" id="__tabbed_1_1" name="__tabbed_1" type="radio"><input id="__tabbed_1_2" name="__tabbed_1" type="radio"><input id="__tabbed_1_3" name="__tabbed_1" type="radio"><input id="__tabbed_1_4" name="__tabbed_1" type="radio"><input id="__tabbed_1_5" name="__tabbed_1" type="radio"><input id="__tabbed_1_6" name="__tabbed_1" type="radio"><input id="__tabbed_1_7" name="__tabbed_1" type="radio"><div class="tabbed-labels"><label for="__tabbed_1_1">Standard Run (All Features)</label><label for="__tabbed_1_2">Using a Manifest File</label><label for="__tabbed_1_3">Machine Learning Tuning</label><label for="__tabbed_1_4"><abbr title="SHapley Additive exPlanations">SHAP</abbr> &amp; Visualization</label><label for="__tabbed_1_5">Accessibility &amp; Theme</label><label for="__tabbed_1_6">Advanced Analytics</label><label for="__tabbed_1_7">Safe Load Mode (I/O Constraints)</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">PYTHONUNBUFFERED</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
@@ -1669,7 +1759,7 @@
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<p>Control statistical parameters and cross-validation natively:</p>
+<p>Control statistical parameters and cross-validation:</p>
 <p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
@@ -1679,69 +1769,134 @@
 <em>Options for imputation: <code>median</code>, <code>mean</code>, <code>zero</code>. Folds must be <code>3-20</code>.</em><p></p>
 </div>
 <div class="tabbed-block">
-<p>If you see <code>PermissionError</code> during large cohort loading, reduce the parquet chunk-size:</p>
+<p>Control <abbr title="SHapley Additive exPlanations">SHAP</abbr> explainability and display:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--chunk-size<span class="w"> </span><span class="m">100</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--shap-samples<span class="w"> </span><span class="m">5000</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>--shap-features<span class="w"> </span><span class="m">10</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>--top-n<span class="w"> </span><span class="m">50</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--shap-samples</code></td>
+<td>500</td>
+<td>Max samples for <abbr title="SHapley Additive exPlanations">SHAP</abbr> computation (higher = slower but more stable)</td>
+</tr>
+<tr>
+<td><code>--shap-features</code></td>
+<td>10</td>
+<td>Number of features to show in <abbr title="SHapley Additive exPlanations">SHAP</abbr> beeswarm/waterfall</td>
+</tr>
+<tr>
+<td><code>--top-n</code></td>
+<td>50</td>
+<td>Number of top features (by importance) to include in model training</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--cvd-safe
+</code></pre></div>
+<p>The <code>--cvd-safe</code> flag switches all dashboard visualizations to the Okabe-Ito color palette, which is accessible for red-green colorblindness. By default, kreview uses a curated neon palette optimized for dark backgrounds.</p>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--compute-univariate-auc
+</code></pre></div>
+<p>The <code>--compute-univariate-auc</code> flag computes a standalone <abbr title="Receiver Operating Characteristic">ROC</abbr>-<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> for each individual feature column (not just the ensemble model). This is computationally expensive but enables:</p>
+<ul>
+<li>Univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> badges in the dashboard's statistical ledger</li>
+<li>Marker size encoding in the volcano plot (larger = better univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>)</li>
+</ul>
+</div>
+<div class="tabbed-block">
+<p>If you see <code>PermissionError</code> during large cohort loading, reduce the parquet chunk-size:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--chunk-size<span class="w"> </span><span class="m">100</span>
 </code></pre></div>
 </div>
 </div>
 </div>
 <hr>
 <h2 id="targeted-execution">Targeted Execution</h2>
-<div class="tabbed-set tabbed-alternate" data-tabs="2:3"><input checked="" id="__tabbed_2_1" name="__tabbed_2" type="radio"><input id="__tabbed_2_2" name="__tabbed_2" type="radio"><input id="__tabbed_2_3" name="__tabbed_2" type="radio"><div class="tabbed-labels"><label for="__tabbed_2_1">Isolating Features</label><label for="__tabbed_2_2">Running by Tier</label><label for="__tabbed_2_3">Skipping Reports</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:4"><input checked="" id="__tabbed_2_1" name="__tabbed_2" type="radio"><input id="__tabbed_2_2" name="__tabbed_2" type="radio"><input id="__tabbed_2_3" name="__tabbed_2" type="radio"><input id="__tabbed_2_4" name="__tabbed_2" type="radio"><div class="tabbed-labels"><label for="__tabbed_2_1">Isolating Features</label><label for="__tabbed_2_2">Running by Tier</label><label for="__tabbed_2_3">Skipping Reports</label><label for="__tabbed_2_4">Resume Mode</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <p>Use the <code>--features</code> flag with a comma-separated list to run only specific evaluators:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>...
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--features<span class="w"> </span><span class="s2">"BreakPointMotifOnTarget,EndMotifOnTarget"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>...
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--features<span class="w"> </span><span class="s2">"BreakPointMotifOnTarget,EndMotifOnTarget"</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <p>Run only Tier 1 (fragment size) or Tier 2 (nucleosome/motif) features:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>...
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--tier<span class="w"> </span><span class="m">1</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>...
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>--tier<span class="w"> </span><span class="m">1</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <p>If you are running in headless <abbr title="Continuous Integration">CI</abbr> environments and don't need HTML dashboards:</p>
-<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>...
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--skip-report
+<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>...
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--skip-report
 </code></pre></div>
-<em>Note: When <code>--skip-report</code> is omitted, <code>kreview</code> natively generates both interactive Plotly <code>output/reports/*.html</code> dashboards and a <code>static_plots/</code> subdirectory containing 2x-scaled <code>.png</code> versions of every chart for clinical PDF insertion.</em><p></p>
+<em>Note: When <code>--skip-report</code> is omitted, <code>kreview</code> generates both interactive Plotly <code>output/reports/*.html</code> dashboards and a <code>static_plots/</code> subdirectory containing 2x-scaled <code>.png</code> versions of every chart.</em><p></p>
+</div>
+<div class="tabbed-block">
+<p>Skip evaluators that already have model results (useful for incremental <abbr title="High-Performance Computing">HPC</abbr> re-runs):</p>
+<p></p><div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span>...
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span>--resume
+</code></pre></div>
+<em>This checks for existing <code>*_model_results.json</code> files and skips extractors that have already completed.</em><p></p>
 </div>
 </div>
 </div>
 <hr>
 <h2 id="labels-only">Labels Only</h2>
 <p>If you only need to generate the <abbr title="Circulating Tumor DNA">ctDNA</abbr> truth labels without running feature evaluation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview<span class="w"> </span>label<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span><span class="s2">"/path/to/samplesheet.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--healthy-xs1-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy1.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--healthy-xs2-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy2.csv"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--cbioportal-dir<span class="w"> </span><span class="s2">"/path/to/cBioPortal/"</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span>--output<span class="w"> </span>labels.parquet
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kreview<span class="w"> </span>label<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--cancer-samplesheet<span class="w"> </span><span class="s2">"/path/to/samplesheet.csv"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>--healthy-xs1-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy1.csv"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span>--healthy-xs2-samplesheet<span class="w"> </span><span class="s2">"/path/to/healthy2.csv"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span>--cbioportal-dir<span class="w"> </span><span class="s2">"/path/to/cBioPortal/"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span>--output<span class="w"> </span>labels.parquet
 </code></pre></div>
 <p>This produces a single Parquet file with sample IDs, clinical metadata, and the assigned 5-tier labels.</p>
 <hr>
 <h2 id="data-lake-integration">Data Lake Integration</h2>
 <p>Every time <code>kreview run</code> executes, feature matrices are loaded into memory, evaluated, and then destroyed. If you want a <strong>persistent output</strong> for downstream analysis:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>...
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>--export-duckdb
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>kreview<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>...
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>--export-duckdb
 </code></pre></div>
-<p>This creates or merges an immutable <code>kreview_lake.duckdb</code> file in your <code>output/</code> directory. Downstream researchers can then query it directly with DuckDB or Pandas without re-running the pipeline!</p>
+<p>This creates or merges an immutable <code>kreview_lake.duckdb</code> file in your <code>output/</code> directory. Downstream researchers can then query it directly with DuckDB or Pandas without re-running the pipeline.</p>
 <hr>
 <h2 id="re-generating-reports">Re-generating Reports</h2>
 <p>If you have existing evaluation results (<code>stats.json</code>, <code>*_matrix.parquet</code>) and want to regenerate the HTML dashboard:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kreview<span class="w"> </span>report<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--results-dir<span class="w"> </span>output/BreakPointMotifOnTarget/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--output-dir<span class="w"> </span>output/reports/
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>kreview<span class="w"> </span>report<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>--results-dir<span class="w"> </span>output/BreakPointMotifOnTarget/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span>--output-dir<span class="w"> </span>output/reports/
 </code></pre></div>
+<p>For a guide to interpreting the generated dashboard, see the <a href="../../machine-learning/dashboard-guide/">Dashboard Interpretation Guide</a>.</p>
 
 
 
@@ -1764,7 +1919,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 15:47:51 UTC"><span class="timeago" datetime="2026-04-09T15:47:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 15:47:51 UTC">2026-04-09</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 13, 2026 17:37:14 UTC"><span class="timeago" datetime="2026-04-13T17:37:14+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 13, 2026 17:37:14 UTC">2026-04-13</span>
   </span>
 
     

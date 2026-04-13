@@ -680,6 +680,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -770,6 +774,62 @@
     
   
     Models &amp; Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../machine-learning/dashboard-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dashboard Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../machine-learning/decision-curve-analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decision Curve Analysis
   
 
     
@@ -1205,6 +1265,8 @@
       
         
       
+        
+      
     
     
     
@@ -1351,6 +1413,34 @@
     
   
     Evaluation Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/feature-cards/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Cards
   
 
     
@@ -1742,18 +1832,18 @@
 </table>
 <hr>
 <h2 id="fragment-size-metrics-tier-1">📏 Fragment Size Metrics (Tier 1)</h2>
-<p>Tumor <abbr title="Cell-Free DNA">cfDNA</abbr> is physically shorter than normal <abbr title="Cell-Free DNA">cfDNA</abbr> because tumor cell-death occurs rapidly (necrosis) dodging the clean apoptotic laddering that fragments healthy cells safely on circulating histone boundaries.</p>
+<p>Tumor <abbr title="Cell-Free DNA">cfDNA</abbr> tends to be shorter than normal <abbr title="Cell-Free DNA">cfDNA</abbr> because rapid cell death (necrosis) disrupts the clean apoptotic nucleosome-wrapping that generates uniform ~167bp fragments from healthy cells.</p>
 <ul>
 <li><strong><abbr title="Fragment Size Distribution">FSD</abbr> (Fragment Size Distribution):</strong> Calculates the raw density profile of all fragment lengths across the sample.</li>
-<li><strong><abbr title="Fragment Size Coverage">FSC</abbr> (Fragment Size Coverage):</strong> Measures the specific ratio of short fragments (&lt; 150bp) vs long fragments (150-220bp) at targeted loci across the exome. A high <code>short_to_long_ratio</code> powerfully correlates with <abbr title="Circulating Tumor DNA">ctDNA</abbr>+.</li>
+<li><strong><abbr title="Fragment Size Coverage">FSC</abbr> (Fragment Size Coverage):</strong> Measures the specific ratio of short fragments (&lt; 150bp) vs long fragments (150-220bp) at targeted loci across the exome. A high <code>short_to_long_ratio</code> is associated with <abbr title="Circulating Tumor DNA">ctDNA</abbr>+ status.</li>
 <li><strong><abbr title="Fragment Size Ratio">FSR</abbr> (Fragment Size Ratio):</strong> Computes a single scalar short-to-long ratio as a global summary metric, both at panel-capture regions and genome-wide.</li>
 </ul>
 <h2 id="nucleosome-cleavage-mapping-tier-2">✂️ Nucleosome &amp; Cleavage Mapping (Tier 2)</h2>
-<p>These features trace the physical proteins that were bound to the <abbr title="Cell-Free DNA">cfDNA</abbr> right before apoptosis occurred.</p>
+<p>These features trace nucleosome positioning and nuclease cleavage patterns present in the <abbr title="Cell-Free DNA">cfDNA</abbr> at the time of cell death.</p>
 <ul>
 <li><strong><abbr title="Window Protection Score">WPS</abbr> (Window Protection Score):</strong> Evaluates depth profiles across narrow windows to identify where nucleosomes perfectly protected the DNA helix from circulating nucleases, or where <abbr title="Transcription Factor Binding Site">TFBS</abbr> sat.</li>
 <li><strong><abbr title="Transcription Factor Binding Site">TFBS</abbr> (Transcription Factor Binding Sites):</strong> Specifically measures the nucleosome-depleted regions at known transcription factor binding locations.</li>
-<li><strong>EndMotif / BreakPointMotif:</strong> Analyzes the first 4-nucleotide sequence of every read. Some nucleases specifically slice at <code>CCCA</code> motifs. Shifts in specific tetramers serve as powerful cancer markers because tumor tissues up/downregulate specific nucleases (e.g. <code>DNASE1L3</code>, <code>DFFB</code>).</li>
+<li><strong>EndMotif / BreakPointMotif:</strong> Analyzes the first 4-nucleotide sequence of every read. Specific nucleases cleave at preferred recognition sites (e.g. <code>CCCA</code>). Shifts in tetramer frequencies can serve as cancer markers because tumor tissues up-regulate or down-regulate specific nucleases (e.g. <code>DNASE1L3</code>, <code>DFFB</code>).</li>
 <li><strong>EndMotif1mer:</strong> Single-base resolution motif analysis for maximum granularity.</li>
 </ul>
 <h2 id="structural-integrity-accessibility-tier-2">🔍 Structural Integrity &amp; Accessibility (Tier 2)</h2>
@@ -1789,7 +1879,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 02:58:05 UTC"><span class="timeago" datetime="2026-04-09T02:58:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 02:58:05 UTC">2026-04-09</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 13, 2026 17:37:14 UTC"><span class="timeago" datetime="2026-04-13T17:37:14+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 13, 2026 17:37:14 UTC">2026-04-13</span>
   </span>
 
     
