@@ -14,6 +14,7 @@ __all__ = [
 
 # %% ../nbs/90_cli.ipynb #27a890c5
 import typer
+import sys
 from pathlib import Path
 from typing import Optional
 import pandas as pd
@@ -211,6 +212,39 @@ def _extract_from_dataframe(e_name, df_chunk, verbose=False):
         return e_name, False, str(exc)
 
 
+def _find_quarto() -> str:
+    """Discover the quarto binary from PATH or well-known install locations."""
+    import shutil
+
+    # 1. Check PATH first
+    found = shutil.which("quarto")
+    if found:
+        return found
+
+    # 2. Check well-known install locations
+    candidates = [
+        # macOS Positron bundled Quarto
+        "/Applications/Positron.app/Contents/Resources/app/quarto/bin/quarto",
+        # macOS standalone Quarto install
+        "/Applications/quarto/bin/quarto",
+        # Homebrew (Apple Silicon)
+        "/opt/homebrew/bin/quarto",
+        # Homebrew (Intel)
+        "/usr/local/bin/quarto",
+        # Linux system install
+        "/usr/bin/quarto",
+        # User-local install
+        str(Path.home() / ".local" / "bin" / "quarto"),
+        # Conda env
+        str(Path(sys.executable).parent / "quarto"),
+    ]
+    for c in candidates:
+        if Path(c).is_file():
+            return c
+
+    return "quarto"  # Fall back to bare name (will raise FileNotFoundError)
+
+
 def _render_quarto_report(
     matrix_path: str,
     feat_name: str,
@@ -234,9 +268,10 @@ def _render_quarto_report(
     env = os.environ.copy()
     env["QUARTO_PYTHON"] = str(python_exe)
 
+    quarto_bin = _find_quarto()
     out_html = Path(report_dir) / f"{feat_name}_dashboard.html"
     cmd = [
-        "quarto",
+        quarto_bin,
         "render",
         "report_template.qmd",
         "-P",
