@@ -23,6 +23,8 @@ class WPSPanelEvaluator(FeatureEvaluator):
     - median absolute deviation
     - spectral max power and dominant frequency (FFT-based periodicity)
     - local_depth scalar (if available)
+
+    Handles both numpy array and string columns from krewlyzer parquets.
     """
 
     name = "WPSPanel"
@@ -49,14 +51,17 @@ class WPSPanelEvaluator(FeatureEvaluator):
                     )
 
                     for m in float_cols:
-                        if m in cols and pd.notna(row[m]):
-                            extracted[f"{rt}_{m}"] = float(row[m])
+                        if m in cols:
+                            v = row[m]
+                            if v is not None and not (
+                                isinstance(v, float) and np.isnan(v)
+                            ):
+                                extracted[f"{rt}_{m}"] = float(v)
 
                     for a in array_cols:
-                        if a in cols and pd.notna(row[a]):
-                            parsed = parse_array(str(row[a]))
-                            if len(parsed) > 0:
-                                arr = np.array(parsed)
+                        if a in cols:
+                            arr = _to_float_array(row[a])
+                            if arr is not None and len(arr) > 0:
                                 extracted[f"{rt}_{a}_mean"] = float(np.mean(arr))
                                 extracted[f"{rt}_{a}_std"] = float(np.std(arr))
 
