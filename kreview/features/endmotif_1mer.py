@@ -4,7 +4,7 @@
 from __future__ import annotations
 import pandas as pd
 import structlog
-from ..eval_engine import FeatureEvaluator
+from ..eval_engine import FeatureEvaluator, parse_array
 
 log = structlog.get_logger()
 
@@ -13,25 +13,13 @@ __all__ = ["log", "EndMotif1merEvaluator"]
 
 
 # %% ../../nbs/features/23_endmotif_1mer.ipynb #b74ea526
-def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith("["):
-        return []
-    clean = (
-        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
-    )
-    try:
-        return [float(x) for x in clean.split()]
-    except (ValueError, TypeError):
-        return []
-
-
 class EndMotif1merEvaluator(FeatureEvaluator):
-    """Extracts 1-mer fragment end frequencies."""
+    """Extracts 1-mer fragment end base frequencies."""
 
     name = "EndMotif1mer"
     source_file = ".EndMotif1mer.parquet"
-    tier = 2
-    category = "epigenetics_and_geometry"
+    tier = 3
+    category = "motifs"
 
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         extracted = {}
@@ -40,8 +28,6 @@ class EndMotif1merEvaluator(FeatureEvaluator):
                 return extracted
             cols = set(df.columns)
 
-            self.tier = 3
-            self.category = "motifs"
             if "base" in cols and "fraction" in cols:
                 for row in df.to_dict("records"):
                     b = str(row["base"])

@@ -9,12 +9,12 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "FSDEvaluator"]
+__all__ = ["log", "FSDGenomewideEvaluator"]
 
 
 # %% ../../nbs/features/13b_fsd_genomewide.ipynb #3253d621
-class FSDEvaluator(FeatureEvaluator):
-    """Extracts normalized densities for all fragment size buckets."""
+class FSDGenomewideEvaluator(FeatureEvaluator):
+    """Extracts normalized densities for genomewide fragment size buckets."""
 
     name = "FsdGenomewide"
     source_file = ".FSD.parquet"

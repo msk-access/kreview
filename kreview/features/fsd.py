@@ -9,12 +9,12 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "FSDEvaluator"]
+__all__ = ["log", "FSDOnTargetEvaluator"]
 
 
 # %% ../../nbs/features/13_fsd.ipynb #3253d621
-class FSDEvaluator(FeatureEvaluator):
-    """Extracts normalized densities for all fragment size buckets."""
+class FSDOnTargetEvaluator(FeatureEvaluator):
+    """Extracts normalized densities for on-target fragment size buckets."""
 
     name = "FsdOnTarget"
     source_file = ".FSD.ontarget.parquet"

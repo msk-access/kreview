@@ -120,6 +120,23 @@ from concurrent.futures import ProcessPoolExecutor
 import concurrent.futures
 
 
+def _impute(df, strategy: str):
+    """Apply imputation strategy to a feature DataFrame.
+
+    Args:
+        df: DataFrame with numeric features (may contain NaN).
+        strategy: One of 'zero', 'mean', 'median'.
+
+    Returns:
+        DataFrame with NaN values filled according to strategy.
+    """
+    if strategy == "mean":
+        return df.fillna(df.mean())
+    elif strategy == "median":
+        return df.fillna(df.median())
+    return df.fillna(0)  # default: zero
+
+
 def _extract_from_dataframe(e_name, df_chunk, verbose=False):
     """Extract features from a pre-loaded DataFrame chunk. Runs in child process.
 
@@ -562,7 +579,7 @@ def run(
             if top_feats:
                 # Variance guard: drop features that are constant across all model samples.
                 # Constant features produce AUC=0.500 and waste compute.
-                X_raw = model_df[top_feats].fillna(0)
+                X_raw = _impute(model_df[top_feats], impute_strategy)
                 nonconst = [c for c in top_feats if X_raw[c].std() > 0]
                 n_dropped = len(top_feats) - len(nonconst)
                 if n_dropped > 0:
@@ -581,7 +598,9 @@ def run(
 
                 warnings.filterwarnings("ignore", message=".*use_label_encoder.*")
 
-                X = model_df[top_feats].fillna(0).values
+                _echo(f"  Imputation: {impute_strategy}")
+
+                X = _impute(model_df[top_feats], impute_strategy).values
                 c_types = model_df.get("CANCER_TYPE", None)
                 if c_types is not None:
                     c_types = c_types.values

@@ -30,6 +30,7 @@ __all__ = [
     "CVD_SAFE_COLORS",
     "LABEL_COLORS",
     "FeatureEvaluator",
+    "parse_array",
     "set_theme",
     "evaluate_feature",
     "plot_violin",
@@ -59,6 +60,23 @@ class FeatureEvaluator:
         raise NotImplementedError(
             "Feature evaluators must implement the extract() method."
         )
+
+
+def parse_array(s) -> list[float]:
+    """Parse a string-encoded numeric array into a list of floats.
+
+    Handles formats like '[1.0 2.0 3.0]' from parquet serialization.
+    Returns empty list on any parse failure (no silent corruption).
+    """
+    if not isinstance(s, str) or not s.startswith("["):
+        return []
+    clean = (
+        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
+    )
+    try:
+        return [float(x) for x in clean.split()]
+    except (ValueError, TypeError):
+        return []
 
 
 # %% ../nbs/02_eval_engine.ipynb #69946ce8

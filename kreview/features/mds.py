@@ -9,12 +9,12 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "MDSEvaluator"]
+__all__ = ["log", "MDSOnTargetEvaluator"]
 
 
 # %% ../../nbs/features/19_mds.ipynb #c34b7afe
-class MDSEvaluator(FeatureEvaluator):
-    """Global MDS signature."""
+class MDSOnTargetEvaluator(FeatureEvaluator):
+    """On-target MDS signature."""
 
     name = "MdsOnTarget"
     source_file = ".MDS.ontarget.parquet"

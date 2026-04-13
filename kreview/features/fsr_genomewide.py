@@ -9,11 +9,11 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "FSREvaluator"]
+__all__ = ["log", "FSRGenomewideEvaluator"]
 
 
 # %% ../../nbs/features/14b_fsr_genomewide.ipynb #3a85e316
-class FSREvaluator(FeatureEvaluator):
+class FSRGenomewideEvaluator(FeatureEvaluator):
     """Extracts the short/long fragment size ratio across genomewide bins.
 
     Only bins with read coverage (total_count > 0) are included in aggregation.

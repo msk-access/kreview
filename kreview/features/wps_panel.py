@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 import structlog
-from ..eval_engine import FeatureEvaluator
+from ..eval_engine import FeatureEvaluator, parse_array
 
 log = structlog.get_logger()
 
@@ -14,18 +14,6 @@ __all__ = ["log", "WPSPanelEvaluator"]
 
 
 # %% ../../nbs/features/24_wps_panel.ipynb #cee7b4e4
-def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith("["):
-        return []
-    clean = (
-        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
-    )
-    try:
-        return [float(x) for x in clean.split()]
-    except (ValueError, TypeError):
-        return []
-
-
 class WPSPanelEvaluator(FeatureEvaluator):
     """Extracts WPS nucleosome binding geometries."""
 
@@ -58,7 +46,7 @@ class WPSPanelEvaluator(FeatureEvaluator):
 
                     for a in array_cols:
                         if a in cols and pd.notna(row[a]):
-                            parsed = _parse_array(str(row[a]))
+                            parsed = parse_array(str(row[a]))
                             if len(parsed) > 0:
                                 extracted[f"{rt}_{a}_mean"] = float(np.mean(parsed))
                                 extracted[f"{rt}_{a}_std"] = float(np.std(parsed))

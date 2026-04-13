@@ -9,12 +9,12 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "ATACEvaluator"]
+__all__ = ["log", "ATACOnTargetEvaluator"]
 
 
 # %% ../../nbs/features/17_atac.ipynb #874d8529
-class ATACEvaluator(FeatureEvaluator):
-    """Extracts ATAC footprint metrics per feature set."""
+class ATACOnTargetEvaluator(FeatureEvaluator):
+    """Extracts ATAC footprint metrics for on-target regions."""
 
     name = "AtacOnTarget"
     source_file = ".ATAC.ontarget.parquet"

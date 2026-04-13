@@ -9,11 +9,11 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "FSREvaluator"]
+__all__ = ["log", "FSROnTargetEvaluator"]
 
 
 # %% ../../nbs/features/14_fsr.ipynb #3a85e316
-class FSREvaluator(FeatureEvaluator):
+class FSROnTargetEvaluator(FeatureEvaluator):
     """Extracts the short/long fragment size ratio across on-target genomic bins.
 
     Only bins with read coverage (total_count > 0) are included in aggregation.
