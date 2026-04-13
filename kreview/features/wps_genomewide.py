@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 import structlog
-from ..eval_engine import FeatureEvaluator
+from ..eval_engine import FeatureEvaluator, parse_array
 
 log = structlog.get_logger()
 
@@ -14,20 +14,17 @@ __all__ = ["log", "WPSGenomeEvaluator"]
 
 
 # %% ../../nbs/features/25_wps_genomewide.ipynb #86f68672
-def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith("["):
-        return []
-    clean = (
-        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
-    )
-    try:
-        return [float(x) for x in clean.split()]
-    except (ValueError, TypeError):
-        return []
-
-
 class WPSGenomeEvaluator(FeatureEvaluator):
-    """Extracts genome-wide WPS metrics."""
+    """Extracts genome-wide WPS metrics with spectral features.
+
+    For each WPS array, extracts:
+    - mean, std (original)
+    - peak-to-valley amplitude (nucleosome occupancy proxy)
+    - median absolute deviation (robust dispersion)
+    - spectral max power and dominant frequency (FFT-based periodicity)
+
+    Handles both numpy array and string columns from krewlyzer parquets.
+    """
 
     name = "WPSGenome"
     source_file = ".WPS.parquet"
@@ -51,11 +48,29 @@ class WPSGenomeEvaluator(FeatureEvaluator):
                         .replace("|", "_")
                     )
                     for a in array_cols:
-                        if a in cols and pd.notna(row[a]):
-                            parsed = _parse_array(str(row[a]))
-                            if len(parsed) > 0:
-                                extracted[f"{rt}_{a}_mean"] = float(np.mean(parsed))
-                                extracted[f"{rt}_{a}_std"] = float(np.std(parsed))
+                        if a in cols:
+                            arr = _to_float_array(row[a])
+                            if arr is not None and len(arr) > 0:
+                                extracted[f"{rt}_{a}_mean"] = float(np.mean(arr))
+                                extracted[f"{rt}_{a}_std"] = float(np.std(arr))
+
+                                extracted[f"{rt}_{a}_peak_valley"] = float(
+                                    np.max(arr) - np.min(arr)
+                                )
+                                extracted[f"{rt}_{a}_mad"] = float(
+                                    np.median(np.abs(arr - np.median(arr)))
+                                )
+
+                                if len(arr) >= 50:
+                                    fft_vals = np.abs(np.fft.rfft(arr - arr.mean()))
+                                    freqs = np.fft.rfftfreq(len(arr))
+                                    if len(fft_vals) > 2:
+                                        extracted[f"{rt}_{a}_spectral_max_power"] = (
+                                            float(np.max(fft_vals[1:]))
+                                        )
+                                        extracted[
+                                            f"{rt}_{a}_spectral_dominant_freq"
+                                        ] = float(freqs[1:][np.argmax(fft_vals[1:])])
 
             return extracted
         except Exception as e:

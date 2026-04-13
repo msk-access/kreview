@@ -13,25 +13,13 @@ __all__ = ["log", "BreakPointMotifGenomewideEvaluator"]
 
 
 # %% ../../nbs/features/22b_breakpoint_motif_genomewide.ipynb #0b410faf
-def _parse_array(s):
-    if not isinstance(s, str) or not s.startswith("["):
-        return []
-    clean = (
-        s.replace("[", "").replace("]", "").replace(chr(10), "").replace(chr(13), "")
-    )
-    try:
-        return [float(x) for x in clean.split()]
-    except (ValueError, TypeError):
-        return []
-
-
 class BreakPointMotifGenomewideEvaluator(FeatureEvaluator):
-    """Extracts 4-mer adjacent breakpoint motifs."""
+    """Extracts 4-mer adjacent breakpoint motifs for genomewide regions."""
 
     name = "BreakPointMotifGenomewide"
     source_file = ".BreakPointMotif.parquet"
-    tier = 2
-    category = "epigenetics_and_geometry"
+    tier = 3
+    category = "motifs"
 
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         extracted = {}
@@ -40,8 +28,6 @@ class BreakPointMotifGenomewideEvaluator(FeatureEvaluator):
                 return extracted
             cols = set(df.columns)
 
-            self.tier = 3
-            self.category = "motifs"
             if "Motif" in cols and "Frequency" in cols:
                 for row in df.to_dict("records"):
                     m = str(row["Motif"])

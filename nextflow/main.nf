@@ -46,6 +46,7 @@ def helpMessage() {
      --resume_eval              Skip evaluators with existing results (default: false)
      --skip_report              Skip Quarto dashboard generation (default: false)
      --cvd_safe                 Use colorblind-safe palette (default: false)
+     --compute_univariate_auc   Compute per-feature univariate AUC (default: false)
 
      Targeted Execution:
      --features                 Comma-separated list of evaluators (e.g. "AtacOnTarget,FSCOnTarget")

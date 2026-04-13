@@ -14,7 +14,11 @@ __all__ = ["log", "MDSGeneEvaluator"]
 
 # %% ../../nbs/features/20_mds_gene.ipynb #0831bfc4
 class MDSGeneEvaluator(FeatureEvaluator):
-    """Gene-specific MDS signatures."""
+    """Gene-specific MDS signatures with cross-gene distribution statistics.
+
+    Per-gene metrics: mds_mean, mds_e1, mds_std, mds_z, mds_e1_z
+    Cross-gene derived: z-score std/skew, fraction of genes diverged (|z|>2)
+    """
 
     name = "MDSGene"
     source_file = ".MDS.gene.parquet"
@@ -28,6 +32,7 @@ class MDSGeneEvaluator(FeatureEvaluator):
                 return extracted
             cols = set(df.columns)
 
+            # Per-gene extraction
             if "gene" in cols:
                 metrics = [
                     c
@@ -41,6 +46,25 @@ class MDSGeneEvaluator(FeatureEvaluator):
                     for m in metrics:
                         if pd.notna(row[m]):
                             extracted[f"{g}_{m}"] = float(row[m])
+
+            # --- Cross-gene distribution statistics ---
+            if "mds_z" in cols:
+                z_vals = df["mds_z"].dropna()
+                if len(z_vals) > 1:
+                    extracted["mds_gene_z_mean"] = float(z_vals.mean())
+                    extracted["mds_gene_z_std"] = float(z_vals.std())
+                    extracted["mds_gene_z_skew"] = float(z_vals.skew())
+                    extracted["mds_gene_frac_diverged"] = float(
+                        (z_vals.abs() > 2).mean()
+                    )
+
+            if "mds_e1_z" in cols:
+                e1z = df["mds_e1_z"].dropna()
+                if len(e1z) > 1:
+                    extracted["mds_gene_e1z_std"] = float(e1z.std())
+                    extracted["mds_gene_e1z_frac_diverged"] = float(
+                        (e1z.abs() > 2).mean()
+                    )
 
             return extracted
         except Exception as e:

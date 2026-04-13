@@ -14,7 +14,11 @@ __all__ = ["log", "MDSExonEvaluator"]
 
 # %% ../../nbs/features/20b_mds_exon.ipynb #d368744f
 class MDSExonEvaluator(FeatureEvaluator):
-    """Exon-level MDS distributions."""
+    """Exon-level MDS distributions with cross-exon statistics.
+
+    Per-gene exon-level: mean and std of MDS across exons per gene.
+    Cross-exon derived: global mean, std, skew, fraction diverged (|MDS|>2).
+    """
 
     name = "MDSExon"
     source_file = ".MDS.exon.parquet"
@@ -28,6 +32,7 @@ class MDSExonEvaluator(FeatureEvaluator):
                 return extracted
             cols = set(df.columns)
 
+            # Per-gene grouped extraction
             if "gene" in cols and "mds" in cols:
                 gene_grouped = df.groupby("gene")["mds"]
                 for gene, vals in gene_grouped:
@@ -37,6 +42,17 @@ class MDSExonEvaluator(FeatureEvaluator):
                     extracted[f"{g}_mds_exon_mean"] = float(vals.mean())
                     if len(vals) > 1:
                         extracted[f"{g}_mds_exon_std"] = float(vals.std())
+
+            # --- Cross-exon distribution statistics ---
+            if "mds" in cols:
+                all_mds = df["mds"].dropna()
+                if len(all_mds) > 1:
+                    extracted["mds_exon_global_mean"] = float(all_mds.mean())
+                    extracted["mds_exon_global_std"] = float(all_mds.std())
+                    extracted["mds_exon_global_skew"] = float(all_mds.skew())
+                    extracted["mds_exon_frac_diverged"] = float(
+                        (all_mds.abs() > 2).mean()
+                    )
 
             return extracted
         except Exception as e:

@@ -3,22 +3,26 @@
 # %% ../../nbs/features/14b_fsr_genomewide.ipynb #1699fd47
 from __future__ import annotations
 import pandas as pd
+import numpy as np
 import structlog
 from ..eval_engine import FeatureEvaluator
 
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "FSREvaluator"]
+__all__ = ["log", "FSRGenomewideEvaluator"]
 
 
 # %% ../../nbs/features/14b_fsr_genomewide.ipynb #3a85e316
-class FSREvaluator(FeatureEvaluator):
+class FSRGenomewideEvaluator(FeatureEvaluator):
     """Extracts the short/long fragment size ratio across genomewide bins.
 
     Only bins with read coverage (total_count > 0) are included in aggregation.
     Genomewide panels typically cover ~93% of bins, but the filter ensures
     uncovered bins don't contribute noise to summary statistics.
+
+    Per-chromosome metrics: median short_long_ratio per chromosome,
+    parsed from ``region`` column format ``chrN:start-end``.
     """
 
     name = "FsrGenomewide"
@@ -35,7 +39,7 @@ class FSREvaluator(FeatureEvaluator):
             # Filter to bins with actual read coverage
             if "total_count" in df.columns:
                 n_total = len(df)
-                df = df[df["total_count"] > 0]
+                df = df[df["total_count"] > 0].copy()
                 extracted["n_covered_bins"] = len(df)
                 extracted["n_total_bins"] = n_total
                 if df.empty:
@@ -57,6 +61,30 @@ class FSREvaluator(FeatureEvaluator):
             for m in target_metrics:
                 if m in cols:
                     extracted[f"global_{m}"] = float(df[m].median())
+
+            # --- Per-chromosome FSR (region format: chrN:start-end) ---
+            if "region" in cols and "short_long_ratio" in cols:
+                df["_chrom"] = (
+                    df["region"].astype(str).str.extract(r"(chr[\dXY]+)", expand=False)
+                )
+                for chrom, grp in df.groupby("_chrom"):
+                    if pd.isna(chrom) or len(grp) < 2:
+                        continue
+                    ch = str(chrom)
+                    extracted[f"{ch}_fsr_gw_median"] = float(
+                        grp["short_long_ratio"].median()
+                    )
+                    extracted[f"{ch}_fsr_gw_std"] = float(grp["short_long_ratio"].std())
+
+                # --- Cross-chromosome dispersion ---
+                chrom_medians = [
+                    v for k, v in extracted.items() if k.endswith("_fsr_gw_median")
+                ]
+                if len(chrom_medians) > 2:
+                    arr = np.array(chrom_medians)
+                    extracted["fsr_gw_chrom_cv"] = (
+                        float(arr.std() / arr.mean()) if arr.mean() != 0 else 0.0
+                    )
 
             return extracted
         except Exception as e:
