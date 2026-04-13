@@ -275,6 +275,8 @@ if scoreboard_path.exists():
 
 *Distinct fragmentation patterns from tumor-derived cfDNA may be detectable in plasma via size, motif, and nucleosome positioning signatures.*
 
+[Methods & API Documentation](https://msk-access.github.io/kreview/)
+
 # Executive Summary {orientation="rows" scrolling="true"}
 
 ## Row {height="15%"}
@@ -325,6 +327,26 @@ dict(value=spec, color="info", icon="shield-check")
 #| content: valuebox
 #| title: "Features Extracted"
 dict(value=f"{len(numeric_cols)}", color="primary", icon="activity")
+```
+
+```{python}
+#| content: valuebox
+#| title: "Verdict"
+if mres is not None:
+    best = max(auc_rf, auc_lr, auc_xgb)
+    if best >= 0.80:
+        verdict = "Strong separation"
+        v_color = "success"
+    elif best >= 0.70:
+        verdict = "Moderate separation"
+        v_color = "warning"
+    else:
+        verdict = "Weak separation"
+        v_color = "danger"
+else:
+    verdict = "No model data"
+    v_color = "secondary"
+dict(value=verdict, color=v_color, icon="graph-up")
 ```
 
 ## Row {height="40%"}
@@ -468,6 +490,35 @@ if metric_records:
     show_plotly(fig_perf, filename="performance_metrics")
 else:
     display(Markdown("> Performance metrics not available."))
+```
+
+```{python}
+#| echo: false
+# AUC Deltas + Training Time summary
+if mres is not None:
+    summary_rows = []
+    for prefix, name in [("lr", "Logistic Regression"), ("rf", "Random Forest"), ("xgb", "XGBoost")]:
+        auc_val = mres.get(f"auc_{prefix}")
+        t_sec = mres.get(f"{prefix}_training_time_sec")
+        threshold = mres.get(f"{prefix}_optimal_threshold")
+        if auc_val is not None:
+            summary_rows.append({
+                "Model": name,
+                "AUC": f"{auc_val:.3f}",
+                "Threshold (Youden J)": f"{threshold:.3f}" if threshold else "N/A",
+                "Training Time (s)": f"{t_sec:.2f}" if t_sec else "N/A",
+            })
+    if summary_rows:
+        delta_rf_lr = mres.get("auc_delta_rf_lr")
+        delta_xgb_rf = mres.get("auc_delta_xgb_rf")
+        delta_text = ""
+        if delta_rf_lr is not None:
+            delta_text += f"RF–LR: {delta_rf_lr:+.3f}"
+        if delta_xgb_rf is not None:
+            delta_text += f" | XGB–RF: {delta_xgb_rf:+.3f}"
+        if delta_text:
+            display(Markdown(f"**AUC Deltas**: {delta_text}"))
+        itables.show(pd.DataFrame(summary_rows), classes="display compact nowrap", maxBytes=0, paging=False)
 ```
 
 ### ROC Curves with CI
@@ -819,6 +870,32 @@ if mres is not None:
         combined = combined[[c for c in cols if c in combined.columns]]
         combined.replace({"0": "Healthy Normal", "1": "True ctDNA+"}, inplace=True)
         itables.show(combined.round(3), classes="display nowrap", maxBytes=0)
+```
+
+### Feature Importances
+
+```{python}
+#| echo: false
+if mres is not None and "rf_feature_importances" in mres:
+    imp = mres["rf_feature_importances"]
+    if isinstance(imp, dict):
+        imp_df = pd.DataFrame(
+            sorted(imp.items(), key=lambda x: x[1], reverse=True)[:20],
+            columns=["Feature", "Importance"]
+        ).iloc[::-1]
+        fig_imp = px.bar(
+            imp_df, x="Importance", y="Feature", orientation="h",
+            color="Importance", color_continuous_scale="Oranges"
+        )
+        _ = fig_imp.update_layout(
+            **LAYOUT_DEFAULTS, showlegend=False,
+            title="RF Feature Importances (Top 20)",
+            margin=dict(l=10, r=10, t=40, b=10),
+            xaxis_title="Gini Importance", yaxis_title=""
+        )
+        show_plotly(fig_imp, filename="feature_importances")
+else:
+    display(Markdown("> Feature importances not available."))
 ```
 
 # Feature Explanation (SHAP) {orientation="rows" scrolling="false"}
@@ -1175,6 +1252,25 @@ if top_col:
     show_plotly(fig_v, filename="top_feature_violin")
 ```
 
+```{python}
+#| title: "Independence from Tumor Burden (VAF Scatter)"
+#| echo: false
+if top_col and "max_vaf" in df.columns:
+    cancer = df[df["max_vaf"] > 0]
+    if len(cancer) > 0:
+        fig_vaf = px.scatter(
+            cancer, x="max_vaf", y=top_col, color="label",
+            color_discrete_map=THEME["labels"], opacity=0.6,
+            trendline="lowess", log_x=True,
+            symbol="label"
+        )
+        _ = fig_vaf.update_layout(
+            **LAYOUT_DEFAULTS,
+            margin=dict(l=10, r=10, t=10, b=10)
+        )
+        show_plotly(fig_vaf, filename="vaf_scatter")
+```
+
 ::: {.callout-note collapse="true"}
 ## Statistical Ledger
 ```{python}
@@ -1232,7 +1328,7 @@ fig_bal = px.bar(
     x=label_counts.index, y=label_counts.values,
     color=label_counts.index,
     color_discrete_map=THEME["labels"],
-    text=[f"{v} ({v/len(df)*100:.1f}%)" for v in label_counts.values]
+    text=[f"{v} ({v/len(df)*100:.1f}%)" if len(df) > 0 else f"{v}" for v in label_counts.values]
 )
 _ = fig_bal.update_layout(
     **LAYOUT_DEFAULTS, showlegend=False,
@@ -1241,6 +1337,24 @@ _ = fig_bal.update_layout(
 )
 fig_bal.update_traces(textposition="outside")
 show_plotly(fig_bal, filename="class_balance")
+```
+
+```{python}
+#| title: "Label × Cancer Type"
+if "CANCER_TYPE" in df.columns:
+    sunburst_df = df.groupby(["label", "CANCER_TYPE"]).size().reset_index(name="count")
+    if len(sunburst_df) > 0:
+        fig_sun = px.sunburst(
+            sunburst_df, path=["label", "CANCER_TYPE"], values="count",
+            color="label", color_discrete_map=THEME["labels"]
+        )
+        _ = fig_sun.update_layout(
+            **LAYOUT_DEFAULTS,
+            margin=dict(l=10, r=10, t=10, b=10)
+        )
+        show_plotly(fig_sun, filename="label_cancer_sunburst")
+else:
+    display(Markdown("> CANCER_TYPE column not available."))
 ```
 
 ### Column {width="50%"}
@@ -1305,6 +1419,52 @@ if "GENE_PANEL" in df.columns:
     show_plotly(fig_panel)
 else:
     display(Markdown("> Panel information not available."))
+```
+
+## Row {height="35%"}
+
+### Column {width="50%"}
+
+```{python}
+#| title: "Per-Sample Feature Coverage"
+# Histogram of non-null feature percentage per sample
+if len(numeric_cols) > 0:
+    completeness = df[numeric_cols].notna().mean(axis=1) * 100
+    fig_cov = px.histogram(
+        completeness, nbins=30,
+        labels={"value": "% Features Non-Null", "count": "Samples"},
+        color_discrete_sequence=[THEME["models"][0]]
+    )
+    _ = fig_cov.update_layout(
+        **LAYOUT_DEFAULTS, showlegend=False,
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_title="% Features Non-Null", yaxis_title="Samples"
+    )
+    show_plotly(fig_cov, filename="coverage_completeness")
+```
+
+### Column {width="50%"}
+
+```{python}
+#| title: "Per-Chromosome Features (if available)"
+# Heatmap of per-chromosome features if they exist
+chr_cols = [c for c in numeric_cols if c.startswith("chr") or "_chr" in c]
+if len(chr_cols) > 0:
+    # Show mean value per chromosome feature across all samples
+    chr_means = df[chr_cols].mean()
+    fig_chr = px.bar(
+        x=chr_means.values, y=chr_means.index, orientation="h",
+        color=chr_means.values, color_continuous_scale="Viridis",
+        labels={"x": "Mean Value", "y": "Chromosome Feature"}
+    )
+    _ = fig_chr.update_layout(
+        **LAYOUT_DEFAULTS, showlegend=False,
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_title="Mean Value", yaxis_title=""
+    )
+    show_plotly(fig_chr, filename="chromosome_features")
+else:
+    display(Markdown("> No per-chromosome features detected in this feature set."))
 ```
 
 # Data Explorer {scrolling="true"}

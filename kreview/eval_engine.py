@@ -664,8 +664,8 @@ def single_feature_model(
                 "prob_true": prob_true.tolist(),
                 "prob_pred": prob_pred.tolist(),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("calibration_failed", error=str(e))
         rf_opt = get_optimal_threshold(y, rf_probs)
         results["rf_optimal_threshold"] = rf_opt
         rf_rep, rf_cm = safely_get_metrics(y, rf_probs, threshold=rf_opt)
@@ -755,18 +755,25 @@ def single_feature_model(
         except Exception as e:
             log.warning("pr_curve_failed", error=str(e))
 
-        # ── Fold-level AUC tracking ──
+        # ── Fold-level AUC tracking (all 3 models) ──
         try:
             from sklearn.model_selection import cross_val_score
 
-            rf_fold_aucs = cross_val_score(rf, X, y, cv=cv, scoring="roc_auc")
-            results["rf_fold_aucs"] = rf_fold_aucs.tolist()
-            results["rf_auc_std"] = float(rf_fold_aucs.std())
-            log.debug(
-                "fold_aucs_computed",
-                rf_mean=f"{rf_fold_aucs.mean():.3f}",
-                rf_std=f"{rf_fold_aucs.std():.3f}",
-            )
+            for _prefix, _model in [
+                ("lr", lr_pipe),
+                ("rf", rf),
+                ("xgb", xgb),
+            ]:
+                if _model is not None:
+                    _fold_aucs = cross_val_score(_model, X, y, cv=cv, scoring="roc_auc")
+                    results[f"{_prefix}_fold_aucs"] = _fold_aucs.tolist()
+                    results[f"{_prefix}_auc_std"] = float(_fold_aucs.std())
+                    log.debug(
+                        "fold_aucs_computed",
+                        model=_prefix,
+                        mean=f"{_fold_aucs.mean():.3f}",
+                        std=f"{_fold_aucs.std():.3f}",
+                    )
         except Exception as e:
             log.warning("fold_auc_tracking_failed", error=str(e))
 
