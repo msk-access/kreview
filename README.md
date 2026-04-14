@@ -3,6 +3,7 @@
   <img src="https://img.shields.io/badge/nbdev-Enabled-blue.svg" alt="nbdev Badge">
   <img src="https://img.shields.io/badge/Powered_by-DuckDB-yellow.svg" alt="DuckDB Badge">
   <img src="https://img.shields.io/badge/Reports-Quarto-blueviolet.svg" alt="Quarto Badge">
+  <a href="https://deepwiki.com/msk-access/kreview"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
   
   <h1>kreview</h1>
   <p><b>Advanced cfDNA Fragmentomics Core Evaluation Engine</b></p>
