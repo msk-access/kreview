@@ -53,7 +53,6 @@ nextflow run /usersoftware/shahr2/github/kreview/nextflow/main.nf \
   --cbioportal_dir          /data1/core006/access/production/resources/cbioportal/current/msk_solid_heme \
   --krewlyzer_dir           "${MANIFEST}" \
   --outdir                  /data1/shahr2/share/kreview/0.8.3_eval \
-  --partition               "cmobic_short,cpu_short,cmobic_cpu" \
   --compute_univariate_auc  \
   -profile iris \
   ${RESUME_FLAG}
