@@ -16,7 +16,8 @@
 # Resource math:
 #   - Head process: 4 CPUs + 16GB (Nextflow JVM orchestrating evaluators)
 #   - Evaluator job: 8 CPUs + 64GB (process_high, submitted by NF to SLURM)
-#   - SLURM profile auto-tunes: chunk_size=500, cv_folds=10, shap_samples=5000
+#   - iris profile auto-tunes: chunk_size=500, cv_folds=10, shap_samples=5000
+#   - Multi-partition: cmobic_short(3h), cpu_short(2h), cmobic_cpu(3h+)
 #   - Estimated: single monolithic job, ~2-6h depending on feature count
 # ============================================================================
 
@@ -52,8 +53,9 @@ nextflow run /usersoftware/shahr2/github/kreview/nextflow/main.nf \
   --cbioportal_dir          /data1/core006/access/production/resources/cbioportal/current/msk_solid_heme \
   --krewlyzer_dir           "${MANIFEST}" \
   --outdir                  /data1/shahr2/share/kreview/0.8.3_eval \
+  --partition               "cmobic_short,cpu_short,cmobic_cpu" \
   --compute_univariate_auc  \
-  -profile slurm \
+  -profile iris \
   ${RESUME_FLAG}
 
 echo ">>> kreview evaluation completed at $(date)"
