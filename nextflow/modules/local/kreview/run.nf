@@ -6,9 +6,9 @@ process KREVIEW_RUN {
     // For large runs, singularity.autoMounts is required.
 
     input:
-    path cancer_sheet
-    path healthy_xs1
-    path healthy_xs2
+    path(cancer_sheet, stageAs: 'cancer_samplesheet.csv')
+    path(healthy_xs1,  stageAs: 'healthy_xs1_samplesheet.csv')
+    path(healthy_xs2,  stageAs: 'healthy_xs2_samplesheet.csv')
     val cbioportal_dir          // URI STRINGS: Passed as val to avoid symlinking
     val krewlyzer_results       // URI STRINGS: Prevents staging 14000 parquets natively into work/
 
