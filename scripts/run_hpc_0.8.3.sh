@@ -33,6 +33,15 @@ if [[ "${1:-}" == "--resume" ]]; then
     echo ">>> Resuming previous run..."
 fi
 
+# --- Build manifest.txt listing all krewlyzer result directories ---
+MANIFEST="${PWD}/manifest.txt"
+cat > "${MANIFEST}" <<EOF
+/data1/shahr2/share/krewlyzer/0.8.3/access_12_245
+/data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs1
+/data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs2
+EOF
+echo ">>> Manifest written to ${MANIFEST}"
+
 echo ">>> Starting kreview evaluation at $(date)"
 echo ">>> Working directory: $PWD"
 
@@ -41,7 +50,7 @@ nextflow run /usersoftware/shahr2/github/kreview/nextflow/main.nf \
   --healthy_xs1_samplesheet /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs1/samplesheet.csv \
   --healthy_xs2_samplesheet /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs2/samplesheet.csv \
   --cbioportal_dir          /data1/core006/access/production/resources/cbioportal/current/msk_solid_heme \
-  --krewlyzer_dir           /data1/shahr2/share/krewlyzer/0.8.3 \
+  --krewlyzer_dir           "${MANIFEST}" \
   --outdir                  /data1/shahr2/share/kreview/0.8.3_eval \
   --compute_univariate_auc  \
   -profile slurm \
