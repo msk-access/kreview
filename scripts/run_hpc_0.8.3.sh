@@ -1,31 +1,50 @@
 #!/bin/bash
+#SBATCH --job-name=kreview
+#SBATCH --partition=cmobic_cpu
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=3-00:00:00
+#SBATCH --output=kreview_%j.log
+#SBATCH --error=kreview_%j.err
+
 # ============================================================================
-#  kreview HPC runner — Full evaluation on v0.8.3 krewlyzer outputs
-#  Queue: cmobic_cpu (IRIS)
-#  Profile: slurm (Singularity + auto-tuned chunk_size=500, cv_folds=10)
+# kreview Nextflow Pipeline - IRIS SLURM Submission Script
 # ============================================================================
+# Usage:  sbatch run_hpc_0.8.3.sh
+# Resume: sbatch run_hpc_0.8.3.sh --resume
+#
+# Resource math:
+#   - Head process: 4 CPUs + 16GB (Nextflow JVM orchestrating evaluators)
+#   - Evaluator job: 8 CPUs + 64GB (process_high, submitted by NF to SLURM)
+#   - SLURM profile auto-tunes: chunk_size=500, cv_folds=10, shap_samples=5000
+#   - Estimated: single monolithic job, ~2-6h depending on feature count
+# ============================================================================
+
 set -euo pipefail
 
-# --- Paths ---
-NF_MAIN="/data1/shahr2/share/kreview/nextflow/main.nf"
+# Activate Nextflow environment
+eval "$(micromamba shell hook --shell bash)"
+micromamba activate nf-env
 
-CANCER_SS="/data1/shahr2/share/krewlyzer/0.8.3/access_12_245/samplesheet.csv"
-HEALTHY_XS1_SS="/data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs1/samplesheet.csv"
-HEALTHY_XS2_SS="/data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs2/samplesheet.csv"
+# Optional: pass -resume if provided as argument
+RESUME_FLAG=""
+if [[ "${1:-}" == "--resume" ]]; then
+    RESUME_FLAG="-resume"
+    echo ">>> Resuming previous run..."
+fi
 
-CBIOPORTAL_DIR="/data1/core006/access/production/resources/cbioportal/current/msk_solid_heme"
-KREWLYZER_DIR="/data1/shahr2/share/krewlyzer/0.8.3"
+echo ">>> Starting kreview evaluation at $(date)"
+echo ">>> Working directory: $PWD"
 
-OUTDIR="/data1/shahr2/share/kreview/0.8.3_eval"
-
-# --- Run ---
-nextflow run "${NF_MAIN}" \
-  --cancer_samplesheet      "${CANCER_SS}" \
-  --healthy_xs1_samplesheet "${HEALTHY_XS1_SS}" \
-  --healthy_xs2_samplesheet "${HEALTHY_XS2_SS}" \
-  --cbioportal_dir          "${CBIOPORTAL_DIR}" \
-  --krewlyzer_dir           "${KREWLYZER_DIR}" \
-  --outdir                  "${OUTDIR}" \
+nextflow run /usersoftware/shahr2/github/kreview/nextflow/main.nf \
+  --cancer_samplesheet      /data1/shahr2/share/krewlyzer/0.8.3/access_12_245/samplesheet.csv \
+  --healthy_xs1_samplesheet /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs1/samplesheet.csv \
+  --healthy_xs2_samplesheet /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs2/samplesheet.csv \
+  --cbioportal_dir          /data1/core006/access/production/resources/cbioportal/current/msk_solid_heme \
+  --krewlyzer_dir           /data1/shahr2/share/krewlyzer/0.8.3 \
+  --outdir                  /data1/shahr2/share/kreview/0.8.3_eval \
   --compute_univariate_auc  \
   -profile slurm \
-  -resume
+  ${RESUME_FLAG}
+
+echo ">>> kreview evaluation completed at $(date)"
