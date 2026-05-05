@@ -21,17 +21,21 @@ process KREVIEW_RUN {
     script:
     def features_flag = params.features     ? "--features \"${params.features}\"" : ""
     def tier_flag     = params.tier         ? "--tier ${params.tier}"             : ""
-    def resume_flag   = params.resume_eval  ? "--resume"                          : ""
     def skip_rpt_flag = params.skip_report  ? "--skip-report"                     : ""
     def cvd_flag      = params.cvd_safe     ? "--cvd-safe"                        : ""
     def uauc_flag     = params.compute_univariate_auc ? "--compute-univariate-auc" : ""
+    def duckdb_flag   = params.export_duckdb ? "--export-duckdb"                   : ""
+    // Use persistent output dir so --resume finds results across Nextflow retries
+    def persistent_out = params.outdir + "/evaluators"
     
     """
-    # 1. Ensure output skeleton exists
-    mkdir -p output/
+    # 1. Ensure output skeleton exists (persistent dir + local dir for Nextflow outputs)
+    mkdir -p ${persistent_out}
+    mkdir -p output/stats output/reports output/static_plots
     
     # 2. Execute primary evaluation loop
-    # We use PYTHONUNBUFFERED=1 to ensure Nextflow logs the structlog outputs in realtime
+    # Use persistent_out so results survive Nextflow work/ directory changes on retry.
+    # --resume always enabled: skips evaluators with existing model_results.json
     PYTHONUNBUFFERED=1 kreview run \\
         --cancer-samplesheet ${cancer_sheet} \\
         --healthy-xs1-samplesheet ${healthy_xs1} \\
@@ -47,11 +51,18 @@ process KREVIEW_RUN {
         --workers ${task.cpus} \\
         ${features_flag} \\
         ${tier_flag} \\
-        ${resume_flag} \\
+        --resume \\
         ${skip_rpt_flag} \\
         ${cvd_flag} \\
         ${uauc_flag} \\
-        --export-duckdb \\
-        --output output/
+        ${duckdb_flag} \\
+        --output ${persistent_out}
+    
+    # 3. Copy results to output/ for Nextflow publishDir collection
+    cp ${persistent_out}/*_model_results.json output/stats/     2>/dev/null || true
+    cp ${persistent_out}/*_eval_stats.parquet  output/stats/     2>/dev/null || true
+    cp ${persistent_out}/*.html               output/reports/   2>/dev/null || true
+    cp ${persistent_out}/*.png                output/static_plots/ 2>/dev/null || true
+    cp ${persistent_out}/*.duckdb             output/           2>/dev/null || true
     """
 }
