@@ -175,6 +175,9 @@ lr_preds = None
 rf_preds = None
 xgb_preds = None
 rf_preds_all = None
+kde_labels = None
+oof_y = None
+oof_preds = {}
 
 if mres is not None and top_feats:
     rf_joblib = Path(matrix_path).parent / f"{feature_name}_rf_model.joblib"
