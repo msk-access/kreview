@@ -466,10 +466,26 @@ def run(
         _echo(f"Processing evaluator: {e.name}")
 
         # ── Resume checkpoint: skip if model results already exist ──
+        # GAP-4: Also check that the JSON contains OOF predictions (added in
+        # v0.8.4). JSONs from older runs lack oof_labels and will produce
+        # legacy (leaky) ROC plots. Warn but still skip to avoid re-running
+        # expensive evaluations — user can delete the JSON to force recompute.
         if resume:
             checkpoint = out_path / f"{e.name}_model_results.json"
             if checkpoint.exists():
-                _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
+                try:
+                    import json as _json
+                    with open(checkpoint) as _f:
+                        _chk = _json.load(_f)
+                    if "oof_labels" not in _chk:
+                        _echo(
+                            f"  SKIP (--resume): {checkpoint.name} exists but MISSING oof_labels. "
+                            f"Delete this file and re-run to get OOF-based ROC plots."
+                        )
+                    else:
+                        _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
+                except Exception:
+                    _echo(f"  SKIP (--resume): {checkpoint.name} exists (could not verify contents)")
                 continue
 
         # ── Step 3: Load + Shard + Extract ──

@@ -210,7 +210,9 @@ if mres is not None and top_feats:
         ])
         kde_labels = df.loc[model_mask, "label"].values
         if len(kde_labels) != len(rf_preds_all):
-            print(f"[WARN] OOF length mismatch: preds={len(rf_preds_all)}, labels={len(kde_labels)}. Falling back.")
+            import structlog as _stlog; _stlog.get_logger().warning(
+                "oof_length_mismatch", preds=len(rf_preds_all), labels=len(kde_labels)
+            )
             rf_preds_all = None
             kde_labels = None
     elif rf_model is not None:
@@ -221,7 +223,7 @@ if mres is not None and top_feats:
             rf_preds_all = rf_model.predict_proba(df.loc[kde_idx, top_feats].fillna(0))[:, 1]
             kde_labels = df.loc[kde_idx, "label"].values
         except Exception as e:
-            print(f"[WARN] RF KDE prediction failed: {e}")
+            import structlog as _stlog; _stlog.get_logger().warning("rf_kde_prediction_failed", error=str(e))
             rf_preds_all = None
             kde_labels = None
 
@@ -248,17 +250,17 @@ if mres is not None and top_feats:
             try:
                 lr_preds = lr_model.predict_proba(X_shap)[:, 1]
             except Exception as e:
-                print(f"[WARN] LR prediction failed: {e}")
+                import structlog as _stlog; _stlog.get_logger().warning("lr_shap_prediction_failed", error=str(e))
         if rf_model is not None:
             try:
                 rf_preds = rf_model.predict_proba(X_shap)[:, 1]
             except Exception as e:
-                print(f"[WARN] RF prediction failed: {e}")
+                import structlog as _stlog; _stlog.get_logger().warning("rf_shap_prediction_failed", error=str(e))
         if xgb_model is not None:
             try:
                 xgb_preds = xgb_model.predict_proba(X_shap)[:, 1]
             except Exception as e:
-                print(f"[WARN] XGBoost prediction failed: {e}")
+                import structlog as _stlog; _stlog.get_logger().warning("xgb_shap_prediction_failed", error=str(e))
 
     del shap_df
     import gc; gc.collect()
@@ -754,9 +756,16 @@ if mres is not None and "rf_fold_aucs" in mres:
             color_discrete_map=THEME["model_map"],
             points="all"
         )
+        # GAP-7 fix: show per-model std instead of hardcoded RF-only
+        _fold_stds = " | ".join(
+            f"{m}: {mres.get(f'{p}_auc_std', 0):.3f}"
+            for p, m in [("lr", "LR"), ("rf", "RF"), ("xgb", "XGB")]
+            if f"{p}_fold_aucs" in mres
+        )
+        _fold_title = f"Cross-Validation Fold AUC Variability (std: {_fold_stds})" if _fold_stds else "Cross-Validation Fold AUC Variability"
         _ = fig_fold.update_layout(
             **LAYOUT_DEFAULTS, height=400,
-            title=f"Cross-Validation Fold AUC Variability (std={mres.get('rf_auc_std', 0):.3f})",
+            title=_fold_title,
             showlegend=False,
             yaxis=dict(range=[0, 1])
         )
@@ -1285,11 +1294,15 @@ if eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
         eval_volcano["-log10(p)"] = -np.log10(eval_volcano["kw_pvalue"].replace(0, 1e-300))
         eval_volcano["is_top"] = eval_volcano["feature_column"] == top_col
 
-        eval_volcano["hover_text"] = eval_volcano.apply(
-            lambda row: (f"<b>{row['feature_column']}</b><br>"
-                         f"Cohen's D: {row['cohens_d_true_vs_healthy']:.2f}<br>"
-                         f"K-W p-value: {row['kw_pvalue']:.3e}"), axis=1
-        )
+        # GAP-1 fix: NaN-safe hover text for zero-variance features
+        def _volcano_hover(row):
+            cd = row.get('cohens_d_true_vs_healthy')
+            kw = row.get('kw_pvalue')
+            cd_str = f"{cd:.2f}" if pd.notna(cd) else "N/A"
+            kw_str = f"{kw:.3e}" if pd.notna(kw) else "N/A"
+            return f"<b>{row['feature_column']}</b><br>Cohen's D: {cd_str}<br>K-W p-value: {kw_str}"
+
+        eval_volcano["hover_text"] = eval_volcano.apply(_volcano_hover, axis=1)
         
         # Marker size from univariate AUC if available
         size_col = None
