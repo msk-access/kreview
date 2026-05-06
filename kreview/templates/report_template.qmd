@@ -185,13 +185,33 @@ if mres is not None and top_feats:
     if rf_joblib.exists(): rf_model = joblib.load(rf_joblib)
     if xgb_joblib.exists(): xgb_model = joblib.load(xgb_joblib)
         
-    model_label = df["label"].isin([
-        "True ctDNA+", "Possible ctDNA+", 
-        "Healthy Normal", "Possible ctDNA-", "Possible ctDNA−"
-    ])
+    # ── D-01: Load OOF predictions for ROC & KDE (consistent with official AUC) ──
+    oof_y = np.array(mres["oof_labels"]) if "oof_labels" in mres else None
+    oof_preds = {}  # {"Logistic Regression": array, ...}
+    for _pfx, _nice in [("lr", "Logistic Regression"), ("rf", "Random Forest"), ("xgb", "XGBoost")]:
+        _key = f"{_pfx}_oof_probs"
+        if _key in mres:
+            oof_preds[_nice] = np.array(mres[_key])
 
-    # ── KDE density predictions (subsample full df to save memory) ──
-    if rf_model is not None:
+    # ── S-03 fix: KDE density from OOF predictions (not retrained model) ──
+    # Retrained model predictions on subsampled data leak training info.
+    # OOF predictions are held-out and cover the full model cohort.
+    rf_preds_all = None
+    kde_labels = None
+    if "rf_oof_probs" in mres and "oof_labels" in mres:
+        rf_preds_all = np.array(mres["rf_oof_probs"])
+        # Map binary OOF labels back to string labels for KDE grouping
+        model_mask = df["label"].isin([
+            "True ctDNA+", "Possible ctDNA+",
+            "Healthy Normal", "Possible ctDNA-", "Possible ctDNA−"
+        ])
+        kde_labels = df.loc[model_mask, "label"].values
+        if len(kde_labels) != len(rf_preds_all):
+            print(f"[WARN] OOF length mismatch: preds={len(rf_preds_all)}, labels={len(kde_labels)}. Falling back.")
+            rf_preds_all = None
+            kde_labels = None
+    elif rf_model is not None:
+        # Legacy fallback for results generated before OOF saving
         try:
             _kde_n = min(2000, len(df))
             kde_idx = df.sample(n=_kde_n, random_state=99).index
@@ -201,8 +221,13 @@ if mres is not None and top_feats:
             print(f"[WARN] RF KDE prediction failed: {e}")
             rf_preds_all = None
             kde_labels = None
-    
-    # ── SHAP subsample ──
+
+    model_label = df["label"].isin([
+        "True ctDNA+", "Possible ctDNA+",
+        "Healthy Normal", "Possible ctDNA-", "Possible ctDNA−"
+    ])
+
+    # ── SHAP subsample (only used for SHAP explainability, NOT for ROC plots) ──
     shap_df = df[model_label]
     _max_shap = int(shap_samples)
     
@@ -355,14 +380,28 @@ dict(value=verdict, color=v_color, icon="graph-up")
 
 ```{python}
 #| title: "ROC Summary"
-y_score_dict = {}
-if lr_preds is not None: y_score_dict["Logistic Regression"] = lr_preds
-if rf_preds is not None: y_score_dict["Random Forest"] = rf_preds
-if xgb_preds is not None: y_score_dict["XGBoost"] = xgb_preds
+# D-01 fix: Use OOF predictions (same data as official AUC) instead of SHAP subsample.
+# This ensures the ROC curve AUC matches the value box AUC exactly.
+_roc_title = "Multi-Model ROC"
+_roc_y = None
+_roc_scores = {}
 
-if y_shap is not None and len(y_score_dict) > 0:
-    y_true_dict = {name: y_shap for name in y_score_dict.keys()}
-    fig_roc = plot_roc_curves(y_true_dict, y_score_dict, title="Multi-Model ROC")
+if oof_y is not None and len(oof_preds) > 0:
+    # Primary path: OOF predictions from cross_val_predict
+    _roc_y = oof_y
+    _roc_scores = oof_preds
+    _roc_title = "Multi-Model ROC (Out-of-Fold)"
+elif y_shap is not None:
+    # Legacy fallback: SHAP subsample predictions
+    _roc_y = y_shap
+    if lr_preds is not None: _roc_scores["Logistic Regression"] = lr_preds
+    if rf_preds is not None: _roc_scores["Random Forest"] = rf_preds
+    if xgb_preds is not None: _roc_scores["XGBoost"] = xgb_preds
+    _roc_title = "Multi-Model ROC (SHAP Subsample \u2013 Legacy)"
+
+if _roc_y is not None and len(_roc_scores) > 0:
+    y_true_dict = {name: _roc_y for name in _roc_scores.keys()}
+    fig_roc = plot_roc_curves(y_true_dict, _roc_scores, title=_roc_title)
     _ = fig_roc.update_layout(
         **LAYOUT_DEFAULTS, height=350
     )
@@ -525,20 +564,30 @@ if mres is not None:
 
 ```{python}
 #| echo: false
-if y_shap is not None and len(y_score_dict) > 0:
+# D-01 fix: Use OOF predictions for ROC with CI (same data as official AUC).
+from sklearn.metrics import roc_curve as _roc_curve, roc_auc_score as _roc_auc
+
+_ci_y = oof_y if oof_y is not None else y_shap
+_ci_scores = oof_preds if len(oof_preds) > 0 else {}
+if not _ci_scores and y_shap is not None:
+    # Legacy fallback
+    if lr_preds is not None: _ci_scores["Logistic Regression"] = lr_preds
+    if rf_preds is not None: _ci_scores["Random Forest"] = rf_preds
+    if xgb_preds is not None: _ci_scores["XGBoost"] = xgb_preds
+
+if _ci_y is not None and len(_ci_scores) > 0:
     fig_roc2 = go.Figure()
     colors = THEME["models"]
 
-    for i, (name, preds) in enumerate(y_score_dict.items()):
-        from sklearn.metrics import roc_curve as _roc_curve, roc_auc_score as _roc_auc
-        fpr, tpr, _ = _roc_curve(y_shap, preds)
-        auc_val = _roc_auc(y_shap, preds)
+    for i, (name, preds) in enumerate(_ci_scores.items()):
+        fpr, tpr, _ = _roc_curve(_ci_y, preds)
+        auc_val = _roc_auc(_ci_y, preds)
         
-        # CI from mres
+        # CI from mres (bootstrap CI computed during eval)
         prefix = {"Logistic Regression": "lr", "Random Forest": "rf", "XGBoost": "xgb"}[name]
         ci_lo = mres.get(f"auc_{prefix}_ci_lower") if mres else None
         ci_hi = mres.get(f"auc_{prefix}_ci_upper") if mres else None
-        ci_str = f" [{ci_lo:.2f}–{ci_hi:.2f}]" if ci_lo and ci_hi else ""
+        ci_str = f" [{ci_lo:.2f}\u2013{ci_hi:.2f}]" if ci_lo and ci_hi else ""
         
         _ = fig_roc2.add_trace(go.Scatter(
             x=fpr, y=tpr, mode="lines",
@@ -689,7 +738,7 @@ else:
 #| echo: false
 if mres is not None and "rf_fold_aucs" in mres:
     fold_data = []
-    for prefix, name in [("rf", "Random Forest")]:
+    for prefix, name in [("lr", "Logistic Regression"), ("rf", "Random Forest"), ("xgb", "XGBoost")]:
         aucs = mres.get(f"{prefix}_fold_aucs")
         if aucs:
             for i, a in enumerate(aucs):
@@ -868,7 +917,7 @@ if mres is not None:
         combined = pd.concat(rep_dfs, ignore_index=True)
         cols = ["Model", "Class/Metric", "precision", "recall", "f1-score", "support"]
         combined = combined[[c for c in cols if c in combined.columns]]
-        combined.replace({"0": "Healthy Normal", "1": "True ctDNA+"}, inplace=True)
+        combined.replace({"0": "ctDNA Negative", "1": "ctDNA Positive"}, inplace=True)
         itables.show(combined.round(3), classes="display nowrap", maxBytes=0)
 ```
 
@@ -909,12 +958,22 @@ SHAP (Shapley Additive Explanations) values explain model behavior by indicating
 
 ```{python}
 #| echo: false
-# SHAP Helper functions
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+# SHAP Helper functions (imports already loaded at top of file)
 
 def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title="", n_display=10):
+    """Compute SHAP values and render an interactive beeswarm plot.
+
+    Args:
+        model: Fitted tree-based model (RF or XGBoost).
+        X_sh: Feature DataFrame for SHAP computation.
+        shap_df_samp: DataFrame with 'label' and optional 'sample_id' columns.
+        model_title: Title prefix for the plot.
+        n_display: Number of top features to display.
+
+    Returns:
+        Tuple of (shap.Explanation, top_feature_indices, sample_labels, sample_ids).
+        All None if computation fails.
+    """
     if model is None or shap_df_samp is None:
         return None, None, None, None
     try:    
@@ -982,6 +1041,16 @@ def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title="", n_
         return None, None, None, None
 
 def plot_shap_dependence(sv, top_idx, feature_names, sample_labels, s_ids, model_title=""):
+    """Plot SHAP dependence for the top-2 features, colored by interaction.
+
+    Args:
+        sv: shap.Explanation object from compute_shap_and_plot_beeswarm.
+        top_idx: Array of top feature indices (sorted by mean |SHAP|).
+        feature_names: List of all feature names.
+        sample_labels: Array of string labels for each sample.
+        s_ids: Array of sample IDs for hover info.
+        model_title: Title prefix for the plot.
+    """
     if sv is None: return
     feat1 = feature_names[top_idx[-1]]
     top_2_idx = top_idx[-2] if len(top_idx) > 1 else top_idx[-1]
@@ -1004,7 +1073,20 @@ def plot_shap_dependence(sv, top_idx, feature_names, sample_labels, s_ids, model
     show_plotly(fig)
 
 def plot_shap_waterfall(sv, probs, feature_names, sample_labels, model_title=""):
-    if sv is None: return
+    """Plot SHAP waterfall traces for the best TP and worst FP predictions.
+
+    Args:
+        sv: shap.Explanation object.
+        probs: Predicted probability array (must match sample_labels length).
+        feature_names: List of feature names.
+        sample_labels: Array of string labels for each sample.
+        model_title: Title prefix for the plot.
+    """
+    if sv is None or probs is None:
+        return
+    if len(probs) != len(sample_labels):
+        display(Markdown(f"> SHAP waterfall skipped for {model_title}: probs/labels length mismatch ({len(probs)} vs {len(sample_labels)})"))
+        return
     df_tracker = pd.DataFrame({'True Label': sample_labels, 'Probability': probs})
     
     tp_mask = df_tracker['True Label'] == "True ctDNA+"
@@ -1111,7 +1193,7 @@ try:
         if eval_df is not None and "feature_column" in eval_df.columns:
             row = eval_df[eval_df["feature_column"] == feat]
             if len(row) > 0:
-                cd = row["cohens_d_true_vs_healthy"].iloc[0]
+                cd = row["cohens_d_true_vs_healthy"].iloc[0] if "cohens_d_true_vs_healthy" in row.columns else None
                 d_val = f"Cohen's d: {cd:.2f}" if pd.notna(cd) else ""
                 if "pct_missing" in row.columns:
                     miss_val = f"Missing: {row['pct_missing'].iloc[0]:.1f}%"
@@ -1280,7 +1362,16 @@ if eval_df is not None:
                     "mwu_True_ctDNA_pos_vs_Healthy_Normal_effect_size", "spearman_vaf_r",
                     "pct_missing", "is_zero_variance"]
     avail = [c for c in display_cols if c in eval_df.columns]
-    eval_sorted = eval_df.sort_values(by="cohens_d_true_vs_healthy", ascending=False)
+    # D-03 fix: sort by best available effect-size column
+    _sort_col = next(
+        (c for c in ["cohens_d_true_vs_healthy", "kw_statistic", "univariate_auc"]
+         if c in eval_df.columns),
+        None
+    )
+    if _sort_col:
+        eval_sorted = eval_df.sort_values(by=_sort_col, ascending=False)
+    else:
+        eval_sorted = eval_df  # no sortable column, show as-is
     itables.show(eval_sorted[avail].round(4), classes="display nowrap dataTable", maxBytes=0)
 ```
 :::
