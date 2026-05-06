@@ -39,7 +39,6 @@ __all__ = [
     "plot_feature_vs_vaf",
     "plot_roc_curves",
     "plot_feature_importance",
-    "plot_threshold_sensitivity",
     "decision_curve_analysis",
     "single_feature_model",
 ]
@@ -458,23 +457,6 @@ def plot_feature_importance(
         return go.Figure()
 
 
-def plot_threshold_sensitivity(results_df: pd.DataFrame, title: str = "") -> go.Figure:
-    """Show how label counts shift with VAF/min_variants thresholds."""
-    try:
-        fig = px.line(
-            results_df,
-            x="min_vaf",
-            y="Possible ctDNA+",
-            color="min_variants",
-            markers=True,
-            title=title,
-        )
-        return fig
-    except Exception as e:
-        log.error("plot_threshold_sen_failed", error=str(e))
-        return go.Figure()
-
-
 def decision_curve_analysis(
     y_true: np.ndarray,
     y_prob: np.ndarray,
@@ -624,6 +606,9 @@ def single_feature_model(
 
         lr_probs = cross_val_predict(lr_pipe, X, y, cv=cv, method="predict_proba")[:, 1]
         results["auc_lr"] = roc_auc_score(y, lr_probs)
+        results["lr_oof_probs"] = np.round(
+            lr_probs, 6
+        ).tolist()  # D-01: rounded to 6dp for JSON size
         lr_ci_low, lr_ci_high = _bootstrap_auc(y, lr_probs)
         results["auc_lr_ci_lower"] = lr_ci_low
         results["auc_lr_ci_upper"] = lr_ci_high
@@ -650,6 +635,9 @@ def single_feature_model(
         )
         rf_probs = cross_val_predict(rf, X, y, cv=cv, method="predict_proba")[:, 1]
         results["auc_rf"] = roc_auc_score(y, rf_probs)
+        results["rf_oof_probs"] = np.round(
+            rf_probs, 6
+        ).tolist()  # D-01: rounded to 6dp for JSON size
         rf_ci_low, rf_ci_high = _bootstrap_auc(y, rf_probs)
         results["auc_rf_ci_lower"] = rf_ci_low
         results["auc_rf_ci_upper"] = rf_ci_high
@@ -701,6 +689,9 @@ def single_feature_model(
                     :, 1
                 ]
                 results["auc_xgb"] = roc_auc_score(y, xgb_probs)
+                results["xgb_oof_probs"] = np.round(
+                    xgb_probs, 6
+                ).tolist()  # D-01: rounded to 6dp for JSON size
                 xgb_ci_low, xgb_ci_high = _bootstrap_auc(y, xgb_probs)
                 results["auc_xgb_ci_lower"] = xgb_ci_low
                 results["auc_xgb_ci_upper"] = xgb_ci_high
@@ -717,6 +708,9 @@ def single_feature_model(
                 log.warning("xgboost_cv_failed", error=str(e))
                 xgb = None
                 xgb_probs = None
+
+        # ── OOF labels (D-01: needed by report template for consistent ROC plots) ──
+        results["oof_labels"] = y.tolist()
 
         # ── AUC deltas ──
         results["auc_delta_rf_lr"] = results["auc_rf"] - results["auc_lr"]
@@ -755,25 +749,32 @@ def single_feature_model(
         except Exception as e:
             log.warning("pr_curve_failed", error=str(e))
 
-        # ── Fold-level AUC tracking (all 3 models) ──
+        # ── Fold-level AUC tracking (derived from existing OOF predictions) ──
+        # D-01 fix: use the same CV split that produced the official AUC,
+        # instead of a second independent cross_val_score run.
         try:
-            from sklearn.model_selection import cross_val_score
-
-            for _prefix, _model in [
-                ("lr", lr_pipe),
-                ("rf", rf),
-                ("xgb", xgb),
+            for _prefix, _probs in [
+                ("lr", lr_probs),
+                ("rf", rf_probs),
+                ("xgb", xgb_probs),
             ]:
-                if _model is not None:
-                    _fold_aucs = cross_val_score(_model, X, y, cv=cv, scoring="roc_auc")
-                    results[f"{_prefix}_fold_aucs"] = _fold_aucs.tolist()
-                    results[f"{_prefix}_auc_std"] = float(_fold_aucs.std())
-                    log.debug(
-                        "fold_aucs_computed",
-                        model=_prefix,
-                        mean=f"{_fold_aucs.mean():.3f}",
-                        std=f"{_fold_aucs.std():.3f}",
-                    )
+                if _probs is not None:
+                    _fold_aucs = []
+                    for _, test_idx in cv.split(X, y):
+                        if len(np.unique(y[test_idx])) < 2:
+                            continue
+                        _fold_aucs.append(
+                            float(roc_auc_score(y[test_idx], _probs[test_idx]))
+                        )
+                    if _fold_aucs:
+                        results[f"{_prefix}_fold_aucs"] = _fold_aucs
+                        results[f"{_prefix}_auc_std"] = float(np.std(_fold_aucs))
+                        log.debug(
+                            "fold_aucs_computed",
+                            model=_prefix,
+                            mean=f"{np.mean(_fold_aucs):.3f}",
+                            std=f"{np.std(_fold_aucs):.3f}",
+                        )
         except Exception as e:
             log.warning("fold_auc_tracking_failed", error=str(e))
 

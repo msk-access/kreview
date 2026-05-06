@@ -146,10 +146,6 @@ d = {
                 "eval_engine.html#plot_roc_curves",
                 "kreview/eval_engine.py",
             ),
-            "kreview.eval_engine.plot_threshold_sensitivity": (
-                "eval_engine.html#plot_threshold_sensitivity",
-                "kreview/eval_engine.py",
-            ),
             "kreview.eval_engine.plot_violin": (
                 "eval_engine.html#plot_violin",
                 "kreview/eval_engine.py",
