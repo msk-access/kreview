@@ -475,6 +475,7 @@ def run(
             if checkpoint.exists():
                 try:
                     import json as _json
+
                     with open(checkpoint) as _f:
                         _chk = _json.load(_f)
                     if "oof_labels" not in _chk:
@@ -485,7 +486,9 @@ def run(
                     else:
                         _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
                 except Exception:
-                    _echo(f"  SKIP (--resume): {checkpoint.name} exists (could not verify contents)")
+                    _echo(
+                        f"  SKIP (--resume): {checkpoint.name} exists (could not verify contents)"
+                    )
                 continue
 
         # ── Step 3: Load + Shard + Extract ──
@@ -939,4 +942,3 @@ def report(
         total=total,
         failed_evaluators=failed_names,
     )
-

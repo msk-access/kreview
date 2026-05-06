@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.8] - 2026-05-06
+### Fixed
+- **AUC Consistency (D-01)**: ROC plots and KDE density now use out-of-fold predictions matching the official AUC value boxes. Eliminates the misleading AUC discrepancy (e.g., 0.845 vs 0.72) caused by mixing training/subsample models.
+- **Dashboard Crashes (D-02/D-03)**: All `cohens_d_true_vs_healthy` references guarded with column existence checks. Statistical Ledger falls back to `kw_statistic` → `univariate_auc` when Cohen's D is unavailable.
+- **Classification Labels (C-02)**: Confusion matrix and classification report now correctly show "ctDNA Negative" instead of "Healthy Normal".
+- **Fold Variability (C-01)**: Now displays all three models (LR, RF, XGBoost) with per-model std in title instead of hardcoded RF-only.
+- **Duplicate Imports (C-03)**: Removed redundant plotly import in report template.
+- **Volcano Hover (GAP-1)**: NaN-safe hover text shows "N/A" instead of "nan" for zero-variance features.
+- **JSON Bloat (GAP-6)**: OOF probability arrays rounded to 6 decimal places (~40% size reduction per evaluator).
+- **HPC Memory (OOM)**: Base memory bumped 256→512GB for genome-wide evaluators (FSD, WPS).
+
+### Added
+- **Structured Logging**: `structlog`-based logging in CLI `report()` with per-evaluator timing, success/fail counts, and summary statistics.
+- **Smart Resume (GAP-4)**: Resume checkpoint validates JSON freshness — warns if OOF keys are missing from pre-hardening runs.
+- **SHAP Waterfall Guards (S-04)**: Validates array lengths before plotting to prevent IndexError.
+- **SHAP Docstrings**: All three SHAP helper functions now have full docstrings.
+- **Variable Initialization**: `oof_y`, `oof_preds`, and `kde_labels` initialized at template top level to prevent NameError when models fail.
+
+### Removed
+- `plot_threshold_sensitivity()` — dead code replaced by pre-computed threshold sweep in v0.0.7.
+- Redundant `cross_val_score` import and second independent CV computation.
+- Stale `plot_threshold_sensitivity` entry from `_modidx.py`.
+
 ## [0.0.7] - 2026-04-13
 ### Added
 - **Dashboard Redesign**: Restructured from single-page to 6-page progressive disclosure hierarchy (Executive Summary, Model Validation, Feature Explanation, Biomarker Yield, Cohort & QC, Data Explorer).

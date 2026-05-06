@@ -457,9 +457,6 @@ def plot_feature_importance(
         return go.Figure()
 
 
-
-
-
 def decision_curve_analysis(
     y_true: np.ndarray,
     y_prob: np.ndarray,
@@ -609,7 +606,9 @@ def single_feature_model(
 
         lr_probs = cross_val_predict(lr_pipe, X, y, cv=cv, method="predict_proba")[:, 1]
         results["auc_lr"] = roc_auc_score(y, lr_probs)
-        results["lr_oof_probs"] = np.round(lr_probs, 6).tolist()  # D-01: rounded to 6dp for JSON size
+        results["lr_oof_probs"] = np.round(
+            lr_probs, 6
+        ).tolist()  # D-01: rounded to 6dp for JSON size
         lr_ci_low, lr_ci_high = _bootstrap_auc(y, lr_probs)
         results["auc_lr_ci_lower"] = lr_ci_low
         results["auc_lr_ci_upper"] = lr_ci_high
@@ -636,7 +635,9 @@ def single_feature_model(
         )
         rf_probs = cross_val_predict(rf, X, y, cv=cv, method="predict_proba")[:, 1]
         results["auc_rf"] = roc_auc_score(y, rf_probs)
-        results["rf_oof_probs"] = np.round(rf_probs, 6).tolist()  # D-01: rounded to 6dp for JSON size
+        results["rf_oof_probs"] = np.round(
+            rf_probs, 6
+        ).tolist()  # D-01: rounded to 6dp for JSON size
         rf_ci_low, rf_ci_high = _bootstrap_auc(y, rf_probs)
         results["auc_rf_ci_lower"] = rf_ci_low
         results["auc_rf_ci_upper"] = rf_ci_high
@@ -688,7 +689,9 @@ def single_feature_model(
                     :, 1
                 ]
                 results["auc_xgb"] = roc_auc_score(y, xgb_probs)
-                results["xgb_oof_probs"] = np.round(xgb_probs, 6).tolist()  # D-01: rounded to 6dp for JSON size
+                results["xgb_oof_probs"] = np.round(
+                    xgb_probs, 6
+                ).tolist()  # D-01: rounded to 6dp for JSON size
                 xgb_ci_low, xgb_ci_high = _bootstrap_auc(y, xgb_probs)
                 results["auc_xgb_ci_lower"] = xgb_ci_low
                 results["auc_xgb_ci_upper"] = xgb_ci_high
