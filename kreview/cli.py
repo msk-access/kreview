@@ -466,10 +466,26 @@ def run(
         _echo(f"Processing evaluator: {e.name}")
 
         # ── Resume checkpoint: skip if model results already exist ──
+        # GAP-4: Also check that the JSON contains OOF predictions (added in
+        # v0.8.4). JSONs from older runs lack oof_labels and will produce
+        # legacy (leaky) ROC plots. Warn but still skip to avoid re-running
+        # expensive evaluations — user can delete the JSON to force recompute.
         if resume:
             checkpoint = out_path / f"{e.name}_model_results.json"
             if checkpoint.exists():
-                _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
+                try:
+                    import json as _json
+                    with open(checkpoint) as _f:
+                        _chk = _json.load(_f)
+                    if "oof_labels" not in _chk:
+                        _echo(
+                            f"  SKIP (--resume): {checkpoint.name} exists but MISSING oof_labels. "
+                            f"Delete this file and re-run to get OOF-based ROC plots."
+                        )
+                    else:
+                        _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
+                except Exception:
+                    _echo(f"  SKIP (--resume): {checkpoint.name} exists (could not verify contents)")
                 continue
 
         # ── Step 3: Load + Shard + Extract ──
@@ -817,9 +833,20 @@ def report(
         help="Max features to visualize in SHAP plots.",
     ),
 ):
-    """Re-generate HTML Dashboards from existing matrix parquet files."""
+    """Re-generate HTML Dashboards from existing matrix parquet files.
+
+    Scans ``input_dir`` for ``*_matrix.parquet`` files, renders each as a
+    standalone Quarto HTML dashboard, and writes them to ``out_dir``.
+    Each evaluator is rendered independently so a single failure does not
+    block the remaining dashboards.
+    """
     import glob
     import sys
+    import time as _time
+
+    import structlog
+
+    _log = structlog.get_logger()
 
     print("=== kreview report ===", flush=True)
     print("Configuration:", flush=True)
@@ -831,27 +858,85 @@ def report(
     print("", flush=True)
 
     in_path = Path(input_dir).absolute()
-    matrices = glob.glob(str(in_path / "*_matrix.parquet"))
+    matrices = sorted(glob.glob(str(in_path / "*_matrix.parquet")))
     if not matrices:
+        _log.warning("report_no_matrices", input_dir=str(in_path))
         print(f"No *_matrix.parquet files found in {in_path}", flush=True)
         return
+
+    _log.info("report_started", input_dir=str(in_path), n_matrices=len(matrices))
 
     out_path = Path(out_dir).absolute()
     out_path.mkdir(parents=True, exist_ok=True)
 
+    succeeded = 0
+    failed = 0
+    failed_names = []
+
     for p in matrices:
         feat_name = Path(p).name.replace("_matrix.parquet", "")
         print(f"Rendering dashboard for {feat_name}...", flush=True)
-        ok, msg = _render_quarto_report(
-            p,
-            feat_name,
-            out_path,
-            sys.executable,
-            cvd_safe=cvd_safe,
-            shap_samples=shap_samples,
-            shap_features=shap_features,
-        )
-        if ok:
-            print(f"  Saved: {msg}", flush=True)
-        else:
-            print(f"  FAILED: {msg}", flush=True)
+        t_start = _time.perf_counter()
+
+        # S-01: Per-evaluator try/except — one failure does not block others
+        try:
+            ok, msg = _render_quarto_report(
+                p,
+                feat_name,
+                out_path,
+                sys.executable,
+                cvd_safe=cvd_safe,
+                shap_samples=shap_samples,
+                shap_features=shap_features,
+            )
+            elapsed = _time.perf_counter() - t_start
+            if ok:
+                print(f"  Saved: {msg} ({elapsed:.1f}s)", flush=True)
+                _log.info(
+                    "report_rendered",
+                    evaluator=feat_name,
+                    seconds=f"{elapsed:.1f}",
+                    output=msg,
+                )
+                succeeded += 1
+            else:
+                print(f"  FAILED: {msg} ({elapsed:.1f}s)", flush=True)
+                _log.error(
+                    "report_render_failed",
+                    evaluator=feat_name,
+                    seconds=f"{elapsed:.1f}",
+                    error=msg[:500],
+                )
+                failed += 1
+                failed_names.append(feat_name)
+        except Exception as exc:
+            elapsed = _time.perf_counter() - t_start
+            print(
+                f"  EXCEPTION rendering {feat_name}: {exc} ({elapsed:.1f}s)",
+                flush=True,
+            )
+            _log.error(
+                "report_render_exception",
+                evaluator=feat_name,
+                seconds=f"{elapsed:.1f}",
+                error=str(exc),
+            )
+            failed += 1
+            failed_names.append(feat_name)
+
+    # L-03: Summary with pass/fail counts
+    total = len(matrices)
+    print(
+        f"\nReport summary: {succeeded}/{total} succeeded, {failed}/{total} failed",
+        flush=True,
+    )
+    if failed_names:
+        print(f"  Failed evaluators: {', '.join(failed_names)}", flush=True)
+    _log.info(
+        "report_completed",
+        succeeded=succeeded,
+        failed=failed,
+        total=total,
+        failed_evaluators=failed_names,
+    )
+
