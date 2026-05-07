@@ -120,7 +120,8 @@ def univariate_auc(
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         proba = cross_val_predict(pipe, X, y, cv=cv, method="predict_proba")[:, 1]
         return float(roc_auc_score(y, proba))
-    except Exception:
+    except Exception as exc:
+        log.warning("univariate_auc_failed", error=str(exc))
         return 0.5
 
 

@@ -652,6 +652,16 @@ def run(
                 auc_val = _uauc(_m_df[col], _y_scoring, n_folds=cv_folds)
                 uauc_scores.append(auc_val)
             eval_df["univariate_auc"] = uauc_scores
+        else:
+            _echo(
+                "  WARNING: Univariate AUC disabled (--no-compute-univariate-auc). "
+                "Feature selection will use mutual information only."
+            )
+            log.warning(
+                "univariate_auc_disabled",
+                evaluator=e.name,
+                impact="selection_mi_only",
+            )
 
         # Always compute mutual information (fast, no CV needed)
         from kreview.eval_engine import mutual_info_score as _mi_score
@@ -663,9 +673,7 @@ def run(
             mi_scores.append(mi_val)
         eval_df["mutual_info"] = mi_scores
 
-        import structlog as _slog
-
-        _slog.get_logger().info(
+        log.info(
             "feature_scoring_complete",
             evaluator=e.name,
             n_features=len(numeric_cols),
@@ -681,24 +689,10 @@ def run(
         eval_df.to_parquet(eval_out, index=False)
         _echo(f"  Eval stats: {eval_df.shape[0]} features -> {eval_out}")
 
-        # Single-feature model (4-Tier Inclusion: Positives vs Negatives)
-        model_label = merged["label"].isin(
-            [
-                "True ctDNA+",
-                "Possible ctDNA+",
-                "Healthy Normal",
-                "Possible ctDNA-",
-                "Possible ctDNA−",
-            ]
-        )
-        model_df = merged[model_label].copy()
-
-        y = (
-            model_df["label"]
-            .isin(["True ctDNA+", "Possible ctDNA+"])
-            .astype(int)
-            .values
-        )
+        # Reuse the scoring target for modeling (same 4-tier label mask).
+        # .copy() ensures downstream mutations don't affect the scoring DataFrame.
+        model_df = _m_df.copy()
+        y = _y_scoring
         if len(model_df) >= 20 and len(np.unique(y)) == 2:
             # ── Hybrid Union Feature Selection ──
             # Select top X% by Univariate AUC ∪ top X% by Mutual Information.
@@ -724,7 +718,7 @@ def run(
 
             # Fallback: if both metrics are empty, take first n_keep features
             if not union_feats:
-                _slog.get_logger().warning(
+                log.warning(
                     "selection_fallback",
                     evaluator=e.name,
                     reason="no_scored_features",
@@ -745,7 +739,7 @@ def run(
                 "n_mi_only": len(top_by_mi - top_by_auc),
             }
 
-            _slog.get_logger().info(
+            log.info(
                 "feature_selection_complete",
                 evaluator=e.name,
                 **selection_qc,
@@ -761,12 +755,18 @@ def run(
             if top_feats:
                 # Variance guard: drop features that are constant across all model samples.
                 # Constant features produce AUC=0.500 and waste compute.
-                X_raw = _impute(model_df[top_feats], impute_strategy)
-                nonconst = [c for c in top_feats if X_raw[c].std() > 0]
+                X_imputed = _impute(model_df[top_feats], impute_strategy)
+                nonconst = [c for c in top_feats if X_imputed[c].std() > 0]
                 n_dropped = len(top_feats) - len(nonconst)
                 if n_dropped > 0:
                     _echo(
                         f"  WARNING: Dropped {n_dropped} constant features (zero variance)"
+                    )
+                    log.info(
+                        "variance_guard_dropped",
+                        evaluator=e.name,
+                        n_dropped=n_dropped,
+                        n_remaining=len(nonconst),
                     )
                     top_feats = nonconst
 
@@ -782,7 +782,8 @@ def run(
 
                 _echo(f"  Imputation: {impute_strategy}")
 
-                X = _impute(model_df[top_feats], impute_strategy).values
+                # Reuse cached imputed data (re-slice if variance guard dropped columns)
+                X = X_imputed[top_feats].values
                 c_types = model_df.get("CANCER_TYPE", None)
                 if c_types is not None:
                     c_types = c_types.values
@@ -828,6 +829,20 @@ def run(
                     f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
                     f"AUC_XGB={_fmt(model_res.get('auc_xgb'))} -> {model_out}"
                 )
+
+        else:
+            n_classes = len(np.unique(y)) if len(y) > 0 else 0
+            _echo(
+                f"  SKIP model: {e.name} — insufficient data "
+                f"(n_samples={len(model_df)}, n_classes={n_classes}, "
+                f"need ≥20 samples and 2 classes)"
+            )
+            log.warning(
+                "model_skip_insufficient_data",
+                evaluator=e.name,
+                n_samples=len(model_df),
+                n_classes=n_classes,
+            )
 
         eval_sec = time.time() - t3
         _echo(f"  Evaluation complete in {eval_sec:.1f}s")
