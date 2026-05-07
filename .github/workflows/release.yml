@@ -15,6 +15,9 @@ jobs:
       pages: write         # Required for GitHub Pages Actions Deployment
       id-token: write      # Required for PyPI Trusted Publisher OIDC & Pages
       packages: write      # Required for GHCR (Docker) Publishing
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v5
@@ -97,4 +100,5 @@ jobs:
           path: gh-pages-export
           
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

@@ -71,14 +71,14 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       --krewlyzer-dir ... \
       --shap-samples 5000 \
       --shap-features 10 \
-      --top-n 50
+      --top-percentile 20
     ```
 
     | Flag | Default | Description |
     |------|---------|-------------|
     | `--shap-samples` | 500 | Max samples for SHAP computation (higher = slower but more stable) |
     | `--shap-features` | 10 | Number of features to show in SHAP beeswarm/waterfall |
-    | `--top-n` | 50 | Number of top features (by importance) to include in model training |
+    | `--top-percentile` | 10.0 | Top X% of features per metric (AUC, MI). Union of both sets feeds models. |
 
 === "Accessibility & Theme"
 
@@ -91,19 +91,25 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 
     The `--cvd-safe` flag switches all dashboard visualizations to the Okabe-Ito color palette, which is accessible for red-green colorblindness. By default, kreview uses a curated neon palette optimized for dark backgrounds.
 
-=== "Advanced Analytics"
+=== "Feature Selection"
 
     ```bash
     kreview run \
       --cancer-samplesheet ... \
       --krewlyzer-dir ... \
-      --compute-univariate-auc
+      --top-percentile 20
     ```
 
-    The `--compute-univariate-auc` flag computes a standalone ROC-AUC for each individual feature column (not just the ensemble model). This is computationally expensive but enables:
-    
-    - Univariate AUC badges in the dashboard's statistical ledger
-    - Marker size encoding in the volcano plot (larger = better univariate AUC)
+    Feature selection uses a **Hybrid Union** strategy: the top X% of features by Univariate AUC ∪ top X% by Mutual Information. This captures both linear (AUC) and non-linear (MI) predictors.
+
+    | Flag | Default | Description |
+    |------|---------|-------------|
+    | `--top-percentile` | 10.0 | Percentile cutoff per metric. Union of both sets feeds models. |
+    | `--compute-univariate-auc` | True | Compute per-feature LR AUC (required for hybrid selection). |
+    | `--no-compute-univariate-auc` | — | Opt-out: degrades selection to MI-only with a warning. |
+
+    !!! note "Deprecated: `--top-n`"
+        The `--top-n` flag is deprecated since v0.0.9 and will be removed in v0.1.0. Use `--top-percentile` instead.
 
 === "Safe Load Mode (I/O Constraints)"
 

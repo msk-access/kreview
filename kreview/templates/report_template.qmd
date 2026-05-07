@@ -136,7 +136,11 @@ numeric_cols = [c for c in df.select_dtypes(include=np.number).columns if c not 
 eval_path = Path(matrix_path).parent / f"{feature_name}_eval_stats.parquet"
 if eval_path.exists():
     eval_df = pd.read_parquet(eval_path)
-    if "cohens_d_true_vs_healthy" in eval_df.columns:
+    # Prefer univariate_auc (model-aligned), fall back to cohens_d (legacy)
+    if "univariate_auc" in eval_df.columns:
+        best = eval_df.nlargest(1, "univariate_auc")
+        top_col = best["feature_column"].iloc[0] if len(best) > 0 else numeric_cols[0]
+    elif "cohens_d_true_vs_healthy" in eval_df.columns:
         best = eval_df.dropna(subset=["cohens_d_true_vs_healthy"]).nlargest(1, "cohens_d_true_vs_healthy")
         top_col = best["feature_column"].iloc[0] if len(best) > 0 else numeric_cols[0]
     else:
@@ -472,22 +476,37 @@ else:
 ### Column {width="40%"}
 
 ```{python}
-#| title: "Top 20 Features by Effect Size"
-if eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
-    top_20_df = eval_df.sort_values(by="cohens_d_true_vs_healthy", ascending=False).head(20)
+#| title: "Top 20 Features by Univariate AUC"
+if eval_df is not None and "univariate_auc" in eval_df.columns:
+    top_20_df = eval_df.sort_values(by="univariate_auc", ascending=False).head(20)
     top_20_df = top_20_df.iloc[::-1]
 
     fig_bar = px.bar(
-        top_20_df, x="cohens_d_true_vs_healthy", y="feature_column",
+        top_20_df, x="univariate_auc", y="feature_column",
         orientation='h',
-        color="cohens_d_true_vs_healthy",
+        color="univariate_auc",
         color_continuous_scale="Purpor"
     )
     _ = fig_bar.update_layout(
         **LAYOUT_DEFAULTS,
         showlegend=False,
         margin=dict(l=10, r=10, t=10, b=10),
-        xaxis_title="Cohen's D", yaxis_title=""
+        xaxis_title="Univariate AUC (CV)", yaxis_title=""
+    )
+    show_plotly(fig_bar, filename="top20_univariate_auc")
+elif eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
+    # Legacy fallback for pre-v0.0.9 eval stats
+    top_20_df = eval_df.sort_values(by="cohens_d_true_vs_healthy", ascending=False).head(20)
+    top_20_df = top_20_df.iloc[::-1]
+    fig_bar = px.bar(
+        top_20_df, x="cohens_d_true_vs_healthy", y="feature_column",
+        orientation='h', color="cohens_d_true_vs_healthy",
+        color_continuous_scale="Purpor"
+    )
+    _ = fig_bar.update_layout(
+        **LAYOUT_DEFAULTS, showlegend=False,
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_title="Cohen's D (legacy)", yaxis_title=""
     )
     show_plotly(fig_bar, filename="top20_effect_size")
 ```
@@ -1205,8 +1224,19 @@ try:
         if eval_df is not None and "feature_column" in eval_df.columns:
             row = eval_df[eval_df["feature_column"] == feat]
             if len(row) > 0:
-                cd = row["cohens_d_true_vs_healthy"].iloc[0] if "cohens_d_true_vs_healthy" in row.columns else None
-                d_val = f"Cohen's d: {cd:.2f}" if pd.notna(cd) else ""
+                auc_val = row["univariate_auc"].iloc[0] if "univariate_auc" in row.columns else None
+                mi_val = row["mutual_info"].iloc[0] if "mutual_info" in row.columns else None
+                parts = []
+                if pd.notna(auc_val):
+                    parts.append(f"AUC: {auc_val:.3f}")
+                if pd.notna(mi_val):
+                    parts.append(f"MI: {mi_val:.3f}")
+                if not parts:
+                    # Legacy fallback
+                    cd = row["cohens_d_true_vs_healthy"].iloc[0] if "cohens_d_true_vs_healthy" in row.columns else None
+                    if pd.notna(cd):
+                        parts.append(f"Cohen's d: {cd:.2f}")
+                d_val = " | ".join(parts)
                 if "pct_missing" in row.columns:
                     miss_val = f"Missing: {row['pct_missing'].iloc[0]:.1f}%"
         
@@ -1287,41 +1317,49 @@ else:
 ## Column {width="60%"}
 
 ```{python}
-#| title: "Volcano Plot: Effect Size vs Significance"
-if eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
+#| title: "Volcano Plot: Predictive Power vs Significance"
+_has_auc = eval_df is not None and "univariate_auc" in eval_df.columns
+_has_cd = eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns
+_x_col = "univariate_auc" if _has_auc else ("cohens_d_true_vs_healthy" if _has_cd else None)
+
+if _x_col and eval_df is not None:
     eval_volcano = eval_df.copy()
     if "kw_pvalue" in eval_volcano.columns:
         eval_volcano["-log10(p)"] = -np.log10(eval_volcano["kw_pvalue"].replace(0, 1e-300))
         eval_volcano["is_top"] = eval_volcano["feature_column"] == top_col
 
-        # GAP-1 fix: NaN-safe hover text for zero-variance features
+        # NaN-safe hover text
         def _volcano_hover(row):
+            auc = row.get('univariate_auc')
             cd = row.get('cohens_d_true_vs_healthy')
             kw = row.get('kw_pvalue')
-            cd_str = f"{cd:.2f}" if pd.notna(cd) else "N/A"
-            kw_str = f"{kw:.3e}" if pd.notna(kw) else "N/A"
-            return f"<b>{row['feature_column']}</b><br>Cohen's D: {cd_str}<br>K-W p-value: {kw_str}"
+            mi = row.get('mutual_info')
+            parts = [f"<b>{row['feature_column']}</b>"]
+            if pd.notna(auc): parts.append(f"AUC: {auc:.3f}")
+            if pd.notna(mi): parts.append(f"MI: {mi:.3f}")
+            if pd.notna(cd): parts.append(f"Cohen's D: {cd:.2f}")
+            if pd.notna(kw): parts.append(f"K-W p: {kw:.3e}")
+            return "<br>".join(parts)
 
         eval_volcano["hover_text"] = eval_volcano.apply(_volcano_hover, axis=1)
-        
-        # Marker size from univariate AUC if available
-        size_col = None
-        if "univariate_auc" in eval_volcano.columns:
-            size_col = "univariate_auc"
 
         fig_vol = px.scatter(
-            eval_volcano, x="cohens_d_true_vs_healthy", y="-log10(p)",
+            eval_volcano, x=_x_col, y="-log10(p)",
             hover_name="hover_text", color="is_top",
-            size=size_col,
             color_discrete_map={True: THEME["labels"]["True ctDNA+"], False: "#515865"}
         )
         _ = fig_vol.add_hline(y=-np.log10(0.01), line_dash="dash", line_color="#8DDA77", opacity=0.5)
-        _ = fig_vol.add_vline(x=0.8, line_dash="dash", line_color="#8DDA77", opacity=0.5)
+        if _x_col == "univariate_auc":
+            _ = fig_vol.add_vline(x=0.6, line_dash="dash", line_color="#8DDA77", opacity=0.5,
+                                  annotation_text="AUC=0.6")
+        else:
+            _ = fig_vol.add_vline(x=0.8, line_dash="dash", line_color="#8DDA77", opacity=0.5)
 
+        _xlabel = "Univariate AUC (larger = better discrimination)" if _has_auc else "Cohen's D (legacy)"
         _ = fig_vol.update_layout(
             **LAYOUT_DEFAULTS, showlegend=False,
             margin=dict(l=10, r=10, t=30, b=10),
-            xaxis_title="Cohen's D Effect Size (larger = better separation)",
+            xaxis_title=_xlabel,
             yaxis_title="-Log10(Kruskal-Wallis P-Value)"
         )
         show_plotly(fig_vol, filename="volcano")
@@ -1329,6 +1367,62 @@ if eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
         display(Markdown("> Kruskal-Wallis p-values not available."))
 else:
     display(Markdown("> Evaluation statistics not found."))
+```
+
+```{python}
+#| title: "Feature Selection: AUC vs Mutual Information"
+# Show how features were selected by the hybrid union method
+if eval_df is not None and "univariate_auc" in eval_df.columns and "mutual_info" in eval_df.columns:
+    _sel_df = eval_df.copy()
+    _top_set = set(mres.get("top_features", [])) if mres else set()
+    _sqc = mres.get("selection_qc", {}) if mres else {}
+    _n_keep = _sqc.get("n_keep_per_metric", 0)
+
+    if _top_set and _n_keep > 0:
+        _top_auc = set(_sel_df.nlargest(_n_keep, "univariate_auc")["feature_column"])
+        _top_mi = set(_sel_df.nlargest(_n_keep, "mutual_info")["feature_column"])
+
+        def _sel_category(feat):
+            in_auc = feat in _top_auc
+            in_mi = feat in _top_mi
+            if in_auc and in_mi: return "Selected (Both)"
+            if in_auc: return "Selected (AUC Only)"
+            if in_mi: return "Selected (MI Only)"
+            return "Dropped"
+
+        _sel_df["selection"] = _sel_df["feature_column"].apply(_sel_category)
+    elif _top_set:
+        _sel_df["selection"] = _sel_df["feature_column"].apply(
+            lambda f: "Selected" if f in _top_set else "Dropped"
+        )
+    else:
+        _sel_df["selection"] = "Unknown"
+
+    fig_sel = px.scatter(
+        _sel_df, x="univariate_auc", y="mutual_info",
+        color="selection",
+        color_discrete_map={
+            "Selected (Both)": "#8DDA77",     # Green
+            "Selected (AUC Only)": "#4FC3F7", # Blue
+            "Selected (MI Only)": "#FF9B42",  # Orange
+            "Dropped": "#515865",             # Gray
+            "Selected": "#8DDA77",
+            "Unknown": "#999999",
+        },
+        hover_name="feature_column",
+        opacity=0.7,
+        category_orders={"selection": ["Selected (Both)", "Selected (AUC Only)", "Selected (MI Only)", "Dropped"]}
+    )
+    _ = fig_sel.update_layout(
+        **LAYOUT_DEFAULTS,
+        margin=dict(l=10, r=10, t=30, b=10),
+        xaxis_title="Univariate AUC (linear predictive power)",
+        yaxis_title="Mutual Information (non-linear relevance)",
+        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5)
+    )
+    show_plotly(fig_sel, filename="selection_scatter")
+else:
+    display(Markdown("> Feature selection scatter requires univariate AUC and mutual information scores."))
 ```
 
 ## Column {width="40%"}
@@ -1374,13 +1468,14 @@ if top_col and "max_vaf" in df.columns:
 ```{python}
 #| echo: false
 if eval_df is not None:
-    display_cols = ["feature_column", "cohens_d_true_vs_healthy", "kw_pvalue",
+    display_cols = ["feature_column", "univariate_auc", "mutual_info",
+                    "cohens_d_true_vs_healthy", "kw_pvalue",
                     "mwu_True_ctDNA_pos_vs_Healthy_Normal_effect_size", "spearman_vaf_r",
                     "pct_missing", "is_zero_variance"]
     avail = [c for c in display_cols if c in eval_df.columns]
-    # D-03 fix: sort by best available effect-size column
+    # Sort by best available model-aligned metric
     _sort_col = next(
-        (c for c in ["cohens_d_true_vs_healthy", "kw_statistic", "univariate_auc"]
+        (c for c in ["univariate_auc", "mutual_info", "cohens_d_true_vs_healthy", "kw_statistic"]
          if c in eval_df.columns),
         None
     )

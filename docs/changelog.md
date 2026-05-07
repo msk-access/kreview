@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.9] - 2026-05-07
+### Changed
+- **Feature Selection**: Replaced Cohen's D `--top-n` selection with hybrid union: top X% by Univariate AUC ∪ top X% by Mutual Information. This captures both linear and non-linear predictors.
+- **CLI**: `--top-n` deprecated (prints warning, ignored). Use `--top-percentile` (default: 10%) instead. `--compute-univariate-auc` now defaults to `True`.
+- **Volcano Plot**: X-axis changed from Cohen's D to Univariate AUC for better alignment with model-based selection.
+- **Top-20 Bar Chart**: Ranked by Univariate AUC instead of Cohen's D.
+- **Statistical Ledger**: Sort priority changed to `univariate_auc > mutual_info > cohens_d > kw_statistic`.
+- **Feature Cards**: Display AUC + MI scores instead of Cohen's D.
+
+### Added
+- **`mutual_info_score()`**: New function in `eval_engine.py` using `sklearn.feature_selection.mutual_info_classif(k=3)` for non-linear feature relevance scoring.
+- **`selection_qc` metadata**: Saved in `model_results.json` with method, overlap stats, and feature counts for audit trail.
+- **Feature Selection QC Scatter**: New dashboard plot showing AUC vs MI with 4-color category coding (Both / AUC-only / MI-only / Dropped).
+- **Scoreboard columns**: `selection_method`, `n_selected_features`, `selection_overlap_pct`.
+- **Structured logging**: `feature_scoring_complete`, `feature_selection_complete`, `univariate_auc_disabled`, `variance_guard_dropped`, `model_skip_insufficient_data`.
+- **Resume checkpoint**: Warns on legacy JSONs missing `selection_qc` (pre-v0.0.9 Cohen's D runs).
+- **Tests**: 13 new tests for `univariate_auc` (6) and `mutual_info_score` (7) covering bounds, NaN handling, constant features, signal detection, and reproducibility.
+- **univariate_auc logging**: `log.warning("univariate_auc_failed")` replaces bare silent `except`.
+
+### Fixed
+- **Duplicate label mask** (GAP-1): Removed duplicate 4-tier label mask construction; reuse scoring target for model target.
+- **Redundant import** (GAP-3): Removed `import structlog as _slog` inside evaluator loop; use module-level `log`.
+- **Silent degradation** (GAP-4): Explicit warning when `--no-compute-univariate-auc` degrades to MI-only selection.
+- **Double imputation** (GAP-6): Cached `_impute()` result in variance guard to avoid re-computation.
+- **Silent model skip** (GAP-7): Added echo + structlog warning when model eligibility fails (< 20 samples or single class).
+
 ## [0.0.8] - 2026-05-06
 ### Fixed
 - **AUC Consistency (D-01)**: ROC plots and KDE density now use out-of-fold predictions matching the official AUC value boxes. Eliminates the misleading AUC discrepancy (e.g., 0.845 vs 0.72) caused by mixing training/subsample models.
