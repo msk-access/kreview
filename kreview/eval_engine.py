@@ -32,6 +32,7 @@ __all__ = [
     "FeatureEvaluator",
     "parse_array",
     "univariate_auc",
+    "mutual_info_score",
     "set_theme",
     "evaluate_feature",
     "plot_violin",
@@ -119,8 +120,46 @@ def univariate_auc(
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         proba = cross_val_predict(pipe, X, y, cv=cv, method="predict_proba")[:, 1]
         return float(roc_auc_score(y, proba))
-    except Exception:
+    except Exception as exc:
+        log.warning("univariate_auc_failed", error=str(exc))
         return 0.5
+
+
+def mutual_info_score(
+    feature_col,
+    y,
+    random_state: int = 42,
+) -> float:
+    """Compute mutual information between a single feature and binary target.
+
+    Uses sklearn's mutual_info_classif with k=3 nearest neighbors to estimate
+    the non-linear dependency between a feature and the label. Unlike AUC,
+    mutual information captures arbitrary (non-monotonic) relationships.
+
+    Args:
+        feature_col: pandas Series or array-like of a single feature.
+        y: binary label array (0/1).
+        random_state: random seed for reproducibility.
+
+    Returns:
+        Mutual information score (float, >= 0). Higher means more informative.
+        Returns 0.0 if the feature is constant or computation fails.
+    """
+    from sklearn.feature_selection import mutual_info_classif
+
+    X = np.array(feature_col).reshape(-1, 1)
+    X = np.nan_to_num(X, nan=0.0)
+    y = np.array(y, dtype=int)
+
+    if np.std(X) == 0:
+        return 0.0
+
+    try:
+        mi = mutual_info_classif(X, y, random_state=random_state, n_neighbors=3)
+        return float(mi[0])
+    except Exception as exc:
+        log.warning("mutual_info_failed", error=str(exc))
+        return 0.0
 
 
 # %% ../nbs/02_eval_engine.ipynb #69946ce8

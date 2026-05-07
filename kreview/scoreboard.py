@@ -75,6 +75,11 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
             n_samples = weighted.get("support", np.nan) if weighted else np.nan
             n_positive = pos_class.get("support", np.nan) if pos_class else np.nan
 
+        # Extract selection QC metadata (added in v0.0.9)
+        sel_qc = data.get("selection_qc", {})
+        n_sel = sel_qc.get("n_selected_union", len(data.get("top_features", [])))
+        n_overlap = sel_qc.get("n_overlap_both", 0)
+
         records.append(
             {
                 "evaluator": evaluator_name,
@@ -89,6 +94,9 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
                 "optimal_threshold_rf": data.get("rf_optimal_threshold", np.nan),
                 "n_samples": n_samples,
                 "n_positive": n_positive,
+                "selection_method": sel_qc.get("method", "legacy_cohens_d"),
+                "n_selected_features": n_sel,
+                "selection_overlap_pct": round(n_overlap / max(1, n_sel) * 100, 1),
             }
         )
 
