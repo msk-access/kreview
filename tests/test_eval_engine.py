@@ -1,4 +1,4 @@
-"""Tests for kreview.eval_engine — Phase 1 audit fixes (C-04).
+"""Tests for kreview.eval_engine — Phase 1 audit fixes (C-04) + v0.0.9 selection.
 
 Covers:
   - evaluate_feature output schema validation
@@ -8,13 +8,21 @@ Covers:
   - Pipeline-based LR model (no scaler leakage)
   - Bootstrap CI bounds
   - OOF subgroup metrics present
+  - univariate_auc single-feature CV AUC
+  - mutual_info_score non-linear feature scoring
 """
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from kreview.eval_engine import evaluate_feature, single_feature_model, LABEL_ORDER
+from kreview.eval_engine import (
+    evaluate_feature,
+    single_feature_model,
+    univariate_auc,
+    mutual_info_score,
+    LABEL_ORDER,
+)
 
 # ── Fixtures ────────────────────────────────────────────────────────────────────
 
@@ -405,3 +413,112 @@ class TestAUCDeltas:
         results, *_ = single_feature_model(X, y)
         expected = results["auc_rf"] - results["auc_lr"]
         assert abs(results["auc_delta_rf_lr"] - expected) < 1e-10
+
+
+# ── v0.0.9 feature selection scoring tests ──────────────────────────────────────
+
+
+class TestUnivariateAUC:
+    """univariate_auc single-feature LR AUC (v0.0.9)."""
+
+    def test_returns_float(self):
+        """Should return a float."""
+        np.random.seed(42)
+        x = pd.Series(np.random.randn(100))
+        y = np.array([0] * 50 + [1] * 50)
+        result = univariate_auc(x, y)
+        assert isinstance(result, float)
+
+    def test_range_0_to_1(self):
+        """AUC should be between 0 and 1."""
+        np.random.seed(42)
+        x = pd.Series(np.random.randn(100))
+        y = np.array([0] * 50 + [1] * 50)
+        result = univariate_auc(x, y)
+        assert 0.0 <= result <= 1.0
+
+    def test_constant_feature_returns_0_5(self):
+        """Constant feature should return AUC=0.5 (no information)."""
+        x = pd.Series(np.ones(100))
+        y = np.array([0] * 50 + [1] * 50)
+        result = univariate_auc(x, y)
+        assert result == 0.5
+
+    def test_perfect_signal_high_auc(self):
+        """A feature with perfect separation should have AUC near 1.0."""
+        np.random.seed(42)
+        x = pd.Series([0.0] * 50 + [10.0] * 50)
+        y = np.array([0] * 50 + [1] * 50)
+        result = univariate_auc(x, y)
+        assert result >= 0.95, f"Expected AUC >= 0.95, got {result}"
+
+    def test_nan_handling(self):
+        """Should handle NaN values without crashing."""
+        np.random.seed(42)
+        x = pd.Series(np.random.randn(100))
+        x.iloc[:10] = np.nan
+        y = np.array([0] * 50 + [1] * 50)
+        result = univariate_auc(x, y)
+        assert isinstance(result, float)
+        assert 0.0 <= result <= 1.0
+
+    def test_single_class_returns_0_5(self):
+        """Single-class target should return AUC=0.5."""
+        x = pd.Series(np.random.randn(50))
+        y = np.ones(50, dtype=int)  # All positive
+        result = univariate_auc(x, y)
+        assert result == 0.5
+
+
+class TestMutualInfoScore:
+    """mutual_info_score non-linear feature scoring (v0.0.9)."""
+
+    def test_returns_float(self):
+        """Should return a float."""
+        np.random.seed(42)
+        x = pd.Series(np.random.randn(100))
+        y = np.array([0] * 50 + [1] * 50)
+        result = mutual_info_score(x, y)
+        assert isinstance(result, float)
+
+    def test_non_negative(self):
+        """MI should be >= 0."""
+        np.random.seed(42)
+        x = pd.Series(np.random.randn(100))
+        y = np.array([0] * 50 + [1] * 50)
+        result = mutual_info_score(x, y)
+        assert result >= 0.0
+
+    def test_constant_feature_returns_zero(self):
+        """Constant feature should return MI=0.0 (no information)."""
+        x = pd.Series(np.ones(100))
+        y = np.array([0] * 50 + [1] * 50)
+        result = mutual_info_score(x, y)
+        assert result == 0.0
+
+    def test_informative_feature_positive_mi(self):
+        """A feature with signal should have MI > 0."""
+        np.random.seed(42)
+        x = pd.Series([0.0] * 50 + [10.0] * 50)
+        y = np.array([0] * 50 + [1] * 50)
+        result = mutual_info_score(x, y)
+        assert result > 0.0, f"Expected MI > 0 for informative feature, got {result}"
+
+    def test_nan_handling(self):
+        """Should handle NaN values without crashing (replaced with 0)."""
+        np.random.seed(42)
+        x = pd.Series(np.random.randn(100))
+        x.iloc[:10] = np.nan
+        y = np.array([0] * 50 + [1] * 50)
+        result = mutual_info_score(x, y)
+        assert isinstance(result, float)
+        assert result >= 0.0
+
+    def test_reproducible_with_seed(self):
+        """Same inputs + same seed should produce same result."""
+        np.random.seed(42)
+        x = pd.Series(np.random.randn(100))
+        y = np.array([0] * 50 + [1] * 50)
+        r1 = mutual_info_score(x, y, random_state=42)
+        r2 = mutual_info_score(x, y, random_state=42)
+        assert r1 == r2

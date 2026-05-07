@@ -96,9 +96,7 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
                 "n_positive": n_positive,
                 "selection_method": sel_qc.get("method", "legacy_cohens_d"),
                 "n_selected_features": n_sel,
-                "selection_overlap_pct": round(
-                    n_overlap / max(1, n_sel) * 100, 1
-                ),
+                "selection_overlap_pct": round(n_overlap / max(1, n_sel) * 100, 1),
             }
         )
 

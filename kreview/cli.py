@@ -637,10 +637,7 @@ def run(
         )
         _m_df = merged[_model_mask]
         _y_scoring = (
-            _m_df["label"]
-            .isin(["True ctDNA+", "Possible ctDNA+"])
-            .astype(int)
-            .values
+            _m_df["label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
         )
 
         if compute_univariate_auc:
@@ -677,11 +674,11 @@ def run(
             "feature_scoring_complete",
             evaluator=e.name,
             n_features=len(numeric_cols),
-            n_auc_above_055=int(
-                (eval_df["univariate_auc"] > 0.55).sum()
-            )
-            if "univariate_auc" in eval_df.columns
-            else 0,
+            n_auc_above_055=(
+                int((eval_df["univariate_auc"] > 0.55).sum())
+                if "univariate_auc" in eval_df.columns
+                else 0
+            ),
             n_mi_above_zero=int((eval_df["mutual_info"] > 0.0).sum()),
         )
 
