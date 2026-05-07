@@ -142,7 +142,7 @@ Side-by-side waterfall diagrams for the highest-confidence True Positive and the
 Auto-generated metadata cards for the top-5 features, sourced from the evaluator registry:
 
 - **Tier** and **Category** from the `FeatureEvaluator` class
-- **Cohen's d** from statistical evaluation
+- **Univariate AUC + Mutual Information** scores (with legacy Cohen's d fallback)
 - **Feature stability** — percentage of CV folds where this feature appeared in the top 10
 - **LR coefficient direction** — whether the feature is positively or negatively associated with ctDNA+
 - **Derived feature types** — detected via source code introspection (entropy, spectral, bimodality, etc.)
@@ -155,10 +155,22 @@ KDE density plot of RF predicted probabilities by ctDNA label. Indicates label s
 ## Page 4: Biomarker Yield
 
 ### Volcano Plot
-Effect size (Cohen's d) on x-axis vs statistical significance (−log10 Kruskal-Wallis p-value) on y-axis. The best features appear in the upper-right quadrant (large effect + significant).
+Univariate AUC on x-axis vs statistical significance (−log10 Kruskal-Wallis p-value) on y-axis. The best features appear in the upper-right quadrant (high AUC + significant). Legacy reports may show Cohen's d on the x-axis instead.
 
-- Marker size encodes univariate AUC (if `--compute-univariate-auc` was used)
-- Dashed lines at d=0.8 and p=0.01 mark conventional thresholds for "large effect" and "significant"
+- Dashed lines at AUC=0.6 and p=0.01 mark conventional thresholds for "useful discrimination" and "significant"
+- The top feature (by AUC) is highlighted
+
+### Feature Selection QC Scatter
+Scatter plot of Univariate AUC (x-axis) vs Mutual Information (y-axis) for all features. Each point is color-coded by its selection category:
+
+| Color | Category | Meaning |
+|-------|----------|---------|
+| 🟢 Green | Selected (Both) | Top X% in *both* AUC and MI |
+| 🔵 Blue | Selected (AUC Only) | Top X% in AUC but not MI |
+| 🟠 Orange | Selected (MI Only) | Top X% in MI but not AUC |
+| ⚪ Gray | Dropped | Below threshold in both metrics |
+
+This plot provides a visual audit trail for the [Hybrid Union selection](statistical-tests.md#hybrid-union-selection) method.
 
 ### Feature #1 Violin
 Distribution of the single best feature (by Cohen's d) across the four ctDNA labels. Box plot overlay shows medians and IQR.
@@ -167,7 +179,7 @@ Distribution of the single best feature (by Cohen's d) across the four ctDNA lab
 Scatter plot of the top feature vs max VAF on log scale, colored by label. A LOWESS trendline reveals whether the feature independently predicts ctDNA status or simply tracks mutation burden. Features strongly correlated with VAF (Spearman r > 0.5) may be confounded.
 
 ### Statistical Ledger
-Full table of all per-feature statistics: Cohen's d, K-W p-value, Mann-Whitney U effect size, Spearman correlations, missingness, and zero-variance flags.
+Full table of all per-feature statistics: Univariate AUC, Mutual Information, Cohen's d, K-W p-value, Mann-Whitney U effect size, Spearman correlations, missingness, and zero-variance flags. Sorted by Univariate AUC (descending) by default.
 
 ---
 

@@ -11,7 +11,10 @@ flowchart LR
     B --> C["Mann-Whitney U\n(pairwise)"]:::step
     C --> D["Cohen's d\n(effect size)"]:::step
     D --> E["Spearman Rank\n(confounders)"]:::step
-    E --> F["Pass to ML\nModels"]:::step
+    E --> F["Univariate AUC\n(per-feature LR)"]:::step
+    F --> G["Mutual Information\n(non-linear)"]:::step
+    G --> H["Hybrid Union\n(top % AUC ∪ MI)"]:::step
+    H --> I["Pass to ML\nModels"]:::step
 ```
 
 ---
@@ -78,3 +81,43 @@ In addition to statistical tests, `evaluate_feature()` computes three data quali
 | Zero variance | `is_zero_variance` | Whether `std == 0` after dropping NaN (constant feature) |
 
 These metrics are saved to `*_eval_stats.parquet` and surfaced in the dashboard's [Cohort & QC page](../machine-learning/dashboard-guide.md#page-5-cohort--qc).
+
+## Feature Selection Scoring (v0.0.9+)
+
+After descriptive statistics are computed, kreview scores every feature using two complementary methods to decide which features enter the downstream ML models.
+
+### Univariate AUC
+
+`univariate_auc()` fits a single-feature **Logistic Regression pipeline** (StandardScaler + LR) using `StratifiedKFold` cross-validation and returns the out-of-fold ROC-AUC. This captures **linear, monotonic** relationships between a feature and the binary ctDNA label.
+
+- Returns `0.5` for constant features or when CV fails (< 2 samples per class)
+- Uses the same fold structure and random state as the downstream ensemble
+- Stored as `univariate_auc` in `*_eval_stats.parquet`
+
+### Mutual Information
+
+`mutual_info_score()` uses `sklearn.feature_selection.mutual_info_classif` with `k=3` nearest neighbors to estimate the **non-linear dependency** between a feature and the label. Unlike AUC, MI captures arbitrary (non-monotonic) relationships.
+
+- Returns `0.0` for constant features
+- NaN values are replaced with 0 before computation
+- Deterministic with `random_state=42`
+- Stored as `mutual_info` in `*_eval_stats.parquet`
+
+### Hybrid Union Selection
+
+The final feature set passed to `single_feature_model()` is determined by:
+
+$$\text{Selected} = \text{Top}_{X\%}(\text{AUC}) \cup \text{Top}_{X\%}(\text{MI})$$
+
+where $X$ is controlled by `--top-percentile` (default: 10%). The **union** ensures that features strong in *either* metric are retained — a feature with high AUC but low MI (linear predictor) or high MI but low AUC (non-linear predictor) will both be included.
+
+!!! tip "Selection QC"
+    The `selection_qc` metadata block in `model_results.json` records:
+    
+    - `method`: Always `hybrid_union`
+    - `n_selected_union`: Total features selected
+    - `n_overlap_both`: Features in top-X% of *both* metrics
+    - `n_auc_only` / `n_mi_only`: Features exclusive to one metric
+
+!!! warning "Deprecated: `--top-n`"
+    The `--top-n` flag (fixed count, Cohen's D ranking) is deprecated since v0.0.9. Use `--top-percentile` instead.
