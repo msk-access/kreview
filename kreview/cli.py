@@ -350,9 +350,14 @@ def run(
         help="Batch size for DuckDB file loading over SFTP network mounts",
     ),
     top_n: int = typer.Option(
-        50,
+        None,
         "--top-n",
-        help="Max sub-metrics to feed into ML models per evaluator. All sub-metrics are included up to this cap; the model's feature importance ranks them.",
+        help="[DEPRECATED] Use --top-percentile instead. If set, overrides --top-percentile with a fixed count.",
+    ),
+    top_percentile: float = typer.Option(
+        10.0,
+        "--top-percentile",
+        help="Top X%% of features to select per metric (AUC, MI). The union of both sets feeds into models.",
     ),
     shap_samples: int = typer.Option(
         500,
@@ -362,7 +367,7 @@ def run(
     shap_features: int = typer.Option(
         10,
         "--shap-features",
-        help="Max features to visualize in SHAP beeswarm/waterfall plots. The model still trains on --top-n features.",
+        help="Max features to visualize in SHAP beeswarm/waterfall plots.",
     ),
     resume: bool = typer.Option(
         False,
@@ -370,9 +375,9 @@ def run(
         help="Skip evaluators whose model results already exist in the output directory.",
     ),
     compute_univariate_auc: bool = typer.Option(
-        False,
+        True,
         "--compute-univariate-auc",
-        help="Compute per-feature univariate LR AUC (adds ~10s per evaluator).",
+        help="Compute per-feature univariate LR AUC. Required for hybrid selection (default: True).",
     ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
@@ -394,6 +399,14 @@ def run(
     if impute_strategy not in ["median", "mean", "zero"]:
         _echo("ERROR: --impute-strategy must be median, mean, or zero")
         raise typer.Exit(code=1)
+    if not (1.0 <= top_percentile <= 100.0):
+        _echo("ERROR: --top-percentile must be between 1.0 and 100.0")
+        raise typer.Exit(code=1)
+    if top_n is not None:
+        _echo(
+            "WARNING: --top-n is deprecated and will be removed in v0.1.0. "
+            "Use --top-percentile instead. Ignoring --top-n in favor of --top-percentile."
+        )
 
     _echo(f"=== kreview run (verbose={verbose}, workers={workers}) ===")
     _echo("Configuration:")
@@ -409,7 +422,7 @@ def run(
     _echo(f"  --tier              : {tier or 'ALL'}")
     _echo(f"  --workers           : {workers}")
     _echo(f"  --cv-folds          : {cv_folds}")
-    _echo(f"  --top-n             : {top_n}")
+    _echo(f"  --top-percentile    : {top_percentile}")
     _echo(f"  --impute-strategy   : {impute_strategy}")
     _echo(f"  --chunk-size        : {chunk_size}")
     _echo(f"  --shap-samples      : {shap_samples}")
@@ -482,6 +495,11 @@ def run(
                         _echo(
                             f"  SKIP (--resume): {checkpoint.name} exists but MISSING oof_labels. "
                             f"Delete this file and re-run to get OOF-based ROC plots."
+                        )
+                    elif "selection_qc" not in _chk:
+                        _echo(
+                            f"  SKIP (--resume): {checkpoint.name} uses legacy Cohen's D selection. "
+                            f"Delete to re-run with hybrid union feature selection."
                         )
                     else:
                         _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
@@ -605,33 +623,59 @@ def run(
 
         eval_df = pd.DataFrame(eval_results)
 
-        # Opt-in: compute univariate AUC per feature column
+        # ── Feature Scoring: Univariate AUC + Mutual Information ──
+        # Build binary target once for both scoring methods.
+        # This target matches the downstream model target (positives vs negatives).
+        _model_mask = merged["label"].isin(
+            [
+                "True ctDNA+",
+                "Possible ctDNA+",
+                "Healthy Normal",
+                "Possible ctDNA-",
+                "Possible ctDNA\u2212",
+            ]
+        )
+        _m_df = merged[_model_mask]
+        _y_scoring = (
+            _m_df["label"]
+            .isin(["True ctDNA+", "Possible ctDNA+"])
+            .astype(int)
+            .values
+        )
+
         if compute_univariate_auc:
             from kreview.eval_engine import univariate_auc as _uauc
 
             _echo(f"  Computing univariate AUC for {len(numeric_cols)} features...")
-            # Build binary target for univariate AUC (same as model target)
-            _model_mask = merged["label"].isin(
-                [
-                    "True ctDNA+",
-                    "Possible ctDNA+",
-                    "Healthy Normal",
-                    "Possible ctDNA-",
-                    "Possible ctDNA\u2212",
-                ]
-            )
-            _m_df = merged[_model_mask]
-            _y_uauc = (
-                _m_df["label"]
-                .isin(["True ctDNA+", "Possible ctDNA+"])
-                .astype(int)
-                .values
-            )
             uauc_scores = []
             for col in numeric_cols:
-                auc_val = _uauc(_m_df[col], _y_uauc, n_folds=cv_folds)
+                auc_val = _uauc(_m_df[col], _y_scoring, n_folds=cv_folds)
                 uauc_scores.append(auc_val)
             eval_df["univariate_auc"] = uauc_scores
+
+        # Always compute mutual information (fast, no CV needed)
+        from kreview.eval_engine import mutual_info_score as _mi_score
+
+        _echo(f"  Computing mutual information for {len(numeric_cols)} features...")
+        mi_scores = []
+        for col in numeric_cols:
+            mi_val = _mi_score(_m_df[col], _y_scoring)
+            mi_scores.append(mi_val)
+        eval_df["mutual_info"] = mi_scores
+
+        import structlog as _slog
+
+        _slog.get_logger().info(
+            "feature_scoring_complete",
+            evaluator=e.name,
+            n_features=len(numeric_cols),
+            n_auc_above_055=int(
+                (eval_df["univariate_auc"] > 0.55).sum()
+            )
+            if "univariate_auc" in eval_df.columns
+            else 0,
+            n_mi_above_zero=int((eval_df["mutual_info"] > 0.0).sum()),
+        )
 
         eval_out = out_path / f"{e.name}_eval_stats.parquet"
         eval_df.to_parquet(eval_out, index=False)
@@ -656,20 +700,62 @@ def run(
             .values
         )
         if len(model_df) >= 20 and len(np.unique(y)) == 2:
-            # Pre-filter sub-metrics by Cohen's d (noise reduction) then
-            # feed the top --top-n into the model for importance ranking.
-            if "cohens_d_true_vs_healthy" in eval_df.columns:
-                ranked = (
-                    eval_df.dropna(subset=["cohens_d_true_vs_healthy"])
-                    .sort_values("cohens_d_true_vs_healthy", key=abs, ascending=False)
-                    .head(top_n)["feature_column"]
-                    .tolist()
+            # ── Hybrid Union Feature Selection ──
+            # Select top X% by Univariate AUC ∪ top X% by Mutual Information.
+            # This captures both linear (AUC) and non-linear (MI) predictors,
+            # ensuring the downstream models receive a diverse, high-quality
+            # feature set regardless of evaluator dimensionality.
+            n_keep = max(1, int(len(numeric_cols) * (top_percentile / 100.0)))
+
+            top_by_auc = set()
+            top_by_mi = set()
+
+            if "univariate_auc" in eval_df.columns:
+                top_by_auc = set(
+                    eval_df.nlargest(n_keep, "univariate_auc")["feature_column"]
                 )
-                top_feats = ranked if ranked else numeric_cols[:top_n]
-            else:
-                top_feats = numeric_cols[:top_n]
+            if "mutual_info" in eval_df.columns:
+                top_by_mi = set(
+                    eval_df.nlargest(n_keep, "mutual_info")["feature_column"]
+                )
+
+            # Union: keep features that are strong in either metric
+            union_feats = list(top_by_auc | top_by_mi)
+
+            # Fallback: if both metrics are empty, take first n_keep features
+            if not union_feats:
+                _slog.get_logger().warning(
+                    "selection_fallback",
+                    evaluator=e.name,
+                    reason="no_scored_features",
+                )
+                union_feats = numeric_cols[:n_keep]
+
+            top_feats = union_feats
+
+            # Build selection QC metadata for JSON output and reports
+            selection_qc = {
+                "method": "hybrid_union",
+                "total_input_features": len(numeric_cols),
+                "target_percentile": top_percentile,
+                "n_keep_per_metric": n_keep,
+                "n_selected_union": len(top_feats),
+                "n_overlap_both": len(top_by_auc & top_by_mi),
+                "n_auc_only": len(top_by_auc - top_by_mi),
+                "n_mi_only": len(top_by_mi - top_by_auc),
+            }
+
+            _slog.get_logger().info(
+                "feature_selection_complete",
+                evaluator=e.name,
+                **selection_qc,
+            )
             _echo(
-                f"  Feeding {len(top_feats)}/{len(numeric_cols)} sub-metrics into model (--top-n={top_n})"
+                f"  Feature Selection (top {top_percentile}%): "
+                f"{len(top_feats)}/{len(numeric_cols)} features "
+                f"(AUC∩MI={selection_qc['n_overlap_both']}, "
+                f"AUC-only={selection_qc['n_auc_only']}, "
+                f"MI-only={selection_qc['n_mi_only']})"
             )
 
             if top_feats:
@@ -716,6 +802,7 @@ def run(
 
                 if "error" not in model_res:
                     model_res["top_features"] = top_feats
+                    model_res["selection_qc"] = selection_qc
 
                 import joblib
 
