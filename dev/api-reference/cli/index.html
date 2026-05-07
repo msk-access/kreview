@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1611,20 +1611,22 @@ block the remaining dashboards.</p>
 <a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>                                  containing all feature matrices
 <a id="__codelineno-8-26" name="__codelineno-8-26" href="#__codelineno-8-26"></a>  --chunk-size INTEGER            Batch size for DuckDB file loading over SFTP
 <a id="__codelineno-8-27" name="__codelineno-8-27" href="#__codelineno-8-27"></a>                                  network mounts  [default: 500]
-<a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a>  --top-n INTEGER                 Max sub-metrics to feed into ML models per
-<a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a>                                  evaluator. All sub-metrics are included up
-<a id="__codelineno-8-30" name="__codelineno-8-30" href="#__codelineno-8-30"></a>                                  to this cap; the model's feature importance
-<a id="__codelineno-8-31" name="__codelineno-8-31" href="#__codelineno-8-31"></a>                                  ranks them.  [default: 50]
-<a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
-<a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a>                                  computation in dashboards. Lower values
-<a id="__codelineno-8-34" name="__codelineno-8-34" href="#__codelineno-8-34"></a>                                  reduce memory usage.  [default: 500]
-<a id="__codelineno-8-35" name="__codelineno-8-35" href="#__codelineno-8-35"></a>  --shap-features INTEGER         Max features to visualize in SHAP
-<a id="__codelineno-8-36" name="__codelineno-8-36" href="#__codelineno-8-36"></a>                                  beeswarm/waterfall plots. The model still
-<a id="__codelineno-8-37" name="__codelineno-8-37" href="#__codelineno-8-37"></a>                                  trains on --top-n features.  [default: 10]
-<a id="__codelineno-8-38" name="__codelineno-8-38" href="#__codelineno-8-38"></a>  --resume                        Skip evaluators whose model results already
-<a id="__codelineno-8-39" name="__codelineno-8-39" href="#__codelineno-8-39"></a>                                  exist in the output directory.
-<a id="__codelineno-8-40" name="__codelineno-8-40" href="#__codelineno-8-40"></a>  --compute-univariate-auc        Compute per-feature univariate LR AUC (adds
-<a id="__codelineno-8-41" name="__codelineno-8-41" href="#__codelineno-8-41"></a>                                  ~10s per evaluator).
+<a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a>  --top-n INTEGER                 [DEPRECATED] Use --top-percentile instead.
+<a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a>                                  If set, overrides --top-percentile with a
+<a id="__codelineno-8-30" name="__codelineno-8-30" href="#__codelineno-8-30"></a>                                  fixed count.
+<a id="__codelineno-8-31" name="__codelineno-8-31" href="#__codelineno-8-31"></a>  --top-percentile FLOAT          Top X%% of features to select per metric
+<a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a>                                  (AUC, MI). The union of both sets feeds into
+<a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a>                                  models.  [default: 10.0]
+<a id="__codelineno-8-34" name="__codelineno-8-34" href="#__codelineno-8-34"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
+<a id="__codelineno-8-35" name="__codelineno-8-35" href="#__codelineno-8-35"></a>                                  computation in dashboards. Lower values
+<a id="__codelineno-8-36" name="__codelineno-8-36" href="#__codelineno-8-36"></a>                                  reduce memory usage.  [default: 500]
+<a id="__codelineno-8-37" name="__codelineno-8-37" href="#__codelineno-8-37"></a>  --shap-features INTEGER         Max features to visualize in SHAP
+<a id="__codelineno-8-38" name="__codelineno-8-38" href="#__codelineno-8-38"></a>                                  beeswarm/waterfall plots.  [default: 10]
+<a id="__codelineno-8-39" name="__codelineno-8-39" href="#__codelineno-8-39"></a>  --resume                        Skip evaluators whose model results already
+<a id="__codelineno-8-40" name="__codelineno-8-40" href="#__codelineno-8-40"></a>                                  exist in the output directory.
+<a id="__codelineno-8-41" name="__codelineno-8-41" href="#__codelineno-8-41"></a>  --compute-univariate-auc        Compute per-feature univariate LR AUC.
+<a id="__codelineno-8-42" name="__codelineno-8-42" href="#__codelineno-8-42"></a>                                  Required for hybrid selection (default:
+<a id="__codelineno-8-43" name="__codelineno-8-43" href="#__codelineno-8-43"></a>                                  True).  [default: True]
 </code></pre></div>
 
 

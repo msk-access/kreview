@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1436,6 +1436,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.mutual_info_score" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mutual_info_score
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.set_theme" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1720,6 +1731,17 @@
     <span class="md-ellipsis">
       
         univariate_auc
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.mutual_info_score" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mutual_info_score
       
     </span>
   </a>
@@ -2146,6 +2168,121 @@ Returns empty list on any parse failure (no silent corruption).</p>
             <td>
               <div class="doc-md-description">
                 <p>there are too few samples per class, or <abbr title="Cross-Validation">CV</abbr> fails.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.mutual_info_score" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">mutual_info_score</span><span class="p">(</span><span class="n">feature_col</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compute mutual information between a single feature and binary target.</p>
+<p>Uses sklearn's mutual_info_classif with k=3 nearest neighbors to estimate
+the non-linear dependency between a feature and the label. Unlike <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>,
+mutual information captures arbitrary (non-monotonic) relationships.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>feature_col</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>pandas Series or array-like of a single feature.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>binary label array (0/1).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>random_state</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>random seed for reproducibility.</p>
+              </div>
+            </td>
+            <td>
+                  <code>42</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mutual information score (float, &gt;= 0). Higher means more informative.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Returns 0.0 if the feature is constant or computation fails.</p>
               </div>
             </td>
           </tr>
