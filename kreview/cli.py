@@ -269,10 +269,13 @@ def _render_quarto_report(
 
     quarto_bin = _find_quarto()
     out_html = Path(report_dir) / f"{feat_name}_dashboard.html"
+    log_file = Path(report_dir) / f"{feat_name}_render.log"
     cmd = [
         quarto_bin,
         "render",
         "report_template.qmd",
+        "--log-level",
+        "DEBUG",
         "-P",
         f"matrix_path:{Path(matrix_path).absolute()}",
         "-P",
@@ -290,7 +293,7 @@ def _render_quarto_report(
     ]
 
     try:
-        subprocess.run(
+        result = subprocess.run(
             cmd,
             env=env,
             capture_output=True,
@@ -301,15 +304,26 @@ def _render_quarto_report(
         )
         return True, str(out_html)
     except subprocess.CalledProcessError as exc:
-        # Combine stdout + stderr — pandoc errors often land in stdout
-        parts = []
-        for label, stream in [("STDOUT", exc.stdout), ("STDERR", exc.stderr)]:
-            s = (stream or "").strip()
-            if s:
-                if len(s) > 800:
-                    s = s[:500] + "\n...[truncated]...\n" + s[-300:]
-                parts.append(f"--- {label} ---\n{s}")
-        return False, "\n".join(parts) if parts else f"Exit code {exc.returncode} (no output)"
+        # Write full output to disk for debugging — truncated console output hides errors
+        with open(log_file, "w") as f:
+            f.write(f"=== QUARTO RENDER DEBUG LOG: {feat_name} ===\n")
+            f.write(f"CMD: {' '.join(cmd)}\n")
+            f.write(f"EXIT CODE: {exc.returncode}\n\n")
+            f.write("=== STDOUT ===\n")
+            f.write(exc.stdout or "(empty)")
+            f.write("\n\n=== STDERR ===\n")
+            f.write(exc.stderr or "(empty)")
+        # Return concise error + pointer to full log
+        err_summary = f"Exit code {exc.returncode}. Full log: {log_file}\n"
+        # Extract actual error lines (skip cell progress noise)
+        for stream in [exc.stdout, exc.stderr]:
+            if not stream:
+                continue
+            for line in stream.splitlines():
+                line_s = line.strip()
+                if any(kw in line_s.lower() for kw in ["error", "exception", "traceback", "failed", "fatal", "not found"]):
+                    err_summary += f"  >> {line_s}\n"
+        return False, err_summary
     except subprocess.TimeoutExpired:
         return False, "Timeout (>600s)"
 
