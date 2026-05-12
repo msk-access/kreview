@@ -66,7 +66,7 @@ def show_plotly(fig, filename=None):
         fig.update_layout(margin=dict(b=40, t=30, l=10, r=10))
         html_str = fig.to_html(
             full_html=False,
-            include_plotlyjs='cdn' if not _plotly_loaded else False,
+            include_plotlyjs=True if not _plotly_loaded else False,
             include_mathjax=False,
             config={"responsive": True}
         )

@@ -301,7 +301,11 @@ def _render_quarto_report(
         )
         return True, str(out_html)
     except subprocess.CalledProcessError as exc:
-        return False, exc.stderr[-1500:]
+        # Show head of stderr (actual error) + tail (context)
+        err = exc.stderr or ""
+        if len(err) > 1500:
+            err = err[:1000] + "\n...[truncated]...\n" + err[-500:]
+        return False, err
     except subprocess.TimeoutExpired:
         return False, "Timeout (>600s)"
 
