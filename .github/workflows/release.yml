@@ -8,16 +8,13 @@ on:
       - "v*.*.*"
 
 jobs:
+  # ── Job 1: Build, Publish, and Push ──────────────────────────────────────────
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pages: write         # Required for GitHub Pages Actions Deployment
-      id-token: write      # Required for PyPI Trusted Publisher OIDC & Pages
+      id-token: write      # Required for PyPI Trusted Publisher OIDC
       packages: write      # Required for GHCR (Docker) Publishing
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v5
@@ -88,7 +85,21 @@ jobs:
           mike deploy --push --update-aliases $VERSION latest
           mike set-default --push latest
 
-      - name: Checkout newly built gh-pages branch
+  # ── Job 2: Deploy to GitHub Pages ────────────────────────────────────────────
+  # Separated from the release job so that environment protection rules on
+  # 'github-pages' do not block PyPI / GHCR publishing.
+  deploy-pages:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout gh-pages branch
         uses: actions/checkout@v4
         with:
           ref: gh-pages

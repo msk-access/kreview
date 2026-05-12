@@ -145,7 +145,7 @@ To assess whether the same features are consistently ranked as important across 
 
 ## JSON Output Schema Summary
 
-`single_feature_model()` produces **44 JSON fields** per feature set:
+`single_feature_model()` produces **45 JSON fields** per feature set:
 
 | Category | Fields | Count |
 |----------|--------|-------|
@@ -162,3 +162,4 @@ To assess whether the same features are consistently ranked as important across 
 | Feature Importances | `rf_feature_importances`, `top_features` | 2 |
 | AUC Deltas | `auc_delta_rf_lr`, `auc_delta_xgb_rf` | 2 |
 | Subgroups | `cancer_type_stats`, `assay_stats` | 2 |
+| Selection QC | `selection_qc` (method, overlap stats, feature counts) | 1 |
