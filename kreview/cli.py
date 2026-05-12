@@ -301,11 +301,15 @@ def _render_quarto_report(
         )
         return True, str(out_html)
     except subprocess.CalledProcessError as exc:
-        # Show head of stderr (actual error) + tail (context)
-        err = exc.stderr or ""
-        if len(err) > 1500:
-            err = err[:1000] + "\n...[truncated]...\n" + err[-500:]
-        return False, err
+        # Combine stdout + stderr — pandoc errors often land in stdout
+        parts = []
+        for label, stream in [("STDOUT", exc.stdout), ("STDERR", exc.stderr)]:
+            s = (stream or "").strip()
+            if s:
+                if len(s) > 800:
+                    s = s[:500] + "\n...[truncated]...\n" + s[-300:]
+                parts.append(f"--- {label} ---\n{s}")
+        return False, "\n".join(parts) if parts else f"Exit code {exc.returncode} (no output)"
     except subprocess.TimeoutExpired:
         return False, "Timeout (>600s)"
 
