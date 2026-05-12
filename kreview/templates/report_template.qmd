@@ -166,6 +166,8 @@ else:
     top_feats = numeric_cols
 
 # Load Models
+# Clamp SHAP display count to actual selected feature count (top_percentile may select fewer)
+_shap_display_n = min(_shap_display_n, len(top_feats))
 import shap
 lr_model = None
 rf_model = None
@@ -1414,11 +1416,10 @@ if eval_df is not None and "univariate_auc" in eval_df.columns and "mutual_info"
         category_orders={"selection": ["Selected (Both)", "Selected (AUC Only)", "Selected (MI Only)", "Dropped"]}
     )
     _ = fig_sel.update_layout(
-        **LAYOUT_DEFAULTS,
+        **{**LAYOUT_DEFAULTS, "legend": dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5)},
         margin=dict(l=10, r=10, t=30, b=10),
         xaxis_title="Univariate AUC (linear predictive power)",
         yaxis_title="Mutual Information (non-linear relevance)",
-        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5)
     )
     show_plotly(fig_sel, filename="selection_scatter")
 else:
