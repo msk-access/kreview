@@ -43,7 +43,7 @@ process KREVIEW_RUN {
         --cbioportal-dir "${cbioportal_dir}" \\
         --krewlyzer-dir "${krewlyzer_results}" \\
         --cv-folds ${params.cv_folds ?: 5} \\
-        --top-n ${params.top_n ?: 50} \\
+        --top-percentile ${params.top_percentile ?: 10.0} \\
         --impute-strategy ${params.impute_strategy ?: 'median'} \\
         --chunk-size ${params.chunk_size} \\
         --shap-samples ${params.shap_samples ?: 500} \\
