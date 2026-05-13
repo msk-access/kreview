@@ -285,10 +285,6 @@ def run(
         None, help="Comma-separated features to run"
     ),
     tier: Optional[int] = typer.Option(None, help="Run features of this tier only"),
-    workers: int = typer.Option(4, help="Total processes"),
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Enable verbose logging"
-    ),
     cvd_safe: bool = typer.Option(
         False,
         "--cvd-safe",
@@ -371,7 +367,7 @@ def run(
             "Use --top-percentile instead. Ignoring --top-n in favor of --top-percentile."
         )
 
-    _echo(f"=== kreview run (verbose={verbose}, workers={workers}) ===")
+    _echo("=== kreview run ===")
     _echo("Configuration:")
     _echo(f"  --cancer-samplesheet : {cancer_samplesheet}")
     _echo(f"  --healthy-xs1       : {healthy_xs1_samplesheet}")
@@ -383,7 +379,6 @@ def run(
     _echo(f"  --min-variants      : {min_variants}")
     _echo(f"  --features          : {features or 'ALL'}")
     _echo(f"  --tier              : {tier or 'ALL'}")
-    _echo(f"  --workers           : {workers}")
     _echo(f"  --cv-folds          : {cv_folds}")
     _echo(f"  --top-percentile    : {top_percentile}")
     _echo(f"  --impute-strategy   : {impute_strategy}")
@@ -395,7 +390,6 @@ def run(
     _echo(f"  --export-duckdb     : {export_duckdb}")
     _echo(f"  --resume            : {resume}")
     _echo(f"  --compute-univariate-auc : {compute_univariate_auc}")
-    _echo(f"  --verbose           : {verbose}")
     _echo("")
 
     # ── Step 1: Labels ──
@@ -510,12 +504,8 @@ def run(
                 try:
                     res = e_instance.extract(sample_df)
                     if res:
-                        if isinstance(res, pd.DataFrame):
-                            res["SAMPLE_ID"] = sample_id
-                            partial_results.append(res)
-                        else:
-                            res["SAMPLE_ID"] = sample_id
-                            partial_results.append(pd.DataFrame([res]))
+                        res["SAMPLE_ID"] = sample_id
+                        partial_results.append(pd.DataFrame([res]))
                         chunk_extracted += 1
                 except Exception as exc:
                     log.warning(
