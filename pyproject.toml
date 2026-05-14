@@ -113,6 +113,14 @@ ignore = ["E402", "F401", "E501", "E712", "E741", "E701"]
 
 [tool.black]
 target-version = ["py310"]
+# Notebooks are formatted by nbdev_clean, not black directly.
+# Running black --check on .ipynb files causes CI flakiness across black versions.
+extend-exclude = '''
+(
+  \.ipynb
+)
+'''
+
 
 [tool.nbdev]
 
