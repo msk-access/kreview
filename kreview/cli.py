@@ -60,10 +60,13 @@ def label(
     min_variants: int = typer.Option(
         1, help="Min # variants passing VAF for Possible ctDNA+"
     ),
-    chunk_size: int = typer.Option(
-        500,
+    chunk_size: str = typer.Option(
+        "auto",
         "--chunk-size",
-        help="Batch size for DuckDB file loading over SFTP network mounts",
+        help=(
+            "Samples per DuckDB read batch. 'auto' (default) probes parquet "
+            "row density at runtime, or pass an integer to override."
+        ),
     ),
 ):
     """Generate ctDNA labels without feature evaluation."""
@@ -89,9 +92,9 @@ def label(
         str(cbioportal_dir),
         [],
     )
-    config = LabelConfig(
-        min_vaf=min_vaf, min_variants=min_variants, chunk_size=chunk_size
-    )
+    # LabelConfig uses a fixed chunk_size — metadata is always ~1 row/sample,
+    # so we load in a single large batch regardless of user's --chunk-size.
+    config = LabelConfig(min_vaf=min_vaf, min_variants=min_variants, chunk_size=15_000)
 
     labeler = CtDNALabeler(paths, config)
     labels = labeler.label_all()
@@ -304,10 +307,14 @@ def run(
         "--export-duckdb",
         help="Export a persistent duckdb data lake containing all feature matrices",
     ),
-    chunk_size: int = typer.Option(
-        500,
+    chunk_size: str = typer.Option(
+        "auto",
         "--chunk-size",
-        help="Batch size for DuckDB file loading over SFTP network mounts",
+        help=(
+            "Samples per DuckDB read batch. 'auto' (default) probes parquet "
+            "row density at runtime, or pass an integer to override "
+            "(e.g. --chunk-size 200)."
+        ),
     ),
     top_n: int = typer.Option(
         None,
@@ -392,6 +399,22 @@ def run(
     _echo(f"  --compute-univariate-auc : {compute_univariate_auc}")
     _echo("")
 
+    # ── Validate --chunk-size ──
+    # 'auto' passes through to iter_feature_chunks which probes row density.
+    # An integer string is converted; anything else is rejected early.
+    effective_chunk: int | str = chunk_size
+    if chunk_size != "auto":
+        try:
+            effective_chunk = int(chunk_size)
+            if effective_chunk < 1:
+                raise ValueError("chunk_size must be positive")
+        except ValueError:
+            _echo(
+                f"ERROR: --chunk-size must be 'auto' or a positive integer, "
+                f"got '{chunk_size}'"
+            )
+            raise typer.Exit(code=1)
+
     # ── Step 1: Labels ──
     _echo("Step 1: Generating Labels...")
     t0 = time.time()
@@ -402,9 +425,8 @@ def run(
         str(cbioportal_dir),
         list(krewlyzer_dir),
     )
-    config = LabelConfig(
-        min_vaf=min_vaf, min_variants=min_variants, chunk_size=chunk_size
-    )
+    # LabelConfig uses a fixed chunk_size — metadata is always ~1 row/sample.
+    config = LabelConfig(min_vaf=min_vaf, min_variants=min_variants, chunk_size=15_000)
     labeler = CtDNALabeler(paths, config)
     labels_df = labeler.label_all()
     _echo(f"  Labels: {len(labels_df)} samples in {time.time()-t0:.1f}s")
@@ -473,7 +495,7 @@ def run(
         # Peak memory: ~5GB per chunk instead of >250GB for the full cohort.
         _echo(f"Step 3: Streaming & extracting '{e.name}'...")
         t1 = time.time()
-        _echo(f"  Streaming cohort from DuckDB (chunk_size={chunk_size})...")
+        _echo(f"  Streaming cohort from DuckDB (chunk_size={effective_chunk})...")
 
         partial_results = []
         failed_samples = []
@@ -485,7 +507,7 @@ def run(
             str(e.source_file),
             paths.krewlyzer_dirs,
             set(all_sample_ids),
-            chunk_size=chunk_size,
+            chunk_size=effective_chunk,
         ):
             sid_col = "sample_id" if "sample_id" in chunk_df.columns else "SAMPLE_ID"
             chunk_sample_ids = chunk_df[sid_col].unique()
