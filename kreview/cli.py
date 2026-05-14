@@ -348,7 +348,7 @@ def run(
     ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
-    from kreview.core import Paths, LabelConfig, iter_feature_chunks
+    from kreview.core import Paths, LabelConfig, iter_feature_chunks, run_feature_sql
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
 
@@ -488,91 +488,135 @@ def run(
                     )
                 continue
 
-        # ── Step 3: Stream + Extract (memory-safe) ──
-        # Instead of loading all data into memory and sharding, we stream
-        # DuckDB chunks and extract features inline. Each chunk contains
-        # complete samples (one file = one sample), so extraction is safe.
-        # Peak memory: ~5GB per chunk instead of >250GB for the full cohort.
-        _echo(f"Step 3: Streaming & extracting '{e.name}'...")
+        # ── Step 3: Extract features ──
+        # Two paths: SQL pushdown (fast, single DuckDB pass) or chunked
+        # Python streaming (memory-safe, per-sample extract() loop).
+        # The evaluator declares which path it supports via extract_sql().
+        _echo(f"Step 3: Extracting '{e.name}'...")
         t1 = time.time()
-        _echo(f"  Streaming cohort from DuckDB (chunk_size={effective_chunk})...")
 
-        partial_results = []
-        failed_samples = []
-        total_samples_processed = 0
-        total_rows_read = 0
-        e_instance = e  # The evaluator instance for calling .extract()
+        # --- Path A: SQL Pushdown (if evaluator supports it) ---
+        sql_query = e.extract_sql()
+        feat_matrix = None
 
-        for chunk_df, chunk_idx, n_chunks in iter_feature_chunks(
-            str(e.source_file),
-            paths.krewlyzer_dirs,
-            set(all_sample_ids),
-            chunk_size=effective_chunk,
-        ):
-            sid_col = "sample_id" if "sample_id" in chunk_df.columns else "SAMPLE_ID"
-            chunk_sample_ids = chunk_df[sid_col].unique()
-            chunk_n_rows = len(chunk_df)
-            total_rows_read += chunk_n_rows
+        if sql_query is not None:
+            _echo(f"  Using SQL pushdown for '{e.name}'...")
+            sql_df = run_feature_sql(
+                sql_query,
+                str(e.source_file),
+                paths.krewlyzer_dirs,
+                set(all_sample_ids),
+            )
+            if not sql_df.empty:
+                feat_matrix = sql_df
+                extract_sec = time.time() - t1
+                n_samples = (
+                    sql_df["sample_id"].nunique()
+                    if "sample_id" in sql_df.columns
+                    else len(sql_df)
+                )
+                _echo(
+                    f"  SQL pushdown complete: {n_samples} samples "
+                    f"in {extract_sec:.1f}s"
+                )
+                # Normalize sample_id column name for downstream merge
+                if "sample_id" in sql_df.columns and "SAMPLE_ID" not in sql_df.columns:
+                    feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
+            else:
+                _echo(
+                    f"  SQL pushdown returned empty result for '{e.name}', "
+                    f"falling back to chunked extraction..."
+                )
+                sql_query = None  # Force fallback to Path B
 
+        # --- Path B: Chunked Python streaming (default fallback) ---
+        if sql_query is None:
             _echo(
-                f"  Chunk {chunk_idx + 1}/{n_chunks}: "
-                f"{len(chunk_sample_ids)} samples, {chunk_n_rows:,} rows"
+                f"  Streaming cohort from DuckDB " f"(chunk_size={effective_chunk})..."
             )
+            partial_results = []
+            failed_samples = []
+            total_samples_processed = 0
+            total_rows_read = 0
+            e_instance = e
 
-            # Extract features from each sample within this chunk
-            chunk_extracted = 0
-            for sample_id in chunk_sample_ids:
-                sample_df = chunk_df[chunk_df[sid_col] == sample_id]
-                try:
-                    res = e_instance.extract(sample_df)
-                    if res:
-                        res["SAMPLE_ID"] = sample_id
-                        partial_results.append(pd.DataFrame([res]))
-                        chunk_extracted += 1
-                except Exception as exc:
-                    log.warning(
-                        "sample_extraction_failed",
-                        evaluator=e.name,
-                        sample_id=sample_id,
-                        error=str(exc),
-                    )
-                    failed_samples.append(sample_id)
+            for chunk_df, chunk_idx, n_chunks in iter_feature_chunks(
+                str(e.source_file),
+                paths.krewlyzer_dirs,
+                set(all_sample_ids),
+                chunk_size=effective_chunk,
+            ):
+                sid_col = (
+                    "sample_id" if "sample_id" in chunk_df.columns else "SAMPLE_ID"
+                )
+                chunk_sample_ids = chunk_df[sid_col].unique()
+                chunk_n_rows = len(chunk_df)
+                total_rows_read += chunk_n_rows
 
-            total_samples_processed += len(chunk_sample_ids)
-            _echo(f"    Extracted {chunk_extracted}/{len(chunk_sample_ids)} samples")
+                _echo(
+                    f"  Chunk {chunk_idx + 1}/{n_chunks}: "
+                    f"{len(chunk_sample_ids)} samples, {chunk_n_rows:,} rows"
+                )
 
-            # Explicit memory release — reclaim ~5GB before next chunk
-            del chunk_df
+                # Extract features from each sample within this chunk
+                chunk_extracted = 0
+                for sample_id in chunk_sample_ids:
+                    sample_df = chunk_df[chunk_df[sid_col] == sample_id]
+                    try:
+                        res = e_instance.extract(sample_df)
+                        if res:
+                            res["SAMPLE_ID"] = sample_id
+                            partial_results.append(pd.DataFrame([res]))
+                            chunk_extracted += 1
+                    except Exception as exc:
+                        log.warning(
+                            "sample_extraction_failed",
+                            evaluator=e.name,
+                            sample_id=sample_id,
+                            error=str(exc),
+                        )
+                        failed_samples.append(sample_id)
 
-        if total_samples_processed == 0:
-            _echo(f"  WARNING: No data found for {e.name}, skipping")
-            continue
+                total_samples_processed += len(chunk_sample_ids)
+                _echo(
+                    f"    Extracted {chunk_extracted}/"
+                    f"{len(chunk_sample_ids)} samples"
+                )
 
-        extract_sec = time.time() - t1
-        _echo(
-            f"  Extraction complete: {total_samples_processed} samples, "
-            f"{total_rows_read:,} rows read in {extract_sec:.1f}s"
-        )
+                # Explicit memory release — reclaim ~5GB before next chunk
+                del chunk_df
 
-        if failed_samples:
-            failed_path = out_path / f"{e.name}_failed_samples.csv"
-            pd.DataFrame({"SAMPLE_ID": failed_samples}).to_csv(failed_path, index=False)
+            if total_samples_processed == 0:
+                _echo(f"  WARNING: No data found for {e.name}, skipping")
+                continue
+
+            extract_sec = time.time() - t1
             _echo(
-                f"  WARNING: {len(failed_samples)} samples failed extraction. "
-                f"Saved to {failed_path.name}"
-            )
-            log.warning(
-                "extraction_failures",
-                evaluator=e.name,
-                n_failed=len(failed_samples),
-                output=str(failed_path),
+                f"  Extraction complete: {total_samples_processed} samples, "
+                f"{total_rows_read:,} rows read in {extract_sec:.1f}s"
             )
 
-        if not partial_results:
-            _echo(f"  WARNING: No results for {e.name}, skipping")
-            continue
+            if failed_samples:
+                failed_path = out_path / f"{e.name}_failed_samples.csv"
+                pd.DataFrame({"SAMPLE_ID": failed_samples}).to_csv(
+                    failed_path, index=False
+                )
+                _echo(
+                    f"  WARNING: {len(failed_samples)} samples failed extraction. "
+                    f"Saved to {failed_path.name}"
+                )
+                log.warning(
+                    "extraction_failures",
+                    evaluator=e.name,
+                    n_failed=len(failed_samples),
+                    output=str(failed_path),
+                )
 
-        feat_matrix = pd.concat(partial_results, ignore_index=True)
+            if not partial_results:
+                _echo(f"  WARNING: No results for {e.name}, skipping")
+                continue
+
+            feat_matrix = pd.concat(partial_results, ignore_index=True)
         merged = pd.merge(labels_df, feat_matrix, on="SAMPLE_ID", how="inner")
         out_p = out_path / f"{e.name}_matrix.parquet"
         merged.to_parquet(out_p, index=False)

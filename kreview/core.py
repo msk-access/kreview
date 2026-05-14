@@ -37,6 +37,7 @@ __all__ = [
     "load_feature_cohort",
     "iter_feature_chunks",
     "load_metadata_cohort",
+    "run_feature_sql",
     "load_sample_feature",
     "load_sample_metadata",
     "make_variant_key",
@@ -627,6 +628,75 @@ def load_metadata_cohort(
     return load_feature_cohort(
         ".metadata.parquet", results_dirs, sample_ids, chunk_size=chunk_size
     )
+
+
+def run_feature_sql(
+    sql_query: str,
+    feature_suffix: str,
+    results_dirs: list[Path],
+    sample_ids: list[str] | set[str] | None = None,
+    conn: duckdb.DuckDBPyConnection | None = None,
+) -> pd.DataFrame:
+    """Execute a full-cohort SQL extraction in a single DuckDB pass.
+
+    This is the SQL pushdown alternative to ``iter_feature_chunks`` +
+    per-sample ``extract()``. It runs the evaluator's SQL query against
+    all discovered parquet files at once, returning one row per sample.
+
+    The query must contain a ``read_parquet(?, ...)`` placeholder that
+    accepts the file path list.
+
+    Args:
+        sql_query: DuckDB SQL with ``?`` placeholder for file paths.
+        feature_suffix: Parquet suffix (e.g. '.MDS.ontarget.parquet').
+        results_dirs: Krewlyzer output directories to scan.
+        sample_ids: Optional subset to filter to.
+        conn: Optional DuckDB connection.
+
+    Returns:
+        DataFrame with one row per sample, or empty DataFrame on failure.
+    """
+    file_paths = _discover_feature_paths(feature_suffix, results_dirs, sample_ids)
+    if not file_paths:
+        log.warning("run_feature_sql_no_files", feature=feature_suffix)
+        return pd.DataFrame()
+
+    if conn is None:
+        conn = get_duckdb_conn()
+
+    start = time.time()
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            df = conn.execute(sql_query, [file_paths]).df()
+            elapsed = time.time() - start
+            log.info(
+                "sql_pushdown_complete",
+                feature=feature_suffix,
+                n_files=len(file_paths),
+                n_rows=len(df),
+                n_samples=(
+                    df["sample_id"].nunique() if "sample_id" in df.columns else len(df)
+                ),
+                elapsed_sec=round(elapsed, 1),
+            )
+            return df
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                log.warning(
+                    "sql_pushdown_retry",
+                    feature=feature_suffix,
+                    attempt=attempt + 1,
+                    error=str(exc),
+                )
+                time.sleep(2**attempt)
+            else:
+                log.error(
+                    "sql_pushdown_failed",
+                    feature=feature_suffix,
+                    error=str(exc),
+                )
+                return pd.DataFrame()
 
 
 # %% ../nbs/00_core.ipynb #6d814a93
