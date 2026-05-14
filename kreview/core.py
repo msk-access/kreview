@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from functools import lru_cache
+import math
 import pandas as pd
 import duckdb
 import structlog
@@ -34,6 +35,7 @@ __all__ = [
     "get_duckdb_conn",
     "discover_available_samples",
     "load_feature_cohort",
+    "iter_feature_chunks",
     "load_metadata_cohort",
     "load_sample_feature",
     "load_sample_metadata",
@@ -322,27 +324,26 @@ def discover_available_samples(
 
 
 # %% ../nbs/00_core.ipynb #9b1bb0f9
-def load_feature_cohort(
+def _discover_feature_paths(
     feature_suffix: str,
     results_dirs: list[Path],
     sample_ids: list[str] | set[str] | None = None,
-    conn: duckdb.DuckDBPyConnection | None = None,
-    chunk_size: int = 500,
-) -> pd.DataFrame:
-    """Load one feature type across available samples using explicit file list.
+) -> list[str]:
+    """Discover and return the list of parquet file paths for a feature type.
 
-    ARCHITECTURE NOTE: We build an explicit file list from discovered samples
-    instead of using a glob pattern. This avoids DuckDB scanning thousands of
-    directories over network mounts (SFTP/NFS), which causes multi-minute stalls.
+    This is a pure I/O function (filesystem ls) — no parquet reads occur.
+    It is the shared first stage for both `load_feature_cohort` (batch) and
+    `iter_feature_chunks` (streaming).
+
+    Returns:
+        Sorted list of absolute file path strings. Empty list if no files found.
+
+    Raises:
+        ValueError: If results_dirs is empty.
     """
-    start_time = time.time()
-
     if not results_dirs:
         log.error("results_dirs_empty")
         raise ValueError("Must provide at least one krewlyzer results directory")
-
-    if conn is None:
-        conn = get_duckdb_conn()
 
     # Step 1: Discover valid samples (fast filesystem ls, no parquet reads)
     log.info("discovering_samples", n_dirs=len(results_dirs))
@@ -363,7 +364,7 @@ def load_feature_cohort(
 
     if not final_samples:
         log.warning("no_samples_available_for_cohort", feature=feature_suffix)
-        return pd.DataFrame()
+        return []
 
     log.info("building_file_list", n_samples=len(final_samples))
 
@@ -388,11 +389,28 @@ def load_feature_cohort(
 
     if not file_paths:
         log.warning("no_feature_files_found", feature=feature_suffix)
-        return pd.DataFrame()
 
-    log.info("reading_parquet_files", n_files=len(file_paths), chunk_size=chunk_size)
+    return file_paths
 
-    # Step 3: Read explicit file list (pass Python list directly, no subquery)
+
+def _read_parquet_chunk(
+    conn: duckdb.DuckDBPyConnection,
+    file_paths: list[str],
+    feature_suffix: str,
+    chunk_label: str = "",
+) -> pd.DataFrame:
+    """Read a batch of parquet files via DuckDB with retry logic.
+
+    Args:
+        conn: DuckDB connection (must be in the calling thread).
+        file_paths: List of absolute parquet file paths to read.
+        feature_suffix: Feature name for logging context.
+        chunk_label: Human-readable label for log messages.
+
+    Returns:
+        DataFrame with all rows from the batch, or empty DataFrame on
+        permanent failure after 3 retries.
+    """
     query = """
         SELECT *,
             regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id
@@ -403,42 +421,125 @@ def load_feature_cohort(
             hive_partitioning=false
         )
     """
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return conn.execute(query, [file_paths]).df()
+        except Exception as e:
+            err_str = str(e)
+            if attempt < max_retries - 1:
+                log.warning(
+                    "duckdb_io_retry",
+                    feature=feature_suffix,
+                    attempt=attempt + 1,
+                    chunk=chunk_label,
+                    error=err_str,
+                )
+                time.sleep(2**attempt)  # Exponential backoff for transient I/O
+            else:
+                log.error(
+                    "duckdb_chunk_read_failed",
+                    feature=feature_suffix,
+                    chunk=chunk_label,
+                    error=err_str,
+                )
+                return pd.DataFrame()
+
+
+def iter_feature_chunks(
+    feature_suffix: str,
+    results_dirs: list[Path],
+    sample_ids: list[str] | set[str] | None = None,
+    conn: duckdb.DuckDBPyConnection | None = None,
+    chunk_size: int = 500,
+):
+    """Stream feature data as chunks without accumulating in memory.
+
+    This is the memory-safe alternative to `load_feature_cohort`. Each chunk
+    contains complete samples (one parquet file = one sample), so chunk
+    boundaries never split a sample's data.
+
+    Yields:
+        (chunk_df, chunk_idx, n_chunks): A tuple of the DataFrame chunk,
+        the zero-based chunk index, and total number of chunks.
+
+    Raises:
+        ValueError: If results_dirs is empty.
+    """
+    file_paths = _discover_feature_paths(feature_suffix, results_dirs, sample_ids)
+    if not file_paths:
+        return  # Generator yields nothing — caller sees an empty iteration
+
+    if conn is None:
+        conn = get_duckdb_conn()
 
     conn.execute("SET threads=4;")  # Throttle SFTP I/O bursts
 
-    df_list = []
-    for i in range(0, len(file_paths), chunk_size):
-        chunk = file_paths[i : i + chunk_size]
-        max_retries = 3
+    n_chunks = math.ceil(len(file_paths) / chunk_size)
+    log.info(
+        "streaming_parquet_files",
+        feature=feature_suffix,
+        n_files=len(file_paths),
+        chunk_size=chunk_size,
+        n_chunks=n_chunks,
+    )
 
-        for attempt in range(max_retries):
-            try:
-                df_chunk = conn.execute(query, [chunk]).df()
-                df_list.append(df_chunk)
-                break
-            except Exception as e:
-                err_str = str(e)
-                if attempt < max_retries - 1:
-                    log.warning(
-                        "duckdb_io_retry",
-                        feature=feature_suffix,
-                        attempt=attempt + 1,
-                        chunk_start=i,
-                        error=err_str,
-                    )
-                    time.sleep(
-                        2**attempt
-                    )  # Exponential backoff for transient I/O failures
-                else:
-                    log.error(
-                        "feature_cohort_load_failed",
-                        feature=feature_suffix,
-                        error=err_str,
-                        chunk_start=i,
-                    )
-                    return pd.DataFrame()  # Permanent failure
+    for chunk_idx in range(n_chunks):
+        start = chunk_idx * chunk_size
+        batch = file_paths[start : start + chunk_size]
+        chunk_label = f"{chunk_idx + 1}/{n_chunks}"
 
-    df = pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
+        df_chunk = _read_parquet_chunk(conn, batch, feature_suffix, chunk_label)
+
+        if df_chunk.empty:
+            log.warning(
+                "empty_chunk",
+                feature=feature_suffix,
+                chunk=chunk_label,
+                n_files=len(batch),
+            )
+            continue  # Skip empty chunks, don't abort the whole stream
+
+        log.info(
+            "chunk_loaded",
+            feature=feature_suffix,
+            chunk=chunk_label,
+            n_samples=(
+                df_chunk["sample_id"].nunique()
+                if "sample_id" in df_chunk.columns
+                else 0
+            ),
+            n_rows=len(df_chunk),
+        )
+        yield df_chunk, chunk_idx, n_chunks
+
+
+def load_feature_cohort(
+    feature_suffix: str,
+    results_dirs: list[Path],
+    sample_ids: list[str] | set[str] | None = None,
+    conn: duckdb.DuckDBPyConnection | None = None,
+    chunk_size: int = 500,
+) -> pd.DataFrame:
+    """Load one feature type across available samples into a single DataFrame.
+
+    This is the backward-compatible batch loader. For memory-constrained
+    environments (e.g., HPC with 64GB RAM), use `iter_feature_chunks` instead
+    to process data in a streaming fashion.
+
+    ARCHITECTURE NOTE: We build an explicit file list from discovered samples
+    instead of using a glob pattern. This avoids DuckDB scanning thousands of
+    directories over network mounts (SFTP/NFS), which causes multi-minute stalls.
+    """
+    start_time = time.time()
+
+    chunks = []
+    for df_chunk, _idx, _total in iter_feature_chunks(
+        feature_suffix, results_dirs, sample_ids, conn, chunk_size
+    ):
+        chunks.append(df_chunk)
+
+    df = pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
 
     elapsed = time.time() - start_time
     if df.empty:
@@ -451,12 +552,6 @@ def load_feature_cohort(
             feature=feature_suffix,
             n_samples=df["sample_id"].nunique(),
             n_rows=len(df),
-            elapsed_sec=round(elapsed, 2),
-        )
-        log.info(
-            "load_complete",
-            n_samples=df["sample_id"].nunique(),
-            n_rows=len(df),
             elapsed_sec=round(elapsed, 1),
         )
     return df
@@ -465,6 +560,7 @@ def load_feature_cohort(
 def load_metadata_cohort(
     results_dirs: list[Path], sample_ids=None, chunk_size: int = 500
 ):
+    """Load metadata for all samples. Thin wrapper around load_feature_cohort."""
     return load_feature_cohort(
         ".metadata.parquet", results_dirs, sample_ids, chunk_size=chunk_size
     )

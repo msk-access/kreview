@@ -48,7 +48,6 @@ process KREVIEW_RUN {
         --chunk-size ${params.chunk_size} \\
         --shap-samples ${params.shap_samples ?: 500} \\
         --shap-features ${params.shap_features ?: 10} \\
-        --workers ${task.cpus} \\
         ${features_flag} \\
         ${tier_flag} \\
         --resume \\

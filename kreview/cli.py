@@ -116,8 +116,6 @@ def features_list():
 # %% ../nbs/90_cli.ipynb #0206e0c1
 import numpy as np
 import time
-from concurrent.futures import ProcessPoolExecutor
-import concurrent.futures
 
 
 def _impute(df, strategy: str):
@@ -143,72 +141,6 @@ def _impute(df, strategy: str):
             fallback="zero",
         )
     return df.fillna(0)  # default: zero
-
-
-def _extract_from_dataframe(e_name, df_chunk, verbose=False):
-    """Extract features from a pre-loaded DataFrame chunk. Runs in child process.
-
-    Key design: The parent process loads the full cohort from DuckDB ONCE,
-    then shards the DataFrame to workers. This avoids N parallel glob scans
-    over network mounts which causes I/O deadlock.
-    """
-    from kreview.registry import get_all_evaluators
-    import sys
-
-    def _log(msg, **kw):
-        extras = " ".join(f"{k}={v}" for k, v in kw.items())
-        ts = time.strftime("%H:%M:%S")
-        print(f"[{ts}] [worker] {msg}  {extras}", file=sys.stderr, flush=True)
-
-    evaluators = {ev.name: ev for ev in get_all_evaluators()}
-    if e_name not in evaluators:
-        _log("ERROR: evaluator_not_found", name=e_name)
-        return e_name, False, f"Evaluator '{e_name}' not found in registry"
-    e = evaluators[e_name]
-
-    sid_col = "sample_id" if "sample_id" in df_chunk.columns else "SAMPLE_ID"
-    uniq_sids = df_chunk[sid_col].unique()
-    _log("chunk_started", evaluator=e_name, samples=len(uniq_sids), rows=len(df_chunk))
-
-    try:
-        t0 = time.time()
-        extracted_rows = []
-        for i, sample_id in enumerate(uniq_sids):
-            samp_data = df_chunk[df_chunk[sid_col] == sample_id]
-            res = e.extract(samp_data)
-            if res is not None:
-                if isinstance(res, pd.DataFrame):
-                    res["SAMPLE_ID"] = sample_id
-                    extracted_rows.append(res)
-                else:
-                    res["SAMPLE_ID"] = sample_id
-                    extracted_rows.append(pd.DataFrame([res]))
-
-            if verbose and i > 0 and i % 200 == 0:
-                _log("extracting", evaluator=e_name, processed=i, total=len(uniq_sids))
-
-        feat_matrix = (
-            pd.concat(extracted_rows, ignore_index=True)
-            if extracted_rows
-            else pd.DataFrame()
-        )
-        total_sec = time.time() - t0
-        _log(
-            "chunk_completed",
-            evaluator=e_name,
-            matrix_rows=len(feat_matrix),
-            cols=len(feat_matrix.columns) if not feat_matrix.empty else 0,
-            seconds=f"{total_sec:.1f}",
-        )
-        return e_name, True, feat_matrix
-
-    except Exception as exc:
-        import traceback
-
-        _log("CHUNK_CRASHED", evaluator=e_name, error=str(exc))
-        traceback.print_exc(file=sys.stderr)
-        sys.stderr.flush()
-        return e_name, False, str(exc)
 
 
 def _find_quarto() -> str:
@@ -293,7 +225,7 @@ def _render_quarto_report(
     ]
 
     try:
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             env=env,
             capture_output=True,
@@ -321,7 +253,17 @@ def _render_quarto_report(
                 continue
             for line in stream.splitlines():
                 line_s = line.strip()
-                if any(kw in line_s.lower() for kw in ["error", "exception", "traceback", "failed", "fatal", "not found"]):
+                if any(
+                    kw in line_s.lower()
+                    for kw in [
+                        "error",
+                        "exception",
+                        "traceback",
+                        "failed",
+                        "fatal",
+                        "not found",
+                    ]
+                ):
                     err_summary += f"  >> {line_s}\n"
         return False, err_summary
     except subprocess.TimeoutExpired:
@@ -343,10 +285,6 @@ def run(
         None, help="Comma-separated features to run"
     ),
     tier: Optional[int] = typer.Option(None, help="Run features of this tier only"),
-    workers: int = typer.Option(4, help="Total processes"),
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Enable verbose logging"
-    ),
     cvd_safe: bool = typer.Option(
         False,
         "--cvd-safe",
@@ -403,12 +341,11 @@ def run(
     ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
-    from kreview.core import Paths, LabelConfig, load_feature_cohort
+    from kreview.core import Paths, LabelConfig, iter_feature_chunks
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
 
     from kreview.eval_engine import evaluate_feature, single_feature_model
-    import time
     import glob
     import json
 
@@ -430,7 +367,7 @@ def run(
             "Use --top-percentile instead. Ignoring --top-n in favor of --top-percentile."
         )
 
-    _echo(f"=== kreview run (verbose={verbose}, workers={workers}) ===")
+    _echo("=== kreview run ===")
     _echo("Configuration:")
     _echo(f"  --cancer-samplesheet : {cancer_samplesheet}")
     _echo(f"  --healthy-xs1       : {healthy_xs1_samplesheet}")
@@ -442,7 +379,6 @@ def run(
     _echo(f"  --min-variants      : {min_variants}")
     _echo(f"  --features          : {features or 'ALL'}")
     _echo(f"  --tier              : {tier or 'ALL'}")
-    _echo(f"  --workers           : {workers}")
     _echo(f"  --cv-folds          : {cv_folds}")
     _echo(f"  --top-percentile    : {top_percentile}")
     _echo(f"  --impute-strategy   : {impute_strategy}")
@@ -454,7 +390,6 @@ def run(
     _echo(f"  --export-duckdb     : {export_duckdb}")
     _echo(f"  --resume            : {resume}")
     _echo(f"  --compute-univariate-auc : {compute_univariate_auc}")
-    _echo(f"  --verbose           : {verbose}")
     _echo("")
 
     # ── Step 1: Labels ──
@@ -531,81 +466,85 @@ def run(
                     )
                 continue
 
-        # ── Step 3: Load + Shard + Extract ──
-        _echo(f"Step 3: Loading & extracting '{e.name}'...")
+        # ── Step 3: Stream + Extract (memory-safe) ──
+        # Instead of loading all data into memory and sharding, we stream
+        # DuckDB chunks and extract features inline. Each chunk contains
+        # complete samples (one file = one sample), so extraction is safe.
+        # Peak memory: ~5GB per chunk instead of >250GB for the full cohort.
+        _echo(f"Step 3: Streaming & extracting '{e.name}'...")
         t1 = time.time()
-        _echo(f"  Loading cohort from DuckDB (chunk_size={chunk_size})...")
-        df_full = load_feature_cohort(
+        _echo(f"  Streaming cohort from DuckDB (chunk_size={chunk_size})...")
+
+        partial_results = []
+        failed_samples = []
+        total_samples_processed = 0
+        total_rows_read = 0
+        e_instance = e  # The evaluator instance for calling .extract()
+
+        for chunk_df, chunk_idx, n_chunks in iter_feature_chunks(
             str(e.source_file),
             paths.krewlyzer_dirs,
             set(all_sample_ids),
             chunk_size=chunk_size,
-        )
+        ):
+            sid_col = "sample_id" if "sample_id" in chunk_df.columns else "SAMPLE_ID"
+            chunk_sample_ids = chunk_df[sid_col].unique()
+            chunk_n_rows = len(chunk_df)
+            total_rows_read += chunk_n_rows
 
-        if df_full.empty:
+            _echo(
+                f"  Chunk {chunk_idx + 1}/{n_chunks}: "
+                f"{len(chunk_sample_ids)} samples, {chunk_n_rows:,} rows"
+            )
+
+            # Extract features from each sample within this chunk
+            chunk_extracted = 0
+            for sample_id in chunk_sample_ids:
+                sample_df = chunk_df[chunk_df[sid_col] == sample_id]
+                try:
+                    res = e_instance.extract(sample_df)
+                    if res:
+                        res["SAMPLE_ID"] = sample_id
+                        partial_results.append(pd.DataFrame([res]))
+                        chunk_extracted += 1
+                except Exception as exc:
+                    log.warning(
+                        "sample_extraction_failed",
+                        evaluator=e.name,
+                        sample_id=sample_id,
+                        error=str(exc),
+                    )
+                    failed_samples.append(sample_id)
+
+            total_samples_processed += len(chunk_sample_ids)
+            _echo(f"    Extracted {chunk_extracted}/{len(chunk_sample_ids)} samples")
+
+            # Explicit memory release — reclaim ~5GB before next chunk
+            del chunk_df
+
+        if total_samples_processed == 0:
             _echo(f"  WARNING: No data found for {e.name}, skipping")
             continue
 
-        sid_col = "sample_id" if "sample_id" in df_full.columns else "SAMPLE_ID"
-        n_samples = df_full[sid_col].nunique()
+        extract_sec = time.time() - t1
         _echo(
-            f"  Loaded: {n_samples} samples, {len(df_full)} rows in {time.time()-t1:.1f}s"
+            f"  Extraction complete: {total_samples_processed} samples, "
+            f"{total_rows_read:,} rows read in {extract_sec:.1f}s"
         )
 
-        # Shard by sample_id
-        unique_ids = df_full[sid_col].unique()
-        n_chunks = min(workers * 2, len(unique_ids))
-        id_chunks = np.array_split(unique_ids, n_chunks)
-        df_chunks = [df_full[df_full[sid_col].isin(set(chunk))] for chunk in id_chunks]
-        _echo(f"  Sharded into {len(df_chunks)} chunks")
-
-        t2 = time.time()
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            future_map = {}
-            for ci, chunk_df in enumerate(df_chunks):
-                fut = pool.submit(_extract_from_dataframe, e.name, chunk_df, verbose)
-                future_map[fut] = ci
-
-            _echo(f"  Submitted {len(future_map)} tasks to {workers} workers")
-
-            partial_results = []
-            failed_samples = []
-            completed = 0
-            for fut in concurrent.futures.as_completed(future_map):
-                chunk_idx = future_map[fut]
-                completed += 1
-                try:
-                    e_name, success, data = fut.result()
-                    if success and not data.empty:
-                        partial_results.append(data)
-                        _echo(
-                            f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: OK ({len(data)} rows)"
-                        )
-                    elif success:
-                        _echo(
-                            f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: OK (empty)"
-                        )
-                    else:
-                        _echo(
-                            f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: FAILED - {data}"
-                        )
-                        failed_chunk = id_chunks[chunk_idx]
-                        failed_samples.extend(list(failed_chunk))
-                except Exception as exc:
-                    _echo(
-                        f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: EXCEPTION - {exc}"
-                    )
-                    failed_chunk = id_chunks[chunk_idx]
-                    failed_samples.extend(list(failed_chunk))
-
-        extract_sec = time.time() - t2
         if failed_samples:
             failed_path = out_path / f"{e.name}_failed_samples.csv"
             pd.DataFrame({"SAMPLE_ID": failed_samples}).to_csv(failed_path, index=False)
             _echo(
-                f"  WARNING: {len(failed_samples)} samples failed extraction. Saved to {failed_path.name}"
+                f"  WARNING: {len(failed_samples)} samples failed extraction. "
+                f"Saved to {failed_path.name}"
             )
-        _echo(f"  Extraction complete in {extract_sec:.1f}s")
+            log.warning(
+                "extraction_failures",
+                evaluator=e.name,
+                n_failed=len(failed_samples),
+                output=str(failed_path),
+            )
 
         if not partial_results:
             _echo(f"  WARNING: No results for {e.name}, skipping")
