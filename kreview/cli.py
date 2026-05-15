@@ -60,14 +60,6 @@ def label(
     min_variants: int = typer.Option(
         1, help="Min # variants passing VAF for Possible ctDNA+"
     ),
-    chunk_size: str = typer.Option(
-        "auto",
-        "--chunk-size",
-        help=(
-            "Samples per DuckDB read batch. 'auto' (default) probes parquet "
-            "row density at runtime, or pass an integer to override."
-        ),
-    ),
 ):
     """Generate ctDNA labels without feature evaluation."""
     from kreview.core import Paths, LabelConfig
@@ -82,7 +74,6 @@ def label(
     print(f"  --output            : {output}", flush=True)
     print(f"  --min-vaf           : {min_vaf}", flush=True)
     print(f"  --min-variants      : {min_variants}", flush=True)
-    print(f"  --chunk-size        : {chunk_size}", flush=True)
     print("", flush=True)
 
     paths = Paths(
@@ -92,8 +83,7 @@ def label(
         str(cbioportal_dir),
         [],
     )
-    # LabelConfig uses a fixed chunk_size — metadata is always ~1 row/sample,
-    # so we load in a single large batch regardless of user's --chunk-size.
+    # Metadata is ~1 row/sample — load everything in a single large batch.
     config = LabelConfig(min_vaf=min_vaf, min_variants=min_variants, chunk_size=15_000)
 
     labeler = CtDNALabeler(paths, config)
@@ -617,6 +607,13 @@ def run(
                 continue
 
             feat_matrix = pd.concat(partial_results, ignore_index=True)
+
+        # Guard: both Path A and Path B should set feat_matrix before reaching
+        # this point (or `continue` to skip). This is a safety net.
+        if feat_matrix is None:
+            _echo(f"  WARNING: No feature matrix produced for {e.name}, skipping")
+            continue
+
         merged = pd.merge(labels_df, feat_matrix, on="SAMPLE_ID", how="inner")
         out_p = out_path / f"{e.name}_matrix.parquet"
         merged.to_parquet(out_p, index=False)
