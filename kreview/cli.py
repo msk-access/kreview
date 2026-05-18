@@ -10,6 +10,7 @@ __all__ = [
     "features_list",
     "run",
     "report",
+    "extract",
     "fuse",
     "eval_gpu",
 ]
@@ -147,6 +148,160 @@ def _impute(df, strategy: str):
             fallback="zero",
         )
     return df.fillna(0)  # default: zero
+
+
+def _extract_evaluator(
+    evaluator,
+    paths,
+    all_sample_ids: list[str],
+    chunk_size: int,
+    out_path: Path,
+    labels_df: pd.DataFrame,
+    *,
+    _echo=print,
+) -> pd.DataFrame | None:
+    """Extract features for a single evaluator and write the matrix parquet.
+
+    Tries SQL pushdown first (Path A); falls back to chunked Python
+    streaming (Path B) when the evaluator doesn't support SQL or SQL
+    returns empty results.
+
+    Returns:
+        Merged DataFrame (labels + features) written to disk, or None
+        if extraction produced no data.
+    """
+    from kreview.core import iter_feature_chunks, run_feature_sql
+
+    _echo(f"  Extracting '{evaluator.name}'...")
+    t1 = time.time()
+
+    # --- Path A: SQL Pushdown (if evaluator supports it) ---
+    sql_query = evaluator.extract_sql()
+    feat_matrix = None
+
+    if sql_query is not None:
+        _echo(f"  Using SQL pushdown for '{evaluator.name}'...")
+        sql_df = run_feature_sql(
+            sql_query,
+            str(evaluator.source_file),
+            paths.krewlyzer_dirs,
+            set(all_sample_ids),
+        )
+        if not sql_df.empty:
+            feat_matrix = sql_df
+            extract_sec = time.time() - t1
+            n_samples = (
+                sql_df["sample_id"].nunique()
+                if "sample_id" in sql_df.columns
+                else len(sql_df)
+            )
+            _echo(
+                f"  SQL pushdown complete: {n_samples} samples "
+                f"in {extract_sec:.1f}s"
+            )
+            # Normalize sample_id column name for downstream merge
+            if "sample_id" in sql_df.columns and "SAMPLE_ID" not in sql_df.columns:
+                feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
+        else:
+            _echo(
+                f"  SQL pushdown returned empty result for '{evaluator.name}', "
+                f"falling back to chunked extraction..."
+            )
+            sql_query = None  # Force fallback to Path B
+
+    # --- Path B: Chunked Python streaming (default fallback) ---
+    if sql_query is None:
+        _echo(f"  Streaming cohort from DuckDB (chunk_size={chunk_size})...")
+        partial_results = []
+        failed_samples = []
+        total_samples_processed = 0
+        total_rows_read = 0
+
+        for chunk_df, chunk_idx, n_chunks in iter_feature_chunks(
+            str(evaluator.source_file),
+            paths.krewlyzer_dirs,
+            set(all_sample_ids),
+            chunk_size=chunk_size,
+        ):
+            sid_col = "sample_id" if "sample_id" in chunk_df.columns else "SAMPLE_ID"
+            chunk_sample_ids = chunk_df[sid_col].unique()
+            chunk_n_rows = len(chunk_df)
+            total_rows_read += chunk_n_rows
+
+            _echo(
+                f"  Chunk {chunk_idx + 1}/{n_chunks}: "
+                f"{len(chunk_sample_ids)} samples, {chunk_n_rows:,} rows"
+            )
+
+            # Extract features from each sample within this chunk
+            chunk_extracted = 0
+            for sample_id in chunk_sample_ids:
+                sample_df = chunk_df[chunk_df[sid_col] == sample_id]
+                try:
+                    res = evaluator.extract(sample_df)
+                    if res:
+                        res["SAMPLE_ID"] = sample_id
+                        partial_results.append(pd.DataFrame([res]))
+                        chunk_extracted += 1
+                except Exception as exc:
+                    log.warning(
+                        "sample_extraction_failed",
+                        evaluator=evaluator.name,
+                        sample_id=sample_id,
+                        error=str(exc),
+                    )
+                    failed_samples.append(sample_id)
+
+            total_samples_processed += len(chunk_sample_ids)
+            _echo(
+                f"    Extracted {chunk_extracted}/" f"{len(chunk_sample_ids)} samples"
+            )
+
+            # Explicit memory release — reclaim ~5GB before next chunk
+            del chunk_df
+
+        if total_samples_processed == 0:
+            _echo(f"  WARNING: No data found for {evaluator.name}, skipping")
+            return None
+
+        extract_sec = time.time() - t1
+        _echo(
+            f"  Extraction complete: {total_samples_processed} samples, "
+            f"{total_rows_read:,} rows read in {extract_sec:.1f}s"
+        )
+
+        if failed_samples:
+            failed_path = out_path / f"{evaluator.name}_failed_samples.csv"
+            pd.DataFrame({"SAMPLE_ID": failed_samples}).to_csv(failed_path, index=False)
+            _echo(
+                f"  WARNING: {len(failed_samples)} samples failed extraction. "
+                f"Saved to {failed_path.name}"
+            )
+            log.warning(
+                "extraction_failures",
+                evaluator=evaluator.name,
+                n_failed=len(failed_samples),
+                output=str(failed_path),
+            )
+
+        if not partial_results:
+            _echo(f"  WARNING: No results for {evaluator.name}, skipping")
+            return None
+
+        feat_matrix = pd.concat(partial_results, ignore_index=True)
+
+    # Guard: both Path A and Path B should set feat_matrix before reaching
+    # this point (or return None). This is a safety net.
+    if feat_matrix is None:
+        _echo(f"  WARNING: No feature matrix produced for {evaluator.name}, skipping")
+        return None
+
+    merged = pd.merge(labels_df, feat_matrix, on="SAMPLE_ID", how="inner")
+    out_p = out_path / f"{evaluator.name}_matrix.parquet"
+    merged.to_parquet(out_p, index=False)
+    _echo(f"  Matrix: {merged.shape[0]} samples x {merged.shape[1]} cols -> {out_p}")
+
+    return merged
 
 
 def _find_quarto() -> str:
@@ -357,7 +512,7 @@ def run(
     ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
-    from kreview.core import Paths, LabelConfig, iter_feature_chunks, run_feature_sql
+    from kreview.core import Paths, LabelConfig
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
 
@@ -504,147 +659,19 @@ def run(
                 continue
 
         # ── Step 3: Extract features ──
-        # Two paths: SQL pushdown (fast, single DuckDB pass) or chunked
-        # Python streaming (memory-safe, per-sample extract() loop).
-        # The evaluator declares which path it supports via extract_sql().
-        _echo(f"Step 3: Extracting '{e.name}'...")
-        t1 = time.time()
-
-        # --- Path A: SQL Pushdown (if evaluator supports it) ---
-        sql_query = e.extract_sql()
-        feat_matrix = None
-
-        if sql_query is not None:
-            _echo(f"  Using SQL pushdown for '{e.name}'...")
-            sql_df = run_feature_sql(
-                sql_query,
-                str(e.source_file),
-                paths.krewlyzer_dirs,
-                set(all_sample_ids),
-            )
-            if not sql_df.empty:
-                feat_matrix = sql_df
-                extract_sec = time.time() - t1
-                n_samples = (
-                    sql_df["sample_id"].nunique()
-                    if "sample_id" in sql_df.columns
-                    else len(sql_df)
-                )
-                _echo(
-                    f"  SQL pushdown complete: {n_samples} samples "
-                    f"in {extract_sec:.1f}s"
-                )
-                # Normalize sample_id column name for downstream merge
-                if "sample_id" in sql_df.columns and "SAMPLE_ID" not in sql_df.columns:
-                    feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
-            else:
-                _echo(
-                    f"  SQL pushdown returned empty result for '{e.name}', "
-                    f"falling back to chunked extraction..."
-                )
-                sql_query = None  # Force fallback to Path B
-
-        # --- Path B: Chunked Python streaming (default fallback) ---
-        if sql_query is None:
-            _echo(
-                f"  Streaming cohort from DuckDB " f"(chunk_size={effective_chunk})..."
-            )
-            partial_results = []
-            failed_samples = []
-            total_samples_processed = 0
-            total_rows_read = 0
-            e_instance = e
-
-            for chunk_df, chunk_idx, n_chunks in iter_feature_chunks(
-                str(e.source_file),
-                paths.krewlyzer_dirs,
-                set(all_sample_ids),
-                chunk_size=effective_chunk,
-            ):
-                sid_col = (
-                    "sample_id" if "sample_id" in chunk_df.columns else "SAMPLE_ID"
-                )
-                chunk_sample_ids = chunk_df[sid_col].unique()
-                chunk_n_rows = len(chunk_df)
-                total_rows_read += chunk_n_rows
-
-                _echo(
-                    f"  Chunk {chunk_idx + 1}/{n_chunks}: "
-                    f"{len(chunk_sample_ids)} samples, {chunk_n_rows:,} rows"
-                )
-
-                # Extract features from each sample within this chunk
-                chunk_extracted = 0
-                for sample_id in chunk_sample_ids:
-                    sample_df = chunk_df[chunk_df[sid_col] == sample_id]
-                    try:
-                        res = e_instance.extract(sample_df)
-                        if res:
-                            res["SAMPLE_ID"] = sample_id
-                            partial_results.append(pd.DataFrame([res]))
-                            chunk_extracted += 1
-                    except Exception as exc:
-                        log.warning(
-                            "sample_extraction_failed",
-                            evaluator=e.name,
-                            sample_id=sample_id,
-                            error=str(exc),
-                        )
-                        failed_samples.append(sample_id)
-
-                total_samples_processed += len(chunk_sample_ids)
-                _echo(
-                    f"    Extracted {chunk_extracted}/"
-                    f"{len(chunk_sample_ids)} samples"
-                )
-
-                # Explicit memory release — reclaim ~5GB before next chunk
-                del chunk_df
-
-            if total_samples_processed == 0:
-                _echo(f"  WARNING: No data found for {e.name}, skipping")
-                continue
-
-            extract_sec = time.time() - t1
-            _echo(
-                f"  Extraction complete: {total_samples_processed} samples, "
-                f"{total_rows_read:,} rows read in {extract_sec:.1f}s"
-            )
-
-            if failed_samples:
-                failed_path = out_path / f"{e.name}_failed_samples.csv"
-                pd.DataFrame({"SAMPLE_ID": failed_samples}).to_csv(
-                    failed_path, index=False
-                )
-                _echo(
-                    f"  WARNING: {len(failed_samples)} samples failed extraction. "
-                    f"Saved to {failed_path.name}"
-                )
-                log.warning(
-                    "extraction_failures",
-                    evaluator=e.name,
-                    n_failed=len(failed_samples),
-                    output=str(failed_path),
-                )
-
-            if not partial_results:
-                _echo(f"  WARNING: No results for {e.name}, skipping")
-                continue
-
-            feat_matrix = pd.concat(partial_results, ignore_index=True)
-
-        # Guard: both Path A and Path B should set feat_matrix before reaching
-        # this point (or `continue` to skip). This is a safety net.
-        if feat_matrix is None:
-            _echo(f"  WARNING: No feature matrix produced for {e.name}, skipping")
-            continue
-
-        merged = pd.merge(labels_df, feat_matrix, on="SAMPLE_ID", how="inner")
-        out_p = out_path / f"{e.name}_matrix.parquet"
-        merged.to_parquet(out_p, index=False)
-        _echo(
-            f"  Matrix: {merged.shape[0]} samples x {merged.shape[1]} cols -> {out_p}"
+        # Delegates to _extract_evaluator() which handles both SQL pushdown
+        # (Path A) and chunked Python streaming (Path B).
+        merged = _extract_evaluator(
+            e,
+            paths,
+            all_sample_ids,
+            effective_chunk,
+            out_path,
+            labels_df,
+            _echo=_echo,
         )
+        if merged is None:
+            continue
 
         # ── Step 4: Statistical Evaluation ──
         _echo(f"Step 4: Running statistical evaluation for '{e.name}'...")
@@ -1091,6 +1118,141 @@ def report(
         failed=failed,
         total=total,
         failed_evaluators=failed_names,
+    )
+
+
+# %% ../nbs/90_cli.ipynb #extract_cmd
+@app.command()
+def extract(
+    cancer_samplesheet: Path = typer.Option(..., help="Cancer samplesheet CSV"),
+    healthy_xs1_samplesheet: Path = typer.Option(
+        ..., help="Healthy XS1 samplesheet CSV"
+    ),
+    healthy_xs2_samplesheet: Path = typer.Option(
+        ..., help="Healthy XS2 samplesheet CSV"
+    ),
+    cbioportal_dir: Path = typer.Option(..., help="Directory with cBioPortal files"),
+    krewlyzer_dir: list[str] = typer.Option(..., help="krewlyzer output directory"),
+    output: Path = typer.Option("output/", help="Output directory for matrices"),
+    min_vaf: float = typer.Option(
+        0.01, help="Min VAF for Possible ctDNA+ (default 1%)"
+    ),
+    min_variants: int = typer.Option(
+        1, help="Min # variants passing VAF for Possible ctDNA+"
+    ),
+    ch_hotspot_maf: Path = typer.Option(
+        None,
+        help="Optional TSV of CH hotspot variants for CH-only demotion.",
+    ),
+    features: Optional[str] = typer.Option(
+        None, help="Comma-separated evaluator names (default: all)"
+    ),
+    tier: Optional[int] = typer.Option(None, help="Run only this tier"),
+    chunk_size: int = typer.Option(5000, help="Rows per DuckDB chunk"),
+):
+    """Label samples and extract feature matrices (no eval/model/report).
+
+    Runs the labeling pipeline, then extracts features for each matched
+    evaluator into ``*_matrix.parquet`` files. This is the first half of
+    ``kreview run``, designed for parallelized Nextflow execution.
+    """
+    from kreview.core import Paths, LabelConfig, _calculate_dynamic_chunk_size
+    from kreview.labels import CtDNALabeler
+    from kreview.evaluators import get_all_evaluators
+
+    print("=== kreview extract ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --cancer-samplesheet : {cancer_samplesheet}", flush=True)
+    print(f"  --healthy-xs1       : {healthy_xs1_samplesheet}", flush=True)
+    print(f"  --healthy-xs2       : {healthy_xs2_samplesheet}", flush=True)
+    print(f"  --cbioportal-dir    : {cbioportal_dir}", flush=True)
+    print(f"  --krewlyzer-dir     : {krewlyzer_dir}", flush=True)
+    print(f"  --output            : {output}", flush=True)
+    print(f"  --features          : {features or 'all'}", flush=True)
+    print(f"  --tier              : {tier or 'all'}", flush=True)
+    print(f"  --chunk-size        : {chunk_size}", flush=True)
+    print(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}", flush=True)
+    print("", flush=True)
+
+    t0 = time.time()
+
+    # ── Step 1: Label ──
+    print("Step 1: Labeling...", flush=True)
+    paths = Paths(
+        str(cancer_samplesheet),
+        str(healthy_xs1_samplesheet),
+        str(healthy_xs2_samplesheet),
+        str(cbioportal_dir),
+        krewlyzer_dir,
+    )
+    config = LabelConfig(
+        min_vaf=min_vaf,
+        min_variants=min_variants,
+        chunk_size=15_000,
+        ch_hotspot_maf=ch_hotspot_maf,
+    )
+    labeler = CtDNALabeler(paths, config)
+    labels_df = labeler.label_all()
+    print(f"  Labels: {len(labels_df)} samples in {time.time()-t0:.1f}s", flush=True)
+    print(
+        f"  Distribution:\n{labels_df['label'].value_counts().to_string()}", flush=True
+    )
+
+    # ── Step 2: Resolve evaluators ──
+    print("Step 2: Resolving Feature Evaluators...", flush=True)
+    all_evals = get_all_evaluators()
+    target_evals = []
+    feat_filter = features.split(",") if features else []
+    for e in all_evals:
+        if tier is not None and getattr(e, "tier", -1) != tier:
+            continue
+        if feat_filter and getattr(e, "name", "") not in feat_filter:
+            continue
+        target_evals.append(e)
+
+    if not target_evals:
+        print(
+            f"ERROR: No evaluators matched. Available: {[e.name for e in all_evals]}",
+            flush=True,
+        )
+        raise typer.Exit(code=1)
+    print(f"  Matched: {[e.name for e in target_evals]}", flush=True)
+
+    out_path = Path(output)
+    out_path.mkdir(parents=True, exist_ok=True)
+    all_sample_ids = list(labels_df["SAMPLE_ID"].unique())
+
+    effective_chunk = _calculate_dynamic_chunk_size(chunk_size, len(all_sample_ids))
+    print(f"  Effective chunk size: {effective_chunk}", flush=True)
+
+    # ── Step 3: Extract each evaluator ──
+    extracted = 0
+    for e in target_evals:
+        print(f"\n{'='*60}", flush=True)
+        print(f"Extracting evaluator: {e.name}", flush=True)
+
+        merged = _extract_evaluator(
+            e,
+            paths,
+            all_sample_ids,
+            effective_chunk,
+            out_path,
+            labels_df,
+        )
+        if merged is not None:
+            extracted += 1
+
+    elapsed = time.time() - t0
+    print(
+        f"\n=== Extract complete: {extracted}/{len(target_evals)} evaluators "
+        f"in {elapsed:.1f}s ===",
+        flush=True,
+    )
+    log.info(
+        "extract_complete",
+        n_extracted=extracted,
+        n_total=len(target_evals),
+        elapsed_sec=round(elapsed, 1),
     )
 
 
