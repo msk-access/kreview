@@ -455,6 +455,12 @@ class CtDNALabeler:
 
     Tiers: True ctDNA+, Possible ctDNA+, Possible ctDNA−,
            Healthy Normal, Insufficient Data.
+
+    Features:
+        - IMPACT tissue rescue for True ctDNA+ confirmation
+        - Continuous VAF regression targets (mean_vaf, std_vaf)
+        - Optional CH hotspot filtering with automatic demotion
+          of samples whose only evidence is clonal hematopoiesis
     """
 
     LABEL_TRUE_POS = "True ctDNA+"
@@ -718,6 +724,7 @@ class CtDNALabeler:
 
     def summary(self) -> dict:
         labels = self.label_all()
+        positive_mask = labels["label"].isin([self.LABEL_TRUE_POS, self.LABEL_POSS_POS])
         return {
             "total_samples": len(labels),
             "label_counts": labels["label"].value_counts().to_dict(),
@@ -727,6 +734,27 @@ class CtDNALabeler:
                 "has_sv": int(labels["has_sv"].sum()),
                 "has_cna": int(labels["has_cna"].sum()),
                 "has_paired_impact": int(labels["has_paired_impact"].sum()),
+            },
+            "vaf_stats": {
+                "cohort_mean_vaf": round(float(labels["mean_vaf"].mean()), 4),
+                "positive_mean_vaf": (
+                    round(float(labels.loc[positive_mask, "mean_vaf"].mean()), 4)
+                    if positive_mask.any()
+                    else 0.0
+                ),
+                "cohort_max_vaf": round(float(labels["max_vaf"].max()), 4),
+            },
+            "ch_filtering": {
+                "enabled": self.config.ch_hotspot_maf is not None,
+                "n_ch_demoted": (
+                    int(
+                        (labels["n_ch_variants"] > 0).sum()
+                        - (labels["n_non_ch_variants"] > 0).sum()
+                    )
+                    if self.config.ch_hotspot_maf is not None
+                    else 0
+                ),
+                "total_ch_variants": int(labels["n_ch_variants"].sum()),
             },
             "by_panel": labels.groupby("access_version")["label"]
             .value_counts()

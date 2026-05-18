@@ -47,6 +47,7 @@ def helpMessage() {
      --skip_report              Skip Quarto dashboard generation (default: false)
      --cvd_safe                 Use colorblind-safe palette (default: false)
      --compute_univariate_auc   Compute per-feature univariate AUC (default: false)
+     --ch_hotspot_maf           TSV of CH hotspot variants for CH-only demotion (default: null)
 
      Targeted Execution:
      --features                 Comma-separated list of evaluators (e.g. "AtacOnTarget,FSCOnTarget")

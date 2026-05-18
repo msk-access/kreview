@@ -25,6 +25,7 @@ process KREVIEW_RUN {
     def cvd_flag      = params.cvd_safe     ? "--cvd-safe"                        : ""
     def uauc_flag     = params.compute_univariate_auc ? "--compute-univariate-auc" : ""
     def duckdb_flag   = params.export_duckdb ? "--export-duckdb"                   : ""
+    def ch_maf_flag   = params.ch_hotspot_maf ? "--ch-hotspot-maf \"${params.ch_hotspot_maf}\"" : ""
     // Use persistent output dir so --resume finds results across Nextflow retries
     def persistent_out = params.outdir + "/evaluators"
     
@@ -55,6 +56,7 @@ process KREVIEW_RUN {
         ${cvd_flag} \\
         ${uauc_flag} \\
         ${duckdb_flag} \\
+        ${ch_maf_flag} \\
         --output ${persistent_out}
     
     # 3. Copy results to output/ for Nextflow publishDir collection
