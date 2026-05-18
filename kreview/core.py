@@ -81,12 +81,14 @@ class LabelConfig:
     access_panels: tuple[str, ...] = ACCESS_PANELS
     impact_panels: tuple[str, ...] = IMPACT_PANELS
     chunk_size: int = 15_000  # Metadata is ~1 row/sample; load in single batch
+    ch_hotspot_maf: Path | None = None  # Optional CH hotspot MAF for variant demotion
 
     def __repr__(self) -> str:
         return (
             f"LabelConfig(min_vaf={self.min_vaf}, "
             f"min_variants={self.min_variants}, "
             f"chunk_size={self.chunk_size}, "
+            f"ch_hotspot_maf={self.ch_hotspot_maf}, "
             f"panels={self.access_panels})"
         )
 
