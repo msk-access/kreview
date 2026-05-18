@@ -60,6 +60,11 @@ def label(
     min_variants: int = typer.Option(
         1, help="Min # variants passing VAF for Possible ctDNA+"
     ),
+    ch_hotspot_maf: Path = typer.Option(
+        None,
+        help="Optional TSV of CH hotspot variants for CH-only demotion. "
+        "Samples with only CH mutations are demoted to Possible ctDNA−.",
+    ),
 ):
     """Generate ctDNA labels without feature evaluation."""
     from kreview.core import Paths, LabelConfig
@@ -74,6 +79,7 @@ def label(
     print(f"  --output            : {output}", flush=True)
     print(f"  --min-vaf           : {min_vaf}", flush=True)
     print(f"  --min-variants      : {min_variants}", flush=True)
+    print(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}", flush=True)
     print("", flush=True)
 
     paths = Paths(
@@ -84,7 +90,12 @@ def label(
         [],
     )
     # Metadata is ~1 row/sample — load everything in a single large batch.
-    config = LabelConfig(min_vaf=min_vaf, min_variants=min_variants, chunk_size=15_000)
+    config = LabelConfig(
+        min_vaf=min_vaf,
+        min_variants=min_variants,
+        chunk_size=15_000,
+        ch_hotspot_maf=ch_hotspot_maf,
+    )
 
     labeler = CtDNALabeler(paths, config)
     labels = labeler.label_all()
@@ -336,6 +347,12 @@ def run(
         "--compute-univariate-auc",
         help="Compute per-feature univariate LR AUC. Required for hybrid selection (default: True).",
     ),
+    ch_hotspot_maf: Path = typer.Option(
+        None,
+        "--ch-hotspot-maf",
+        help="Optional TSV of CH hotspot variants for CH-only demotion. "
+        "Samples with only CH mutations are demoted to Possible ctDNA−.",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig, iter_feature_chunks, run_feature_sql
@@ -387,6 +404,7 @@ def run(
     _echo(f"  --export-duckdb     : {export_duckdb}")
     _echo(f"  --resume            : {resume}")
     _echo(f"  --compute-univariate-auc : {compute_univariate_auc}")
+    _echo(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}")
     _echo("")
 
     # ── Validate --chunk-size ──
@@ -416,7 +434,12 @@ def run(
         list(krewlyzer_dir),
     )
     # LabelConfig uses a fixed chunk_size — metadata is always ~1 row/sample.
-    config = LabelConfig(min_vaf=min_vaf, min_variants=min_variants, chunk_size=15_000)
+    config = LabelConfig(
+        min_vaf=min_vaf,
+        min_variants=min_variants,
+        chunk_size=15_000,
+        ch_hotspot_maf=ch_hotspot_maf,
+    )
     labeler = CtDNALabeler(paths, config)
     labels_df = labeler.label_all()
     _echo(f"  Labels: {len(labels_df)} samples in {time.time()-t0:.1f}s")

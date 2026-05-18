@@ -24,12 +24,60 @@ log = structlog.get_logger()
 # %% auto #0
 __all__ = [
     "log",
+    "load_ch_hotspots",
     "compute_impact_match",
     "compute_snv_summary",
     "compute_sv_summary",
     "compute_cna_summary",
     "CtDNALabeler",
 ]
+
+
+# %% ../nbs/01_labels.ipynb #ch_hotspots
+from pathlib import Path as _Path
+
+
+def load_ch_hotspots(ch_maf_path: _Path | str) -> set[tuple]:
+    """Load a CH hotspot MAF file and return a set of variant keys.
+
+    The MAF file must have columns: Hugo_Symbol, Chromosome,
+    Start_Position, Reference_Allele, Tumor_Seq_Allele2.
+
+    Each row is converted to a (chrom, pos, ref, alt) tuple for fast
+    lookup during SNV summary computation.
+    """
+    try:
+        ch_df = pd.read_csv(ch_maf_path, sep="\t", comment="#")
+        required = {
+            "Chromosome",
+            "Start_Position",
+            "Reference_Allele",
+            "Tumor_Seq_Allele2",
+        }
+        missing = required - set(ch_df.columns)
+        if missing:
+            raise ValueError(f"CH hotspot MAF missing required columns: {missing}")
+
+        ch_set = set()
+        for _, row in ch_df.iterrows():
+            ch_set.add(
+                (
+                    str(row["Chromosome"]),
+                    int(row["Start_Position"]),
+                    str(row["Reference_Allele"]),
+                    str(row["Tumor_Seq_Allele2"]),
+                )
+            )
+
+        log.info(
+            "ch_hotspots_loaded",
+            path=str(ch_maf_path),
+            n_hotspots=len(ch_set),
+        )
+        return ch_set
+    except Exception as e:
+        log.error("ch_hotspot_load_failed", path=str(ch_maf_path), error=str(e))
+        raise
 
 
 # %% ../nbs/01_labels.ipynb #6333e679
@@ -182,8 +230,22 @@ def compute_snv_summary(
     maf: pd.DataFrame,
     min_vaf: float = 0.01,
     min_variants: int = 1,
+    ch_variants: set[tuple] | None = None,
 ) -> pd.DataFrame:
-    """Summarize somatic SNV status per eligible sample."""
+    """Summarize somatic SNV status per eligible sample.
+
+    Returns one row per eligible sample with columns:
+        has_snv, n_somatic_snvs, n_total_somatic_snvs,
+        max_vaf, mean_vaf, std_vaf, n_ch_variants, n_non_ch_variants.
+
+    mean_vaf and std_vaf are computed only from VAF-passing variants
+    (those above ``min_vaf``), providing continuous regression targets
+    for the Stage 2 Quantifier.
+
+    If ``ch_variants`` is provided, variants matching CH hotspots are
+    tagged and counted separately. n_non_ch_variants counts only
+    VAF-passing, non-CH variants — the key input for CH-only demotion.
+    """
     try:
         somatic = maf[
             (maf["Tumor_Sample_Barcode"].isin(eligible_ids))
@@ -198,6 +260,10 @@ def compute_snv_summary(
                     "n_somatic_snvs": 0,
                     "n_total_somatic_snvs": 0,
                     "max_vaf": 0.0,
+                    "mean_vaf": 0.0,
+                    "std_vaf": 0.0,
+                    "n_ch_variants": 0,
+                    "n_non_ch_variants": 0,
                 }
             )
 
@@ -208,14 +274,46 @@ def compute_snv_summary(
             0.0,
         )
 
+        # Tag CH hotspot variants if a reference set was provided
+        if ch_variants is not None:
+            somatic["is_ch"] = somatic.apply(
+                lambda r: (
+                    str(r.get("Chromosome", "")),
+                    (
+                        int(r["Start_Position"])
+                        if pd.notna(r.get("Start_Position"))
+                        else 0
+                    ),
+                    str(r.get("Reference_Allele", "")),
+                    str(r.get("Tumor_Seq_Allele2", "")),
+                )
+                in ch_variants,
+                axis=1,
+            )
+            log.info(
+                "ch_variants_tagged",
+                n_ch_hits=int(somatic["is_ch"].sum()),
+                n_total_somatic=len(somatic),
+            )
+        else:
+            somatic["is_ch"] = False
+
         def _agg(group: pd.DataFrame) -> pd.Series:
             passing = group[group["VAF"] >= min_vaf]
+            n_ch = int(passing["is_ch"].sum()) if "is_ch" in passing.columns else 0
+            n_non_ch = len(passing) - n_ch
             return pd.Series(
                 {
                     "has_snv": len(passing) >= min_variants,
                     "n_somatic_snvs": len(passing),
                     "n_total_somatic_snvs": len(group),
                     "max_vaf": group["VAF"].max(),
+                    "mean_vaf": (
+                        float(passing["VAF"].mean()) if len(passing) > 0 else 0.0
+                    ),
+                    "std_vaf": float(passing["VAF"].std()) if len(passing) > 1 else 0.0,
+                    "n_ch_variants": n_ch,
+                    "n_non_ch_variants": n_non_ch,
                 }
             )
 
@@ -235,6 +333,10 @@ def compute_snv_summary(
                     "n_somatic_snvs": 0,
                     "n_total_somatic_snvs": 0,
                     "max_vaf": 0.0,
+                    "mean_vaf": 0.0,
+                    "std_vaf": 0.0,
+                    "n_ch_variants": 0,
+                    "n_non_ch_variants": 0,
                 }
             )
             per_sample = pd.concat([per_sample, missing_df], ignore_index=True)
@@ -244,6 +346,8 @@ def compute_snv_summary(
             min_vaf=min_vaf,
             min_variants=min_variants,
             positive_samples=int(per_sample["has_snv"].sum()),
+            cohort_mean_vaf=round(float(per_sample["mean_vaf"].mean()), 4),
+            cohort_max_vaf=round(float(per_sample["max_vaf"].max()), 4),
         )
         return per_sample
     except Exception as e:
@@ -404,11 +508,17 @@ class CtDNALabeler:
         )
         self._sv_df = compute_sv_summary(self.eligible_ids, self.sv)
         self._cna_df = compute_cna_summary(self.eligible_ids, self.cna)
+        # Load CH hotspots if configured
+        self._ch_variants = None
+        if self.config.ch_hotspot_maf is not None:
+            self._ch_variants = load_ch_hotspots(self.config.ch_hotspot_maf)
+
         self._snv_df = compute_snv_summary(
             self.eligible_ids,
             self.maf,
             min_vaf=self.config.min_vaf,
             min_variants=self.config.min_variants,
+            ch_variants=self._ch_variants,
         )
 
     def _assign_labels(self, snv_df: pd.DataFrame) -> pd.DataFrame:
@@ -449,11 +559,15 @@ class CtDNALabeler:
                 "n_total_somatic_snvs",
                 "n_somatic_svs",
                 "n_cna_events",
+                "n_ch_variants",
+                "n_non_ch_variants",
             ]
             for col in int_cols:
                 labels[col] = labels[col].fillna(0).astype(int)
 
             labels["max_vaf"] = labels["max_vaf"].fillna(0.0)
+            labels["mean_vaf"] = labels["mean_vaf"].fillna(0.0)
+            labels["std_vaf"] = labels["std_vaf"].fillna(0.0)
 
             labels["label"] = self.LABEL_POSS_NEG
 
@@ -485,6 +599,26 @@ class CtDNALabeler:
 
             is_possible_pos = labels["has_snv"]
             labels.loc[is_possible_pos, "label"] = self.LABEL_POSS_POS
+
+            # CH-only demotion: if a sample's only evidence is CH mutations
+            # (n_non_ch_variants == 0) and it has no SV/CNA/IMPACT match,
+            # demote it from Possible ctDNA+ back to Possible ctDNA−.
+            ch_only = (
+                (labels["label"] == self.LABEL_POSS_POS)
+                & (labels["n_non_ch_variants"] == 0)
+                & (~labels["has_impact_match"])
+                & (~labels["has_sv"])
+                & (~labels["has_cna"])
+            )
+            n_demoted = int(ch_only.sum())
+            if n_demoted > 0:
+                labels.loc[ch_only, "label"] = self.LABEL_POSS_NEG
+                log.warning(
+                    "ch_only_demotion_applied",
+                    n_demoted=n_demoted,
+                    msg="Samples with only CH variants demoted to Possible ctDNA−",
+                )
+
             is_true_pos = (
                 labels["has_impact_match"] | labels["has_sv"] | labels["has_cna"]
             )
@@ -511,11 +645,15 @@ class CtDNALabeler:
                         "has_cna": False,
                         "has_paired_impact": False,
                         "max_vaf": 0.0,
+                        "mean_vaf": 0.0,
+                        "std_vaf": 0.0,
                         "n_impact_confirmed": 0,
                         "n_somatic_snvs": 0,
                         "n_total_somatic_snvs": 0,
                         "n_somatic_svs": 0,
                         "n_cna_events": 0,
+                        "n_ch_variants": 0,
+                        "n_non_ch_variants": 0,
                         "access_version": version,
                         "CANCER_TYPE": np.nan,
                         "CANCER_TYPE_DETAILED": np.nan,
@@ -557,7 +695,11 @@ class CtDNALabeler:
 
             log.info("relabeling", min_vaf=vaf, min_variants=nvars)
             new_snv = compute_snv_summary(
-                self.eligible_ids, self.maf, min_vaf=vaf, min_variants=nvars
+                self.eligible_ids,
+                self.maf,
+                min_vaf=vaf,
+                min_variants=nvars,
+                ch_variants=self._ch_variants,
             )
 
             cancer_labels = self._assign_labels(new_snv)
