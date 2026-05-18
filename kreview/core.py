@@ -826,6 +826,8 @@ def fuse_matrices(
     output_dir: str | Path,
     *,
     min_evaluators: int = 1,
+    drop_low_variance: bool = True,
+    variance_threshold: float = 0.0,
     output_name: str = "super_matrix.parquet",
 ) -> pd.DataFrame:
     """Discover per-evaluator matrices and fuse into a single super-matrix.
@@ -840,7 +842,18 @@ def fuse_matrices(
        to prevent collisions (e.g., ``FSCOnTarget__ratio_short``).
     4. Outer-joins all feature DataFrames on ``SAMPLE_ID``.
     5. Filters to samples appearing in at least ``min_evaluators`` matrices.
-    6. Writes the result to ``output_dir / output_name``.
+    6. Drops low-variance features (cross-evaluator QC) when enabled.
+    7. Writes the result to ``output_dir / output_name``.
+
+    Args:
+        output_dir: Directory containing ``*_matrix.parquet`` files.
+        min_evaluators: Minimum number of evaluators a sample must appear in.
+        drop_low_variance: If True, drop features with variance at or below
+            ``variance_threshold`` after fusion. Eliminates constant columns
+            that carry no discriminative signal (step 3A.3 of the plan).
+        variance_threshold: Features with variance <= this value are dropped.
+            Default 0.0 drops only exactly-constant features.
+        output_name: Filename for the output parquet.
 
     Returns:
         The fused DataFrame.
@@ -951,6 +964,24 @@ def fuse_matrices(
         # Deduplicate metadata (same sample may appear in multiple matrices)
         metadata_df = metadata_df.drop_duplicates(subset=["SAMPLE_ID"])
         fused = pd.merge(metadata_df, fused, on="SAMPLE_ID", how="right")
+
+    # ── Cross-evaluator feature selection (Plan step 3A.3) ──
+    # Remove features with near-zero variance that can't contribute to
+    # discrimination. This runs AFTER fusion across all evaluators — a
+    # global QC step rather than per-evaluator.
+    if drop_low_variance:
+        feature_cols = [c for c in fused.columns if "__" in c]
+        numeric_feats = fused[feature_cols].select_dtypes(include="number")
+        variances = numeric_feats.var()
+        low_var_cols = variances[variances <= variance_threshold].index.tolist()
+        if low_var_cols:
+            fused = fused.drop(columns=low_var_cols)
+            log.info(
+                "fuse_low_variance_dropped",
+                n_dropped=len(low_var_cols),
+                threshold=variance_threshold,
+                examples=low_var_cols[:5],
+            )
 
     # Write output
     out_file = out_path / output_name

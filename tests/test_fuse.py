@@ -122,3 +122,39 @@ class TestFuseMatrices:
 
         fuse_matrices(fuse_dir, output_name="combined.parquet")
         assert (fuse_dir / "combined.parquet").exists()
+
+    def test_zero_variance_dropped(self, tmp_path):
+        """Constant features should be dropped when drop_low_variance=True."""
+        from kreview.core import fuse_matrices
+
+        df = pd.DataFrame(
+            {
+                "SAMPLE_ID": ["S1", "S2", "S3"],
+                "label": ["a", "b", "c"],
+                "varying": [0.1, 0.9, 0.5],
+                "constant": [1.0, 1.0, 1.0],  # zero variance
+            }
+        )
+        df.to_parquet(tmp_path / "TestEval_matrix.parquet", index=False)
+
+        result = fuse_matrices(tmp_path, drop_low_variance=True)
+
+        assert "TestEval__varying" in result.columns
+        assert "TestEval__constant" not in result.columns
+
+    def test_drop_low_variance_disabled(self, tmp_path):
+        """drop_low_variance=False should keep constant features."""
+        from kreview.core import fuse_matrices
+
+        df = pd.DataFrame(
+            {
+                "SAMPLE_ID": ["S1", "S2"],
+                "label": ["a", "b"],
+                "constant": [5.0, 5.0],
+            }
+        )
+        df.to_parquet(tmp_path / "NoFilter_matrix.parquet", index=False)
+
+        result = fuse_matrices(tmp_path, drop_low_variance=False)
+
+        assert "NoFilter__constant" in result.columns

@@ -60,6 +60,9 @@ def label(
     min_vaf: float = typer.Option(
         0.01, help="Min VAF for Possible ctDNA+ (default 1%)"
     ),
+    min_fragments: int = typer.Option(
+        2000, help="Min fragments PF for Depth QC (samples below are Insufficient Data)"
+    ),
     min_variants: int = typer.Option(
         1, help="Min # variants passing VAF for Possible ctDNA+"
     ),
@@ -95,6 +98,7 @@ def label(
     # Metadata is ~1 row/sample — load everything in a single large batch.
     config = LabelConfig(
         min_vaf=min_vaf,
+        min_fragments=min_fragments,
         min_variants=min_variants,
         chunk_size=15_000,
         ch_hotspot_maf=ch_hotspot_maf,
@@ -440,7 +444,9 @@ def run(
     krewlyzer_dir: list[str] = typer.Option(..., help="krewlyzer output directory"),
     output: Path = typer.Option("output/", help="Output directory"),
     min_vaf: float = typer.Option(0.01),
-    min_fragments: int = typer.Option(2000),
+    min_fragments: int = typer.Option(
+        2000, help="Min fragments PF for Depth QC (samples below are Insufficient Data)"
+    ),
     min_variants: int = typer.Option(1),
     features: Optional[str] = typer.Option(
         None, help="Comma-separated features to run"
@@ -593,6 +599,7 @@ def run(
     # LabelConfig uses a fixed chunk_size — metadata is always ~1 row/sample.
     config = LabelConfig(
         min_vaf=min_vaf,
+        min_fragments=min_fragments,
         min_variants=min_variants,
         chunk_size=15_000,
         ch_hotspot_maf=ch_hotspot_maf,
@@ -1137,6 +1144,9 @@ def extract(
     min_vaf: float = typer.Option(
         0.01, help="Min VAF for Possible ctDNA+ (default 1%)"
     ),
+    min_fragments: int = typer.Option(
+        2000, help="Min fragments PF for Depth QC (samples below are Insufficient Data)"
+    ),
     min_variants: int = typer.Option(
         1, help="Min # variants passing VAF for Possible ctDNA+"
     ),
@@ -1187,6 +1197,7 @@ def extract(
     )
     config = LabelConfig(
         min_vaf=min_vaf,
+        min_fragments=min_fragments,
         min_variants=min_variants,
         chunk_size=15_000,
         ch_hotspot_maf=ch_hotspot_maf,
