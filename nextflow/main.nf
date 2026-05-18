@@ -34,8 +34,8 @@ def helpMessage() {
      ML Engine:
      --outdir                   Output directory (default: ./results)
      --cv_folds                 Cross Validation folds (default: 5, slurm: 10)
-     --top_n                    Max features for model training (default: 50)
-     --chunk_size               DuckDB maxfile limit  (default: 50 local, 500 slurm)
+     --top_percentile           Top X% features per metric for model training (default: 10)
+     --chunk_size               DuckDB batch size: 'auto' probes row density (default: auto)
      --impute_strategy          Imputation method (default: median)
 
      SHAP Explainability:

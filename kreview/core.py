@@ -37,6 +37,7 @@ __all__ = [
     "load_feature_cohort",
     "iter_feature_chunks",
     "load_metadata_cohort",
+    "run_feature_sql",
     "load_sample_feature",
     "load_sample_metadata",
     "make_variant_key",
@@ -79,7 +80,7 @@ class LabelConfig:
     min_fragments: int = 2000  # Min fragments for Depth QC
     access_panels: tuple[str, ...] = ACCESS_PANELS
     impact_panels: tuple[str, ...] = IMPACT_PANELS
-    chunk_size: int = 500  # Batch size for file loading
+    chunk_size: int = 15_000  # Metadata is ~1 row/sample; load in single batch
 
     def __repr__(self) -> str:
         return (
@@ -446,18 +447,69 @@ def _read_parquet_chunk(
                 return pd.DataFrame()
 
 
+def _calculate_dynamic_chunk_size(
+    conn: duckdb.DuckDBPyConnection,
+    file_paths: list[str],
+    target_rows: int = 15_000_000,
+) -> int:
+    """Probe the first 5 parquet files to estimate a safe chunk size.
+
+    Uses ``COUNT(*)`` only — no data is loaded into Python memory.
+    The resulting chunk size is clamped to ``[50, 15_000]`` so that:
+    - Heavy features (FSC, ~30K rows/sample) → chunk ~500
+    - Tiny features  (MDS, ~1 row/sample)   → chunk 15_000 (single sweep)
+
+    Falls back to 500 if the probe fails (e.g. network I/O error).
+    """
+    if not file_paths:
+        return 500
+
+    probe = file_paths[: min(5, len(file_paths))]
+    try:
+        n_rows = conn.execute(
+            "SELECT count(*) FROM read_parquet(?, hive_partitioning=false)",
+            [probe],
+        ).fetchone()[0]
+        avg_rows = max(1, n_rows // len(probe))
+        size = max(50, min(15_000, target_rows // avg_rows))
+        log.info(
+            "dynamic_chunk_size_calculated",
+            probe_files=len(probe),
+            total_probe_rows=n_rows,
+            avg_rows_per_sample=avg_rows,
+            chunk_size=size,
+        )
+        return size
+    except Exception as exc:
+        log.warning(
+            "dynamic_chunk_probe_failed",
+            error=str(exc),
+            fallback=500,
+        )
+        return 500
+
+
 def iter_feature_chunks(
     feature_suffix: str,
     results_dirs: list[Path],
     sample_ids: list[str] | set[str] | None = None,
     conn: duckdb.DuckDBPyConnection | None = None,
-    chunk_size: int = 500,
+    chunk_size: int | str = "auto",
 ):
     """Stream feature data as chunks without accumulating in memory.
 
     This is the memory-safe alternative to `load_feature_cohort`. Each chunk
     contains complete samples (one parquet file = one sample), so chunk
     boundaries never split a sample's data.
+
+    Args:
+        feature_suffix: Parquet file suffix (e.g. '.FSC.ontarget.parquet').
+        results_dirs: Krewlyzer output directories to scan.
+        sample_ids: Optional subset of samples to include.
+        conn: Optional DuckDB connection (created if not provided).
+        chunk_size: Number of files per batch. 'auto' (default) probes the
+            first 5 files to estimate rows-per-sample and self-tunes the
+            batch size to target ~15M rows per chunk.
 
     Yields:
         (chunk_df, chunk_idx, n_chunks): A tuple of the DataFrame chunk,
@@ -474,6 +526,10 @@ def iter_feature_chunks(
         conn = get_duckdb_conn()
 
     conn.execute("SET threads=4;")  # Throttle SFTP I/O bursts
+
+    # Resolve dynamic chunk sizing before entering the streaming loop
+    if chunk_size == "auto":
+        chunk_size = _calculate_dynamic_chunk_size(conn, file_paths)
 
     n_chunks = math.ceil(len(file_paths) / chunk_size)
     log.info(
@@ -519,13 +575,17 @@ def load_feature_cohort(
     results_dirs: list[Path],
     sample_ids: list[str] | set[str] | None = None,
     conn: duckdb.DuckDBPyConnection | None = None,
-    chunk_size: int = 500,
+    chunk_size: int | str = "auto",
 ) -> pd.DataFrame:
     """Load one feature type across available samples into a single DataFrame.
 
     This is the backward-compatible batch loader. For memory-constrained
     environments (e.g., HPC with 64GB RAM), use `iter_feature_chunks` instead
     to process data in a streaming fashion.
+
+    Args:
+        chunk_size: 'auto' (default) probes parquet row density at runtime.
+            Pass an integer to override (e.g. 500 for large features).
 
     ARCHITECTURE NOTE: We build an explicit file list from discovered samples
     instead of using a glob pattern. This avoids DuckDB scanning thousands of
@@ -558,12 +618,85 @@ def load_feature_cohort(
 
 
 def load_metadata_cohort(
-    results_dirs: list[Path], sample_ids=None, chunk_size: int = 500
+    results_dirs: list[Path], sample_ids=None, chunk_size: int | str = "auto"
 ):
-    """Load metadata for all samples. Thin wrapper around load_feature_cohort."""
+    """Load metadata for all samples. Thin wrapper around load_feature_cohort.
+
+    Metadata files are ~1 row per sample, so 'auto' will resolve to
+    chunk_size=15_000 (single-sweep load) on first probe.
+    """
     return load_feature_cohort(
         ".metadata.parquet", results_dirs, sample_ids, chunk_size=chunk_size
     )
+
+
+def run_feature_sql(
+    sql_query: str,
+    feature_suffix: str,
+    results_dirs: list[Path],
+    sample_ids: list[str] | set[str] | None = None,
+    conn: duckdb.DuckDBPyConnection | None = None,
+) -> pd.DataFrame:
+    """Execute a full-cohort SQL extraction in a single DuckDB pass.
+
+    This is the SQL pushdown alternative to ``iter_feature_chunks`` +
+    per-sample ``extract()``. It runs the evaluator's SQL query against
+    all discovered parquet files at once, returning one row per sample.
+
+    The query must contain a ``read_parquet(?, ...)`` placeholder that
+    accepts the file path list.
+
+    Args:
+        sql_query: DuckDB SQL with ``?`` placeholder for file paths.
+        feature_suffix: Parquet suffix (e.g. '.MDS.ontarget.parquet').
+        results_dirs: Krewlyzer output directories to scan.
+        sample_ids: Optional subset to filter to.
+        conn: Optional DuckDB connection.
+
+    Returns:
+        DataFrame with one row per sample, or empty DataFrame on failure.
+    """
+    file_paths = _discover_feature_paths(feature_suffix, results_dirs, sample_ids)
+    if not file_paths:
+        log.warning("run_feature_sql_no_files", feature=feature_suffix)
+        return pd.DataFrame()
+
+    if conn is None:
+        conn = get_duckdb_conn()
+
+    start = time.time()
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            df = conn.execute(sql_query, [file_paths]).df()
+            elapsed = time.time() - start
+            log.info(
+                "sql_pushdown_complete",
+                feature=feature_suffix,
+                n_files=len(file_paths),
+                n_rows=len(df),
+                n_samples=(
+                    df["sample_id"].nunique() if "sample_id" in df.columns else len(df)
+                ),
+                elapsed_sec=round(elapsed, 1),
+            )
+            return df
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                log.warning(
+                    "sql_pushdown_retry",
+                    feature=feature_suffix,
+                    attempt=attempt + 1,
+                    error=str(exc),
+                )
+                time.sleep(2**attempt)
+            else:
+                log.error(
+                    "sql_pushdown_failed",
+                    feature=feature_suffix,
+                    error=str(exc),
+                )
+                return pd.DataFrame()
 
 
 # %% ../nbs/00_core.ipynb #6d814a93

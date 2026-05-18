@@ -49,6 +49,10 @@ __all__ = [
 class FeatureEvaluator:
     """Base class for all feature evaluators.
     Defines the extraction contract that transforms raw DuckDB queries into 1D arrays.
+
+    Subclasses must implement ``extract()`` for per-sample Python extraction.
+    Optionally, override ``extract_sql()`` to return a DuckDB SQL query that
+    performs full-cohort extraction in a single pass (no Python loop).
     """
 
     name: str = "base"
@@ -62,6 +66,24 @@ class FeatureEvaluator:
         raise NotImplementedError(
             "Feature evaluators must implement the extract() method."
         )
+
+    def extract_sql(self) -> str | None:
+        """Return a DuckDB SQL query for full-cohort extraction, or None.
+
+        If implemented, the query should:
+        - Accept a ``read_parquet(?, ...)`` placeholder for file paths
+        - GROUP BY sample_id to produce one row per sample
+        - SELECT all extracted feature columns with their final names
+
+        Returning ``None`` (the default) means this evaluator does not
+        support SQL pushdown and will use the chunked Python path.
+        """
+        return None
+
+    @property
+    def supports_sql(self) -> bool:
+        """True if this evaluator provides a SQL pushdown query."""
+        return self.extract_sql() is not None
 
 
 def parse_array(s) -> list[float]:
