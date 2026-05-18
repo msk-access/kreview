@@ -10,6 +10,8 @@ __all__ = [
     "features_list",
     "run",
     "report",
+    "fuse",
+    "eval_gpu",
 ]
 
 # %% ../nbs/90_cli.ipynb #27a890c5
@@ -648,12 +650,14 @@ def run(
         _echo(f"Step 4: Running statistical evaluation for '{e.name}'...")
         t3 = time.time()
 
-        # Identify numeric feature columns (exclude label/metadata cols)
-        meta_cols = set(labels_df.columns) | {"SAMPLE_ID", "sample_id", "filename"}
+        # Identify numeric feature columns (exclude label/metadata cols).
+        # Uses the canonical LABEL_META_COLS set from core — single source of truth.
+        from kreview.core import LABEL_META_COLS
+
         numeric_cols = [
             c
             for c in merged.select_dtypes(include=np.number).columns
-            if c not in meta_cols
+            if c not in LABEL_META_COLS
         ]
         _echo(f"  Found {len(numeric_cols)} numeric feature columns")
 
@@ -1087,4 +1091,232 @@ def report(
         failed=failed,
         total=total,
         failed_evaluators=failed_names,
+    )
+
+
+# %% ../nbs/90_cli.ipynb #fuse_cmd
+@app.command()
+def fuse(
+    output_dir: Path = typer.Option(
+        ..., "--output-dir", help="Directory containing *_matrix.parquet files"
+    ),
+    min_evaluators: int = typer.Option(
+        1,
+        "--min-evaluators",
+        help="Minimum number of evaluators a sample must appear in to be retained",
+    ),
+    output_name: str = typer.Option(
+        "super_matrix.parquet",
+        "--output-name",
+        help="Filename for the fused super-matrix (written to --output-dir)",
+    ),
+):
+    """Fuse per-evaluator matrices into a single super-matrix.
+
+    Discovers all ``*_matrix.parquet`` files in ``--output-dir``, extracts
+    their feature columns (prefixed with evaluator name), outer-joins on
+    SAMPLE_ID, and writes ``super_matrix.parquet`` for downstream multimodal
+    evaluation.
+    """
+    import time as _time
+
+    from kreview.core import fuse_matrices
+
+    print("=== kreview fuse ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --output-dir     : {output_dir}", flush=True)
+    print(f"  --min-evaluators : {min_evaluators}", flush=True)
+    print(f"  --output-name    : {output_name}", flush=True)
+    print("", flush=True)
+
+    if min_evaluators < 1:
+        print("ERROR: --min-evaluators must be >= 1", flush=True)
+        raise typer.Exit(code=1)
+
+    t0 = _time.time()
+    result = fuse_matrices(
+        output_dir,
+        min_evaluators=min_evaluators,
+        output_name=output_name,
+    )
+
+    if result.empty:
+        print(
+            "ERROR: No matrices found or all samples filtered. Nothing to fuse.",
+            flush=True,
+        )
+        raise typer.Exit(code=1)
+
+    n_features = len([c for c in result.columns if "__" in c])
+    elapsed = _time.time() - t0
+    print(
+        f"  Fused: {len(result)} samples x {n_features} features "
+        f"from {result.get('n_evaluators', pd.Series()).max() or '?'} evaluators "
+        f"in {elapsed:.1f}s",
+        flush=True,
+    )
+    print(f"  Output: {output_dir / output_name}", flush=True)
+
+
+# %% ../nbs/90_cli.ipynb #eval_gpu_cmd
+@app.command("eval-gpu")
+def eval_gpu(
+    super_matrix: Path = typer.Option(
+        ..., "--super-matrix", help="Path to super_matrix.parquet"
+    ),
+    model_type: str = typer.Option(
+        "xgboost",
+        "--model-type",
+        help="Model backend: xgboost (CPU), tabicl (GPU), tabpfn (GPU)",
+    ),
+    output: Path = typer.Option("output/", help="Output directory for results"),
+    cv_folds: int = typer.Option(5, "--cv-folds", help="Cross-validation folds"),
+    impute_strategy: str = typer.Option(
+        "median", "--impute-strategy", help="Imputation: median, mean, zero"
+    ),
+):
+    """Run multimodal evaluation on a fused super-matrix.
+
+    Currently supports XGBoost (CPU). GPU backends (TabICLv2, Real-TabPFN)
+    will be added in a future release.
+    """
+    import time as _time
+    import json
+    import numpy as np
+
+    print("=== kreview eval-gpu ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --super-matrix    : {super_matrix}", flush=True)
+    print(f"  --model-type      : {model_type}", flush=True)
+    print(f"  --output          : {output}", flush=True)
+    print(f"  --cv-folds        : {cv_folds}", flush=True)
+    print(f"  --impute-strategy : {impute_strategy}", flush=True)
+    print("", flush=True)
+
+    valid_models = {"xgboost", "tabicl", "tabpfn"}
+    if model_type not in valid_models:
+        print(f"ERROR: --model-type must be one of {valid_models}", flush=True)
+        raise typer.Exit(code=1)
+
+    if model_type in {"tabicl", "tabpfn"}:
+        print(
+            f"ERROR: GPU backend '{model_type}' is not yet available. "
+            f"Use --model-type xgboost for CPU evaluation.",
+            flush=True,
+        )
+        log.warning(
+            "eval_gpu_backend_unavailable",
+            model_type=model_type,
+            msg="GPU backends will be available in a future release",
+        )
+        raise typer.Exit(code=1)
+
+    if not super_matrix.exists():
+        print(f"ERROR: Super-matrix not found: {super_matrix}", flush=True)
+        raise typer.Exit(code=1)
+
+    t0 = _time.time()
+    df = pd.read_parquet(super_matrix)
+    print(f"  Loaded: {df.shape[0]} samples x {df.shape[1]} columns", flush=True)
+
+    # Separate feature columns (prefixed with __) from metadata
+    feature_cols = [c for c in df.columns if "__" in c]
+    if not feature_cols:
+        print(
+            "ERROR: No feature columns found (expected evaluator__feature format)",
+            flush=True,
+        )
+        raise typer.Exit(code=1)
+
+    print(f"  Features: {len(feature_cols)} multimodal features", flush=True)
+
+    # Build binary target
+    model_mask = df["label"].isin(
+        [
+            "True ctDNA+",
+            "Possible ctDNA+",
+            "Healthy Normal",
+            "Possible ctDNA-",
+            "Possible ctDNA\u2212",
+        ]
+    )
+    model_df = df[model_mask].copy()
+    y = model_df["label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
+
+    if len(model_df) < 20 or len(np.unique(y)) < 2:
+        print(
+            f"ERROR: Insufficient data for modeling "
+            f"(n={len(model_df)}, classes={len(np.unique(y))})",
+            flush=True,
+        )
+        raise typer.Exit(code=1)
+
+    # Impute missing values
+    from kreview.cli import _impute
+
+    X_imputed = _impute(model_df[feature_cols], impute_strategy)
+
+    # Drop zero-variance features
+    nonconst = [c for c in feature_cols if X_imputed[c].std() > 0]
+    n_dropped = len(feature_cols) - len(nonconst)
+    if n_dropped > 0:
+        print(f"  Dropped {n_dropped} zero-variance features", flush=True)
+    feature_cols = nonconst
+
+    if not feature_cols:
+        print("ERROR: All features have zero variance after imputation", flush=True)
+        raise typer.Exit(code=1)
+
+    X = X_imputed[feature_cols].values
+    c_types = model_df.get("CANCER_TYPE", None)
+    if c_types is not None:
+        c_types = c_types.values
+    a_types = model_df.get("access_version", None)
+    if a_types is not None:
+        a_types = a_types.values
+
+    from kreview.eval_engine import single_feature_model
+
+    print(f"  Training {model_type} with {len(feature_cols)} features...", flush=True)
+    model_res, lr_model, rf_model, xgb_model = single_feature_model(
+        X,
+        y,
+        feature_names=feature_cols,
+        cancer_types=c_types,
+        assays=a_types,
+        n_folds=cv_folds,
+    )
+
+    out_path = Path(output)
+    out_path.mkdir(parents=True, exist_ok=True)
+    model_out = out_path / f"super_matrix_{model_type}_results.json"
+
+    if "error" not in model_res:
+        model_res["super_matrix_path"] = str(super_matrix)
+        model_res["model_type"] = model_type
+        model_res["n_multimodal_features"] = len(feature_cols)
+        model_res["top_features"] = feature_cols
+
+    with open(model_out, "w") as f:
+        json.dump(model_res, f, indent=2, default=str)
+
+    def _fmt(v):
+        return "N/A" if v is None else f"{v:.3f}"
+
+    elapsed = _time.time() - t0
+    print(
+        f"  Results: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
+        f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
+        f"AUC_XGB={_fmt(model_res.get('auc_xgb'))} "
+        f"in {elapsed:.1f}s",
+        flush=True,
+    )
+    print(f"  Output: {model_out}", flush=True)
+    log.info(
+        "eval_gpu_complete",
+        model_type=model_type,
+        n_features=len(feature_cols),
+        auc_lr=model_res.get("auc_lr"),
+        auc_rf=model_res.get("auc_rf"),
+        output=str(model_out),
     )
