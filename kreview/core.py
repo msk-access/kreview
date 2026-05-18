@@ -22,6 +22,7 @@ __all__ = [
     "ACCESS_PANELS",
     "VARIANT_KEY_COLS",
     "MAF_USECOLS",
+    "LABEL_META_COLS",
     "LabelConfig",
     "Paths",
     "load_samplesheet",
@@ -42,6 +43,7 @@ __all__ = [
     "load_sample_metadata",
     "make_variant_key",
     "EvalRun",
+    "fuse_matrices",
 ]
 
 # %% ../nbs/00_core.ipynb #80f7c27c
@@ -781,3 +783,188 @@ class EvalRun:
         except Exception as e:
             log.error("eval_run_save_failed", path=str(path), error=str(e))
             raise
+
+
+# %% ../nbs/00_core.ipynb #fuse_matrices
+# Metadata columns that every *_matrix.parquet carries from the labeling step.
+# These are NOT features — they must be deduplicated, not prefixed, during fusion.
+LABEL_META_COLS = {
+    "SAMPLE_ID",
+    "PATIENT_ID",
+    "CANCER_TYPE",
+    "CANCER_TYPE_DETAILED",
+    "ONCOTREE_CODE",
+    "SAMPLE_TYPE",
+    "GENE_PANEL",
+    "label",
+    "has_impact_match",
+    "has_snv",
+    "has_sv",
+    "has_cna",
+    "has_paired_impact",
+    "max_vaf",
+    "mean_vaf",
+    "std_vaf",
+    "n_impact_confirmed",
+    "n_somatic_snvs",
+    "n_total_somatic_snvs",
+    "n_somatic_svs",
+    "n_cna_events",
+    "n_ch_variants",
+    "n_non_ch_variants",
+    "access_version",
+    "min_vaf_used",
+    "min_variants_used",
+    "total_fragments_pf",
+    "sample_id",
+    "filename",
+    "assay",
+}
+
+
+def fuse_matrices(
+    output_dir: str | Path,
+    *,
+    min_evaluators: int = 1,
+    output_name: str = "super_matrix.parquet",
+) -> pd.DataFrame:
+    """Discover per-evaluator matrices and fuse into a single super-matrix.
+
+    Each ``*_matrix.parquet`` file in ``output_dir`` contains label/metadata
+    columns plus evaluator-specific feature columns. This function:
+
+    1. Discovers all ``*_matrix.parquet`` files (skips ``super_matrix.parquet``
+       and ``scoreboard_*`` files).
+    2. Extracts metadata columns once from the first matrix.
+    3. Prefixes each evaluator's feature columns with the evaluator name
+       to prevent collisions (e.g., ``FSCOnTarget__ratio_short``).
+    4. Outer-joins all feature DataFrames on ``SAMPLE_ID``.
+    5. Filters to samples appearing in at least ``min_evaluators`` matrices.
+    6. Writes the result to ``output_dir / output_name``.
+
+    Returns:
+        The fused DataFrame.
+    """
+    import glob
+
+    out_path = Path(output_dir)
+    matrix_paths = sorted(glob.glob(str(out_path / "*_matrix.parquet")))
+
+    # Exclude the output itself and scoreboard files to avoid recursion
+    matrix_paths = [
+        p
+        for p in matrix_paths
+        if not Path(p).name.startswith("super_matrix")
+        and not Path(p).name.startswith("scoreboard_")
+    ]
+
+    if not matrix_paths:
+        log.warning("fuse_no_matrices", output_dir=str(out_path))
+        return pd.DataFrame()
+
+    log.info("fuse_started", n_matrices=len(matrix_paths), output_dir=str(out_path))
+
+    metadata_df = None
+    feature_dfs = []
+    evaluator_names = []
+
+    for matrix_path in matrix_paths:
+        eval_name = Path(matrix_path).name.replace("_matrix.parquet", "")
+        evaluator_names.append(eval_name)
+
+        try:
+            df = pd.read_parquet(matrix_path)
+        except Exception as exc:
+            log.error(
+                "fuse_read_failed",
+                evaluator=eval_name,
+                path=matrix_path,
+                error=str(exc),
+            )
+            continue
+
+        if "SAMPLE_ID" not in df.columns:
+            log.error("fuse_missing_sample_id", evaluator=eval_name, path=matrix_path)
+            continue
+
+        # Separate metadata from feature columns
+        present_meta = [c for c in df.columns if c in LABEL_META_COLS]
+        feature_cols = [c for c in df.columns if c not in LABEL_META_COLS]
+
+        # Capture metadata from the first valid matrix
+        if metadata_df is None and present_meta:
+            metadata_df = df[present_meta].copy()
+            log.info(
+                "fuse_metadata_captured",
+                evaluator=eval_name,
+                n_samples=len(metadata_df),
+                n_meta_cols=len(present_meta),
+            )
+
+        if not feature_cols:
+            log.warning("fuse_no_features", evaluator=eval_name)
+            continue
+
+        # Prefix feature columns with evaluator name to prevent collisions
+        feat_df = df[["SAMPLE_ID"] + feature_cols].copy()
+        feat_df = feat_df.rename(columns={c: f"{eval_name}__{c}" for c in feature_cols})
+
+        feature_dfs.append(feat_df)
+        log.info(
+            "fuse_evaluator_loaded",
+            evaluator=eval_name,
+            n_samples=len(feat_df),
+            n_features=len(feature_cols),
+        )
+
+    if not feature_dfs:
+        log.error("fuse_no_valid_matrices", output_dir=str(out_path))
+        return pd.DataFrame()
+
+    # Outer-join all feature DataFrames on SAMPLE_ID
+    fused = feature_dfs[0]
+    for feat_df in feature_dfs[1:]:
+        fused = pd.merge(fused, feat_df, on="SAMPLE_ID", how="outer")
+
+    # Count how many evaluators each sample appears in
+    eval_presence = pd.DataFrame({"SAMPLE_ID": fused["SAMPLE_ID"]})
+    for i, feat_df in enumerate(feature_dfs):
+        eval_presence[f"_eval_{i}"] = eval_presence["SAMPLE_ID"].isin(
+            feat_df["SAMPLE_ID"]
+        )
+    fused["n_evaluators"] = eval_presence.iloc[:, 1:].sum(axis=1).astype(int)
+
+    # Filter by min_evaluators
+    before_filter = len(fused)
+    fused = fused[fused["n_evaluators"] >= min_evaluators].copy()
+    n_dropped = before_filter - len(fused)
+    if n_dropped > 0:
+        log.info(
+            "fuse_min_evaluator_filter",
+            min_evaluators=min_evaluators,
+            n_dropped=n_dropped,
+            n_remaining=len(fused),
+        )
+
+    # Re-attach metadata via left join
+    if metadata_df is not None:
+        # Deduplicate metadata (same sample may appear in multiple matrices)
+        metadata_df = metadata_df.drop_duplicates(subset=["SAMPLE_ID"])
+        fused = pd.merge(metadata_df, fused, on="SAMPLE_ID", how="right")
+
+    # Write output
+    out_file = out_path / output_name
+    fused.to_parquet(out_file, index=False)
+
+    n_features = len([c for c in fused.columns if "__" in c])
+    log.info(
+        "fuse_complete",
+        n_samples=len(fused),
+        n_total_cols=len(fused.columns),
+        n_feature_cols=n_features,
+        n_evaluators_fused=len(feature_dfs),
+        evaluators=evaluator_names,
+        output=str(out_file),
+    )
+
+    return fused
