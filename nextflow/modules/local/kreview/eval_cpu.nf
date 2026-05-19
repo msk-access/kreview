@@ -59,6 +59,9 @@ process KREVIEW_EVAL_CPU {
         --healthy-xs2-samplesheet ${healthy_xs2} \\
         --cbioportal-dir "${cbioportal_dir}" \\
         --krewlyzer-dir "${krewlyzer_results}" \\
+        --min-vaf ${params.min_vaf ?: 0.01} \\
+        --min-fragments ${params.min_fragments ?: 2000} \\
+        --min-variants ${params.min_variants ?: 1} \\
         --cv-folds ${params.cv_folds ?: 5} \\
         --top-percentile ${params.top_percentile ?: 10.0} \\
         --impute-strategy ${params.impute_strategy ?: 'median'} \\
