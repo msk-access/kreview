@@ -15,7 +15,7 @@ include { KREVIEW_EVAL } from './workflows/kreview_eval'
 def helpMessage() {
     log.info """
     ================================================================
-     K R E W I E W   P I P E L I N E  (v${workflow.manifest.version})
+     K R E V I E W   P I P E L I N E  (v${workflow.manifest.version})
     ================================================================
      Usage:
      nextflow run main.nf --cancer_samplesheet cancer.csv \\
@@ -31,12 +31,22 @@ def helpMessage() {
      --cbioportal_dir           Absolute path to MSK cBioPortal sync directory
      --krewlyzer_dir            Absolute path to parquet results (or manifest.txt file)
 
+     Pipeline Mode:
+     --pipeline_mode            'monolithic' (default) or 'multistage'
+                                multistage = Label → Extract(×N) → Fuse → Eval → Report
+
      ML Engine:
      --outdir                   Output directory (default: ./results)
      --cv_folds                 Cross Validation folds (default: 5, slurm: 10)
      --top_percentile           Top X% features per metric for model training (default: 10)
      --chunk_size               DuckDB batch size: 'auto' probes row density (default: auto)
      --impute_strategy          Imputation method (default: median)
+
+     Labeling Engine:
+     --min_vaf                  Min VAF for Possible ctDNA+ (default: 0.01)
+     --min_fragments            Min fragments PF for Depth QC (default: 2000)
+     --min_variants             Min variants passing VAF (default: 1)
+     --ch_hotspot_maf           TSV of CH hotspot variants for CH-only demotion (default: null)
 
      SHAP Explainability:
      --shap_samples             Max samples for SHAP computation (default: 500, slurm: 5000)
@@ -47,7 +57,12 @@ def helpMessage() {
      --skip_report              Skip Quarto dashboard generation (default: false)
      --cvd_safe                 Use colorblind-safe palette (default: false)
      --compute_univariate_auc   Compute per-feature univariate AUC (default: false)
-     --ch_hotspot_maf           TSV of CH hotspot variants for CH-only demotion (default: null)
+
+     Multistage Options (--pipeline_mode multistage):
+     --run_gpu_eval             Enable GPU evaluation step (default: false)
+     --gpu_model_type           Model: xgboost, tabicl, tabpfn (default: xgboost)
+     --min_evaluators           Min evaluators per sample for fuse (default: 1)
+     --gpu_partition            SLURM partition for GPU jobs (default: null)
 
      Targeted Execution:
      --features                 Comma-separated list of evaluators (e.g. "AtacOnTarget,FSCOnTarget")
