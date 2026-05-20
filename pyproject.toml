@@ -57,6 +57,12 @@ docs = [
     "mkdocs-panzoom-plugin>=0.5.2",
     "mkdocs-pdf>=0.1.2"
 ]
+gpu = [
+    "torch>=2.0",
+    "tabpfn>=2.0",
+    "tabpfn-extensions[interpretability]",
+    "tabicl[finetune]",
+]
 all = [
     "papermill>=2.5.0",
     "jupyter>=1.0.0",
