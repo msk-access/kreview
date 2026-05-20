@@ -1232,7 +1232,6 @@ def _compute_shap(
             if hasattr(last, "feature_importances_"):
                 explainer = shap.TreeExplainer(last)
                 # Transform X through pipeline steps before last
-                import sklearn.pipeline
 
                 X_transformed = X_shap
                 for step_name, step in list(fitted_model.named_steps.items())[:-1]:
