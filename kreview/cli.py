@@ -1017,6 +1017,7 @@ def run(
 
                 # ── Enrich results + save ──
                 if "error" not in model_res:
+                    model_res["evaluator"] = e.name
                     model_res["top_features"] = top_feats
                     model_res["selection_qc"] = selection_qc
                     # Add sample IDs for multimodal alignment (C5)
@@ -1028,6 +1029,18 @@ def run(
                         model_res["oof_sample_ids"] = (
                             model_df["SAMPLE_ID"].tolist()
                         )
+                    # Best model summary — for dashboard ranking and Phase D sorting
+                    all_aucs = {
+                        k: v
+                        for k, v in model_res.items()
+                        if k.startswith("auc_")
+                        and isinstance(v, (int, float))
+                        and not k.endswith("_ci_lower")
+                        and not k.endswith("_ci_upper")
+                    }
+                    if all_aucs:
+                        model_res["best_model"] = max(all_aucs, key=all_aucs.get)
+                        model_res["best_auc"] = all_aucs[model_res["best_model"]]
 
                 # Merge with any existing results from a partial resume
                 if existing_results and existing_results is not model_res:
