@@ -968,7 +968,7 @@ def run(
                         try:
                             from kreview.eval_engine import gpu_models
 
-                            gpu_res, gpu_fitted = gpu_models(
+                            gpu_res, _ = gpu_models(
                                 X,
                                 y,
                                 feature_names=top_feats,
@@ -979,6 +979,7 @@ def run(
                                 device=device,
                                 finetune=not no_finetune,
                                 finetune_epochs=finetune_epochs,
+                                compute_shap=False,  # SHAP via kreview eval gpu --shap
                             )
                             # Merge GPU results into the combined dict
                             model_res.update(gpu_res)

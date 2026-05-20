@@ -70,12 +70,13 @@ def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
                     if len(np.unique(y)) > 1:
                         model_results, *_ = ee.cpu_models(X, y)
                         html_parts.append("<h2>Ensemble Predictive Analysis</h2>")
-                        html_parts.append(
-                            f"<p><strong>Random Forest AUC:</strong> {model_results.get('auc_rf', 'N/A')}</p>"
-                        )
-                        html_parts.append(
-                            f"<p><strong>Logistic Regression AUC:</strong> {model_results.get('auc_lr', 'N/A')}</p>"
-                        )
+                        # Dynamically render all model AUCs (CPU + GPU)
+                        for k, v in sorted(model_results.items()):
+                            if k.startswith("auc_") and isinstance(v, (int, float)):
+                                model_label = k.replace("auc_", "").upper()
+                                html_parts.append(
+                                    f"<p><strong>{model_label} AUC:</strong> {v:.3f}</p>"
+                                )
             except Exception as e:
                 log.warning("ensemble_model_failed", error=str(e))
 

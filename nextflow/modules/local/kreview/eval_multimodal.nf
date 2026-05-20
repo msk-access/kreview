@@ -12,7 +12,7 @@
 
 process KREVIEW_EVAL_MULTIMODAL {
     tag "kreview-eval-multimodal"
-    label 'process_high'
+    label 'process_gpu'
 
     input:
     path(super_matrix)

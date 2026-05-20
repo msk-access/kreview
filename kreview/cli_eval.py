@@ -36,13 +36,18 @@ eval_app = typer.Typer(name="eval", help="Model evaluation commands")
 def _load_matrix_and_labels(
     matrix_path: Path,
     label_col: str = "label",
-    sample_id_col: str = "sample_id",
 ) -> tuple[pd.DataFrame, np.ndarray, list[str], np.ndarray | None, np.ndarray | None]:
     """Load a feature matrix parquet and extract features, labels, metadata.
+
+    Uses the canonical ``LABEL_META_COLS`` set from ``kreview.core`` to
+    exclude label/metadata columns.  This prevents data leakage — columns
+    like ``max_vaf``, ``n_somatic_snvs`` must never be treated as features.
 
     Returns (model_df, y, feature_cols, cancer_types, assays).
     Raises typer.Exit on validation errors.
     """
+    from kreview.core import LABEL_META_COLS
+
     if not matrix_path.exists():
         print(f"ERROR: Matrix not found: {matrix_path}", flush=True)
         raise typer.Exit(code=1)
@@ -50,20 +55,13 @@ def _load_matrix_and_labels(
     df = pd.read_parquet(matrix_path)
     print(f"  Loaded: {df.shape[0]} samples x {df.shape[1]} columns", flush=True)
 
-    # Identify feature columns (sub-metric format or __ prefixed)
+    # Identify numeric feature columns using the canonical exclusion set.
+    # LABEL_META_COLS (22 entries) covers all label, metadata, and QC
+    # columns that must not be used as model features.
     feature_cols = [
         c
-        for c in df.columns
-        if c
-        not in {
-            label_col,
-            sample_id_col,
-            "CANCER_TYPE",
-            "access_version",
-            "DMP_ASSAY_ID",
-            "sample_key",
-        }
-        and not c.startswith("_meta")
+        for c in df.select_dtypes(include=np.number).columns
+        if c not in LABEL_META_COLS
     ]
 
     if not feature_cols:
@@ -228,9 +226,11 @@ def eval_cpu(
                 n_folds=cv_folds,
             )
 
-            # Add sample IDs for multimodal alignment
+            # Add sample IDs for multimodal alignment (check both cases)
             if "sample_id" in model_df.columns:
                 results["oof_sample_ids"] = model_df["sample_id"].tolist()
+            elif "SAMPLE_ID" in model_df.columns:
+                results["oof_sample_ids"] = model_df["SAMPLE_ID"].tolist()
 
             _save_results(
                 results,
@@ -374,9 +374,11 @@ def eval_gpu(
                 shap_samples=shap_samples,
             )
 
-            # Add sample IDs for multimodal alignment
+            # Add sample IDs for multimodal alignment (check both cases)
             if "sample_id" in model_df.columns:
                 results["oof_sample_ids"] = model_df["sample_id"].tolist()
+            elif "SAMPLE_ID" in model_df.columns:
+                results["oof_sample_ids"] = model_df["SAMPLE_ID"].tolist()
 
             # Merge with existing results if resuming
             if existing_results:
