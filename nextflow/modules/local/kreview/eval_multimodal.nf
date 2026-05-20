@@ -1,8 +1,9 @@
 // ---------------------------------------------------------
 // KREVIEW_EVAL_MULTIMODAL — Cross-evaluator multimodal evaluation
 // ---------------------------------------------------------
-// Runs `kreview eval multimodal` on the fused super-matrix using
-// per-evaluator model results JSONs for stacking and ablation.
+// Runs `kreview eval multimodal` with per-evaluator model results
+// JSONs for stacking and ablation.  Optionally uses the fused
+// super_matrix.parquet for raw-feature evaluation.
 //
 // This process runs AFTER both EVAL_CPU and EVAL_GPU complete.
 //
@@ -24,16 +25,26 @@ process KREVIEW_EVAL_MULTIMODAL {
     script:
     def models_arg = params.multimodal_models ?: 'rf,xgb'
     def top_k_arg = params.multimodal_top_k ?: 50
+    def cv_folds = params.cv_folds ?: 5
+    // super_matrix is optional — passed if FUSE produced it
+    def super_flag = super_matrix.name != 'NO_SUPER_MATRIX' ? "--super-matrix ${super_matrix}" : ""
     """
     set -euo pipefail
 
     mkdir -p multimodal_output
 
+    # Stage JSON results into a flat directory
+    mkdir -p results_flat
+    for f in ${results_dir}/*_model_results.json; do
+        cp "\${f}" results_flat/ 2>/dev/null || true
+    done
+
     PYTHONUNBUFFERED=1 kreview eval multimodal \\
-        --super-matrix ${super_matrix} \\
-        --results-dir ${results_dir} \\
+        --results-dir results_flat \\
+        ${super_flag} \\
         --models ${models_arg} \\
         --top-k ${top_k_arg} \\
+        --cv-folds ${cv_folds} \\
         --output multimodal_output
     """
 }
