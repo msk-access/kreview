@@ -2,6 +2,8 @@
 
 # %% ../nbs/02_eval_engine.ipynb #792e3b1f
 from __future__ import annotations
+import json
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -26,7 +28,7 @@ log = structlog.get_logger()
 __all__ = ['log', 'LABEL_ORDER', 'NEON_COLORS', 'CVD_SAFE_COLORS', 'LABEL_COLORS', 'single_feature_model', 'FeatureEvaluator',
            'parse_array', 'univariate_auc', 'mutual_info_score', 'set_theme', 'evaluate_feature', 'plot_violin',
            'plot_density', 'plot_feature_vs_vaf', 'plot_roc_curves', 'plot_feature_importance',
-           'decision_curve_analysis', 'evaluate_model', 'cpu_models', 'gpu_models']
+           'decision_curve_analysis', 'evaluate_model', 'cpu_models', 'gpu_models', 'multimodal_eval']
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3
 class FeatureEvaluator:
@@ -1364,3 +1366,632 @@ def gpu_models(
 
         log.error("gpu_models_failed", error=str(e), trace=traceback.format_exc())
         return {"error": str(e)}, {}
+
+
+# ── Phase D: Multimodal Evaluation ──────────────────────────────────────────
+
+
+def _load_per_evaluator_baselines(
+    results_dir: str | Path,
+) -> dict:
+    """Load all ``*_model_results.json`` files from a directory.
+
+    Extracts per-evaluator OOF probabilities, labels, sample IDs, and
+    AUC baselines needed for multimodal stacking.
+
+    Args:
+        results_dir: Directory containing ``*_model_results.json`` files
+            produced by ``kreview eval cpu`` or ``kreview eval gpu``.
+
+    Returns:
+        A dict keyed by evaluator name::
+
+            {
+                "FSCOnTarget": {
+                    "models": ["lr", "rf", "xgb"],
+                    "oof_probs": {"lr": [...], "rf": [...], ...},
+                    "oof_labels": [...],
+                    "oof_sample_ids": [...],
+                    "aucs": {"lr": 0.85, "rf": 0.88, ...},
+                    "best_model": "auc_rf",
+                    "best_auc": 0.88,
+                },
+                ...
+            }
+
+    Raises:
+        FileNotFoundError: If ``results_dir`` does not exist.
+        ValueError: If no valid JSON files are found.
+    """
+    import glob
+
+    results_dir = Path(results_dir)
+    if not results_dir.exists():
+        raise FileNotFoundError(f"Results directory not found: {results_dir}")
+
+    json_paths = sorted(glob.glob(str(results_dir / "*_model_results.json")))
+    if not json_paths:
+        raise ValueError(f"No *_model_results.json files in {results_dir}")
+
+    baselines = {}
+    n_loaded, n_skipped = 0, 0
+
+    for jp in json_paths:
+        eval_name = Path(jp).stem.replace("_model_results", "")
+        try:
+            with open(jp) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            log.error(
+                "multimodal_json_load_failed",
+                path=jp,
+                error=str(exc),
+            )
+            n_skipped += 1
+            continue
+
+        # Skip error results
+        if "error" in data:
+            log.warning(
+                "multimodal_skip_errored_evaluator",
+                evaluator=eval_name,
+                error=data["error"],
+            )
+            n_skipped += 1
+            continue
+
+        # Discover which models have OOF probs
+        model_names = []
+        oof_probs = {}
+        aucs = {}
+        for k, v in data.items():
+            if k.endswith("_oof_probs") and isinstance(v, list):
+                mn = k.replace("_oof_probs", "")
+                model_names.append(mn)
+                oof_probs[mn] = v
+            if k.startswith("auc_") and isinstance(v, (int, float)):
+                # Exclude CI bounds
+                if not k.endswith("_ci_lower") and not k.endswith("_ci_upper"):
+                    aucs[k.replace("auc_", "")] = v
+
+        if not model_names:
+            log.warning(
+                "multimodal_no_oof_probs",
+                evaluator=eval_name,
+                keys_sample=list(data.keys())[:10],
+            )
+            n_skipped += 1
+            continue
+
+        # Extract labels and sample IDs
+        oof_labels = data.get("oof_labels")
+        oof_sample_ids = data.get("oof_sample_ids")
+
+        if oof_labels is None:
+            log.warning("multimodal_missing_oof_labels", evaluator=eval_name)
+            n_skipped += 1
+            continue
+
+        baselines[eval_name] = {
+            "models": model_names,
+            "oof_probs": oof_probs,
+            "oof_labels": oof_labels,
+            "oof_sample_ids": oof_sample_ids,
+            "aucs": aucs,
+            "best_model": data.get("best_model"),
+            "best_auc": data.get("best_auc"),
+        }
+        n_loaded += 1
+
+    log.info(
+        "multimodal_baselines_loaded",
+        n_loaded=n_loaded,
+        n_skipped=n_skipped,
+        evaluators=sorted(baselines.keys()),
+    )
+
+    if not baselines:
+        raise ValueError(
+            f"No valid evaluator baselines found in {results_dir} "
+            f"({n_skipped} skipped)"
+        )
+
+    return baselines
+
+
+def _build_stacking_matrix(
+    baselines: dict,
+    *,
+    model_filter: str | None = None,
+) -> tuple[pd.DataFrame, np.ndarray]:
+    """Build a meta-feature matrix from OOF predictions across evaluators.
+
+    Each column is ``{evaluator}_{model}`` containing that model's OOF
+    probability for the given evaluator.  Rows are aligned by
+    ``oof_sample_ids`` via outer-join so all samples are represented.
+
+    Args:
+        baselines: Output of :func:`_load_per_evaluator_baselines`.
+        model_filter: If provided, only include this model's OOF probs
+            (e.g. ``"rf"``).  None means include all available models.
+
+    Returns:
+        (stacking_df, y) where ``stacking_df`` has columns like
+        ``FSCOnTarget_rf``, ``MdsOnTarget_lr``, etc., and ``y`` is the
+        aligned binary label array.
+
+    Raises:
+        ValueError: If no stacking columns can be built (e.g. no
+            evaluators have ``oof_sample_ids``).
+    """
+    frames = []
+    evaluators_with_ids = 0
+    evaluators_without_ids = 0
+
+    for eval_name, info in sorted(baselines.items()):
+        sample_ids = info.get("oof_sample_ids")
+        if sample_ids is None:
+            log.warning(
+                "stacking_missing_sample_ids",
+                evaluator=eval_name,
+                hint="Run with oof_sample_ids for correct alignment",
+            )
+            evaluators_without_ids += 1
+            continue
+
+        evaluators_with_ids += 1
+        models_to_use = (
+            [model_filter] if model_filter and model_filter in info["oof_probs"]
+            else info["models"]
+        )
+
+        eval_data = {"_sample_id": sample_ids}
+        for mn in models_to_use:
+            probs = info["oof_probs"].get(mn)
+            if probs is not None and len(probs) == len(sample_ids):
+                eval_data[f"{eval_name}_{mn}"] = probs
+            elif probs is not None:
+                log.warning(
+                    "stacking_length_mismatch",
+                    evaluator=eval_name,
+                    model=mn,
+                    n_probs=len(probs),
+                    n_ids=len(sample_ids),
+                )
+
+        # Also carry the labels for this evaluator
+        eval_data["_oof_labels"] = info["oof_labels"]
+
+        if len(eval_data) > 2:  # Has at least one model column beyond _sample_id and _oof_labels
+            frames.append(pd.DataFrame(eval_data))
+
+    if not frames:
+        raise ValueError(
+            f"Cannot build stacking matrix: {evaluators_without_ids} evaluators "
+            f"missing oof_sample_ids, {evaluators_with_ids} had IDs but no probs"
+        )
+
+    # Outer-join on sample ID to handle evaluators with different sample sets
+    stacking = frames[0]
+    for df in frames[1:]:
+        stacking = pd.merge(stacking, df, on="_sample_id", how="outer", suffixes=("", "_dup"))
+        # Resolve duplicate _oof_labels columns (keep first)
+        dup_cols = [c for c in stacking.columns if c.endswith("_dup")]
+        if dup_cols:
+            stacking = stacking.drop(columns=dup_cols)
+
+    # Extract labels (should be consistent across evaluators)
+    y = stacking["_oof_labels"].values.astype(int)
+    sample_ids = stacking["_sample_id"].tolist()
+
+    # Drop internal columns
+    feature_cols = [c for c in stacking.columns if c not in ("_sample_id", "_oof_labels")]
+    stacking_features = stacking[feature_cols].copy()
+
+    n_nans = stacking_features.isna().sum().sum()
+    log.info(
+        "stacking_matrix_built",
+        n_samples=len(stacking_features),
+        n_features=len(feature_cols),
+        n_evaluators=evaluators_with_ids,
+        n_nans=int(n_nans),
+        feature_cols=feature_cols[:10],
+        sample_ids_head=sample_ids[:3],
+    )
+
+    return stacking_features, y
+
+
+def _select_multimodal_features(
+    df: pd.DataFrame,
+    y: np.ndarray,
+    *,
+    max_nan_frac: float = 0.80,
+    top_k: int = 50,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Feature selection pipeline for multimodal evaluation.
+
+    Steps:
+        1. Drop columns with > ``max_nan_frac`` NaN
+        2. Median-impute remaining NaNs
+        3. Drop zero-variance columns
+        4. Rank by mutual information → keep top-K
+
+    Args:
+        df: Feature DataFrame (numeric columns only).
+        y: Binary label array (same length as ``df``).
+        max_nan_frac: Maximum fraction of NaN allowed per column.
+        top_k: Number of features to retain after MI ranking.
+
+    Returns:
+        (selected_df, selected_feature_names)
+    """
+    from sklearn.feature_selection import mutual_info_classif
+
+    n_initial = len(df.columns)
+
+    # Step 1: Drop columns with too many NaNs
+    nan_fracs = df.isna().mean()
+    high_nan = nan_fracs[nan_fracs > max_nan_frac].index.tolist()
+    if high_nan:
+        df = df.drop(columns=high_nan)
+        log.info(
+            "multimodal_feature_nan_drop",
+            n_dropped=len(high_nan),
+            max_nan_frac=max_nan_frac,
+            examples=high_nan[:5],
+        )
+
+    # Step 2: Median-impute remaining NaNs
+    n_nans = int(df.isna().sum().sum())
+    if n_nans > 0:
+        df = df.fillna(df.median())
+        log.info("multimodal_feature_imputed", n_nans=n_nans)
+
+    # Step 3: Drop zero-variance
+    variances = df.var()
+    zero_var = variances[variances <= 0].index.tolist()
+    if zero_var:
+        df = df.drop(columns=zero_var)
+        log.info("multimodal_feature_zerovar_drop", n_dropped=len(zero_var))
+
+    if df.empty or len(df.columns) == 0:
+        log.error("multimodal_no_features_after_selection")
+        return df, []
+
+    # Step 4: Mutual information ranking → top-K
+    if len(df.columns) > top_k:
+        mi_scores = mutual_info_classif(df.values, y, random_state=42)
+        mi_ranked = sorted(
+            zip(df.columns, mi_scores), key=lambda x: x[1], reverse=True
+        )
+        selected = [name for name, _ in mi_ranked[:top_k]]
+        df = df[selected]
+        log.info(
+            "multimodal_feature_mi_selected",
+            n_before=len(mi_ranked),
+            n_after=len(selected),
+            top_5=[(name, f"{score:.3f}") for name, score in mi_ranked[:5]],
+        )
+    else:
+        selected = list(df.columns)
+
+    log.info(
+        "multimodal_feature_selection_complete",
+        n_initial=n_initial,
+        n_final=len(selected),
+    )
+    return df, selected
+
+
+def multimodal_eval(
+    results_dir: str | Path,
+    super_matrix_path: str | Path | None = None,
+    *,
+    models: tuple[str, ...] = ("rf", "xgb"),
+    n_folds: int = 5,
+    top_k: int = 50,
+    random_state: int = 42,
+) -> dict:
+    """Cross-evaluator multimodal evaluation.
+
+    Implements three complementary strategies:
+
+    1. **Stacking**: Meta-learner trained on OOF predictions from all
+       per-evaluator models.  Each column is one evaluator's OOF
+       probability.  This measures how much combining multiple
+       fragmentomics signals improves classification.
+
+    2. **Raw features** (optional): If ``super_matrix_path`` is provided,
+       trains directly on the fused feature matrix with MI-based
+       feature selection.
+
+    3. **Ablation**: Leave-one-evaluator-out analysis on the stacking
+       matrix, showing each evaluator's marginal contribution.
+
+    Args:
+        results_dir: Directory with ``*_model_results.json`` files.
+        super_matrix_path: Optional path to ``super_matrix.parquet``.
+        models: Model names to use (``rf``, ``xgb``, ``lr``).
+        n_folds: Cross-validation folds.
+        top_k: Top-K features for raw-feature strategy.
+        random_state: Reproducibility seed.
+
+    Returns:
+        A comprehensive results dict with keys for each strategy.
+    """
+    from kreview.core import LABEL_META_COLS
+
+    results = {
+        "strategy": "multimodal",
+        "models_requested": list(models),
+    }
+
+    # ── Load baselines ──
+    log.info("multimodal_eval_start", results_dir=str(results_dir))
+    baselines = _load_per_evaluator_baselines(results_dir)
+    results["n_evaluators"] = len(baselines)
+    results["evaluators"] = sorted(baselines.keys())
+
+    # Capture per-evaluator best AUCs for comparison
+    single_aucs = {}
+    for eval_name, info in baselines.items():
+        if info.get("best_auc") is not None:
+            single_aucs[eval_name] = info["best_auc"]
+    results["single_evaluator_aucs"] = single_aucs
+
+    best_single_name = max(single_aucs, key=single_aucs.get) if single_aucs else None
+    best_single_auc = single_aucs.get(best_single_name, 0.0) if best_single_name else 0.0
+    results["best_single_evaluator"] = best_single_name
+    results["best_single_auc"] = best_single_auc
+
+    # ── Strategy 1: Stacking ──
+    log.info("multimodal_stacking_start")
+    try:
+        stacking_df, y_stack = _build_stacking_matrix(baselines)
+
+        # Impute NaNs from outer-join mismatches
+        n_nans = int(stacking_df.isna().sum().sum())
+        if n_nans > 0:
+            stacking_df = stacking_df.fillna(0.5)  # Neutral probability
+            log.info("stacking_nan_imputed", n_nans=n_nans, fill_value=0.5)
+
+        cv = StratifiedKFold(
+            n_splits=min(n_folds, len(y_stack) // 2),
+            shuffle=True,
+            random_state=random_state,
+        )
+
+        stacking_results = {}
+        for model_name in models:
+            try:
+                model = _build_model(model_name, random_state)
+                res, _ = evaluate_model(
+                    model,
+                    stacking_df.values,
+                    y_stack,
+                    cv,
+                    f"stacking_{model_name}",
+                    feature_names=list(stacking_df.columns),
+                )
+                stacking_results.update(res)
+
+                stacking_auc = res.get(f"auc_stacking_{model_name}")
+                if stacking_auc is not None and best_single_auc > 0:
+                    delta = stacking_auc - best_single_auc
+                    stacking_results[f"stacking_{model_name}_vs_best_single"] = delta
+                    log.info(
+                        "stacking_model_complete",
+                        model=model_name,
+                        auc=stacking_auc,
+                        delta_vs_best_single=delta,
+                    )
+            except Exception as e:
+                log.error("stacking_model_failed", model=model_name, error=str(e))
+                stacking_results[f"stacking_{model_name}_error"] = str(e)
+
+        results["stacking"] = stacking_results
+        results["stacking_n_features"] = len(stacking_df.columns)
+        results["stacking_features"] = list(stacking_df.columns)
+
+    except Exception as e:
+        log.error("multimodal_stacking_failed", error=str(e))
+        results["stacking_error"] = str(e)
+
+    # ── Strategy 2: Raw features (optional) ──
+    if super_matrix_path is not None:
+        log.info("multimodal_raw_start", super_matrix=str(super_matrix_path))
+        try:
+            super_df = pd.read_parquet(super_matrix_path)
+            log.info(
+                "super_matrix_loaded",
+                n_samples=len(super_df),
+                n_cols=len(super_df.columns),
+            )
+
+            # Extract labels
+            if "label" not in super_df.columns:
+                raise ValueError("super_matrix must contain 'label' column")
+
+            label_mask = super_df["label"].isin(
+                ["True ctDNA+", "Possible ctDNA+", "Healthy Normal",
+                 "Possible ctDNA-", "Possible ctDNA\u2212"]
+            )
+            super_df = super_df[label_mask].copy()
+            y_raw = super_df["label"].isin(
+                ["True ctDNA+", "Possible ctDNA+"]
+            ).astype(int).values
+
+            # Select numeric feature columns (exclude metadata)
+            feature_cols = [
+                c for c in super_df.select_dtypes(include=np.number).columns
+                if c not in LABEL_META_COLS
+            ]
+
+            if not feature_cols:
+                raise ValueError("No numeric feature columns in super_matrix")
+
+            X_raw = super_df[feature_cols]
+            X_selected, selected_names = _select_multimodal_features(
+                X_raw, y_raw, top_k=top_k
+            )
+
+            if X_selected.empty:
+                raise ValueError("No features survived selection")
+
+            cv_raw = StratifiedKFold(
+                n_splits=min(n_folds, len(y_raw) // 2),
+                shuffle=True,
+                random_state=random_state,
+            )
+
+            raw_results = {}
+            for model_name in models:
+                try:
+                    model = _build_model(model_name, random_state)
+                    res, _ = evaluate_model(
+                        model,
+                        X_selected.values,
+                        y_raw,
+                        cv_raw,
+                        f"raw_{model_name}",
+                        feature_names=selected_names,
+                    )
+                    raw_results.update(res)
+
+                    raw_auc = res.get(f"auc_raw_{model_name}")
+                    if raw_auc is not None and best_single_auc > 0:
+                        raw_results[f"raw_{model_name}_vs_best_single"] = raw_auc - best_single_auc
+                except Exception as e:
+                    log.error("raw_model_failed", model=model_name, error=str(e))
+                    raw_results[f"raw_{model_name}_error"] = str(e)
+
+            results["raw_features"] = raw_results
+            results["raw_n_features_selected"] = len(selected_names)
+            results["raw_features_selected"] = selected_names[:20]
+
+        except Exception as e:
+            log.error("multimodal_raw_failed", error=str(e))
+            results["raw_features_error"] = str(e)
+
+    # ── Strategy 3: Ablation (leave-one-evaluator-out) ──
+    if "stacking" in results and "stacking_error" not in results:
+        log.info("multimodal_ablation_start")
+        try:
+            ablation = {}
+            # Use the best stacking model for ablation
+            best_stack_model = None
+            best_stack_auc = 0.0
+            for mn in models:
+                auc_val = results["stacking"].get(f"auc_stacking_{mn}", 0.0)
+                if auc_val and auc_val > best_stack_auc:
+                    best_stack_auc = auc_val
+                    best_stack_model = mn
+
+            if best_stack_model is not None:
+                # Drop each evaluator's columns and retrain
+                for eval_name in sorted(baselines.keys()):
+                    cols_to_drop = [
+                        c for c in stacking_df.columns if c.startswith(f"{eval_name}_")
+                    ]
+                    if not cols_to_drop:
+                        continue
+
+                    X_ablated = stacking_df.drop(columns=cols_to_drop)
+                    if X_ablated.empty:
+                        continue
+
+                    try:
+                        model = _build_model(best_stack_model, random_state)
+                        res, _ = evaluate_model(
+                            model, X_ablated.values, y_stack, cv,
+                            f"ablation_{eval_name}",
+                            feature_names=list(X_ablated.columns),
+                        )
+                        ablated_auc = res.get(f"auc_ablation_{eval_name}", 0.0)
+                        delta = best_stack_auc - (ablated_auc or 0.0)
+                        ablation[eval_name] = {
+                            "auc_without": ablated_auc,
+                            "delta": delta,
+                            "n_cols_removed": len(cols_to_drop),
+                        }
+                        log.info(
+                            "ablation_evaluator",
+                            evaluator=eval_name,
+                            auc_without=ablated_auc,
+                            delta=delta,
+                        )
+                    except Exception as e:
+                        log.error(
+                            "ablation_evaluator_failed",
+                            evaluator=eval_name,
+                            error=str(e),
+                        )
+                        ablation[eval_name] = {"error": str(e)}
+
+                # Sort by delta (most important first)
+                ablation_sorted = dict(
+                    sorted(
+                        ablation.items(),
+                        key=lambda x: x[1].get("delta", 0.0),
+                        reverse=True,
+                    )
+                )
+                results["ablation"] = ablation_sorted
+                results["ablation_model"] = best_stack_model
+                results["ablation_baseline_auc"] = best_stack_auc
+
+        except Exception as e:
+            log.error("multimodal_ablation_failed", error=str(e))
+            results["ablation_error"] = str(e)
+
+    log.info(
+        "multimodal_eval_complete",
+        strategies=["stacking"]
+        + (["raw_features"] if "raw_features" in results else [])
+        + (["ablation"] if "ablation" in results else []),
+        n_evaluators=len(baselines),
+    )
+
+    return results
+
+
+def _build_model(model_name: str, random_state: int):
+    """Instantiate a model by name for multimodal evaluation.
+
+    Centralises model construction so that ``multimodal_eval`` does not
+    duplicate sklearn import/init logic for every strategy × model
+    combination.
+
+    Args:
+        model_name: One of ``lr``, ``rf``, ``xgb``.
+        random_state: Seed for reproducibility.
+
+    Returns:
+        An sklearn-compatible estimator.
+
+    Raises:
+        ValueError: If ``model_name`` is not recognised.
+    """
+    if model_name == "lr":
+        return Pipeline([
+            ("scaler", StandardScaler()),
+            ("lr", LogisticRegression(max_iter=1000, random_state=random_state)),
+        ])
+    elif model_name == "rf":
+        return RandomForestClassifier(
+            n_estimators=200, max_depth=6, random_state=random_state, n_jobs=-1
+        )
+    elif model_name == "xgb":
+        try:
+            from xgboost import XGBClassifier
+            return XGBClassifier(
+                n_estimators=200, max_depth=4, learning_rate=0.1,
+                random_state=random_state, use_label_encoder=False,
+                eval_metric="logloss", verbosity=0, n_jobs=-1,
+            )
+        except ImportError:
+            log.error("xgb_import_failed", hint="pip install xgboost")
+            raise
+    else:
+        raise ValueError(f"Unknown model: {model_name!r}. Choose from: lr, rf, xgb")

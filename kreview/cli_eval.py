@@ -409,57 +409,137 @@ def eval_gpu(
     print("\n=== eval gpu complete ===", flush=True)
 
 
-# ── eval multimodal (stub — Phase D) ─────────────────────────────────────────
+# ── eval multimodal ───────────────────────────────────────────────────────────
 
 
 @eval_app.command("multimodal")
 def eval_multimodal(
-    super_matrix: Path = typer.Option(
-        ...,
-        "--super-matrix",
-        help="Path to super_matrix.parquet",
-    ),
     results_dir: Path = typer.Option(
         ...,
         "--results-dir",
-        help="Directory with *_model_results.json files",
+        help="Directory with *_model_results.json files from eval cpu/gpu",
+    ),
+    super_matrix: Path = typer.Option(
+        None,
+        "--super-matrix",
+        help="Optional path to super_matrix.parquet for raw-feature strategy",
     ),
     output: Path = typer.Option("output/", help="Output directory"),
     models: str = typer.Option(
         "rf,xgb",
         "--models",
-        help="Models for multimodal evaluation",
+        help="Comma-separated models for multimodal evaluation (lr,rf,xgb)",
     ),
-    top_k: int = typer.Option(50, "--top-k", help="Top-K features for selection"),
+    top_k: int = typer.Option(50, "--top-k", help="Top-K features for MI selection"),
+    cv_folds: int = typer.Option(5, "--cv-folds", help="Cross-validation folds"),
 ):
-    """Cross-evaluator multimodal evaluation on fused super-matrix.
+    """Cross-evaluator multimodal evaluation with stacking and ablation.
 
-    Reads per-evaluator results JSONs for OOF probabilities and combines
-    with the super_matrix for stacking and ablation analysis.
+    Reads per-evaluator model_results.json files for OOF probabilities
+    and combines them into a stacking matrix.  Three strategies are run:
 
-    NOTE: Full implementation in Phase D.
+    1. **Stacking**: Meta-learner on OOF probabilities across evaluators
+    2. **Raw features** (if --super-matrix provided): MI-selected features
+    3. **Ablation**: Leave-one-evaluator-out importance analysis
     """
+    from kreview.eval_engine import multimodal_eval as _multimodal_eval
+
     print("=== kreview eval multimodal ===", flush=True)
-    print(f"  --super-matrix : {super_matrix}", flush=True)
     print(f"  --results-dir  : {results_dir}", flush=True)
+    print(f"  --super-matrix : {super_matrix or '(not provided)'}", flush=True)
     print(f"  --output       : {output}", flush=True)
     print(f"  --models       : {models}", flush=True)
     print(f"  --top-k        : {top_k}", flush=True)
+    print(f"  --cv-folds     : {cv_folds}", flush=True)
     print("", flush=True)
-    print("  NOTE: Multimodal evaluation will be implemented in Phase D.", flush=True)
-    print("  This command validates inputs and exits.", flush=True)
 
-    if not super_matrix.exists():
-        print(f"ERROR: Super-matrix not found: {super_matrix}", flush=True)
-        raise typer.Exit(code=1)
-
+    # ── Validation ──
     if not results_dir.exists():
         print(f"ERROR: Results directory not found: {results_dir}", flush=True)
         raise typer.Exit(code=1)
 
     json_files = sorted(results_dir.glob("*_model_results.json"))
+    if not json_files:
+        print(f"ERROR: No *_model_results.json files in {results_dir}", flush=True)
+        raise typer.Exit(code=1)
     print(f"  Found {len(json_files)} evaluator result files", flush=True)
 
-    print("\n=== eval multimodal (stub) complete ===", flush=True)
+    if super_matrix is not None and not super_matrix.exists():
+        print(f"ERROR: Super-matrix not found: {super_matrix}", flush=True)
+        raise typer.Exit(code=1)
 
+    models_list = tuple(m.strip() for m in models.split(",") if m.strip())
+    if not models_list:
+        print("ERROR: No models specified", flush=True)
+        raise typer.Exit(code=1)
+
+    # ── Run multimodal evaluation ──
+    t0 = _time.time()
+    try:
+        results = _multimodal_eval(
+            results_dir=results_dir,
+            super_matrix_path=super_matrix,
+            models=models_list,
+            n_folds=cv_folds,
+            top_k=top_k,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        print(f"ERROR: {e}", flush=True)
+        log.error("multimodal_eval_failed", error=str(e))
+        raise typer.Exit(code=1)
+    except Exception as e:
+        log.error("multimodal_eval_unexpected_error", error=str(e))
+        print(f"ERROR: Unexpected error: {e}", flush=True)
+        raise typer.Exit(code=1)
+
+    elapsed = _time.time() - t0
+
+    # ── Display summary ──
+    print(f"\n  Evaluators: {results.get('n_evaluators', 0)}", flush=True)
+    print(f"  Best single-evaluator: {results.get('best_single_evaluator')} "
+          f"(AUC={results.get('best_single_auc', 'N/A')})", flush=True)
+
+    # Stacking results
+    stacking = results.get("stacking", {})
+    if stacking:
+        print("\n  Stacking results:", flush=True)
+        for k, v in sorted(stacking.items()):
+            if k.startswith("auc_stacking_") and not k.endswith(("_ci_lower", "_ci_upper")):
+                mn = k.replace("auc_stacking_", "")
+                delta_key = f"stacking_{mn}_vs_best_single"
+                delta = stacking.get(delta_key)
+                delta_str = f" (Δ={delta:+.3f})" if delta is not None else ""
+                print(f"    {mn}: AUC={v:.3f}{delta_str}", flush=True)
+    elif "stacking_error" in results:
+        print(f"\n  Stacking ERROR: {results['stacking_error']}", flush=True)
+
+    # Raw features results
+    raw_results = results.get("raw_features", {})
+    if raw_results:
+        print(f"\n  Raw features ({results.get('raw_n_features_selected', '?')} selected):",
+              flush=True)
+        for k, v in sorted(raw_results.items()):
+            if k.startswith("auc_raw_") and not k.endswith(("_ci_lower", "_ci_upper")):
+                print(f"    {k.replace('auc_raw_', '')}: AUC={v:.3f}", flush=True)
+
+    # Ablation results
+    ablation = results.get("ablation", {})
+    if ablation:
+        print(f"\n  Ablation (model={results.get('ablation_model')}):", flush=True)
+        for eval_name, info in list(ablation.items())[:10]:
+            if "error" in info:
+                print(f"    {eval_name}: ERROR", flush=True)
+            else:
+                print(f"    {eval_name}: Δ={info.get('delta', 0):.3f} "
+                      f"(AUC-without={info.get('auc_without', 'N/A')})", flush=True)
+
+    # ── Save results ──
+    _save_results(
+        results,
+        output,
+        "multimodal_results.json",
+        extra_meta={"results_dir": str(results_dir), "elapsed_sec": elapsed},
+    )
+
+    print(f"\n=== eval multimodal complete ({elapsed:.1f}s) ===", flush=True)
 
