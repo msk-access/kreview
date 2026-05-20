@@ -496,7 +496,8 @@ def run(
     resume: bool = typer.Option(
         False,
         "--resume",
-        help="Skip evaluators whose model results already exist in the output directory.",
+        help="Skip models whose AUC results already exist in the output JSON. "
+        "Enables incremental runs: first CPU, then GPU with --resume.",
     ),
     compute_univariate_auc: bool = typer.Option(
         True,
@@ -508,6 +509,27 @@ def run(
         "--ch-hotspot-maf",
         help="Optional TSV of CH hotspot variants for CH-only demotion. "
         "Samples with only CH mutations are demoted to Possible ctDNA−.",
+    ),
+    gpu_models_flag: str = typer.Option(
+        "",
+        "--gpu-models",
+        help="Comma-separated GPU models to run after CPU models: tabpfn,tabicl. "
+        "Empty (default) = CPU only. Requires torch + model packages (pip install kreview[gpu]).",
+    ),
+    no_finetune: bool = typer.Option(
+        False,
+        "--no-finetune",
+        help="Use zero-shot inference for GPU models instead of fine-tuning (not recommended).",
+    ),
+    finetune_epochs: int = typer.Option(
+        30,
+        "--finetune-epochs",
+        help="Number of fine-tuning epochs for GPU foundation models.",
+    ),
+    device: str = typer.Option(
+        "cuda",
+        "--device",
+        help="PyTorch device for GPU models: cuda, cpu.",
     ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
@@ -561,7 +583,30 @@ def run(
     _echo(f"  --resume            : {resume}")
     _echo(f"  --compute-univariate-auc : {compute_univariate_auc}")
     _echo(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}")
+    _echo(f"  --gpu-models        : {gpu_models_flag or 'disabled (CPU only)'}")
+    if gpu_models_flag:
+        _echo(f"  --device            : {device}")
+        _echo(f"  --finetune          : {not no_finetune}")
+        _echo(f"  --finetune-epochs   : {finetune_epochs}")
     _echo("")
+
+    # ── Parse GPU models ──
+    gpu_model_list = (
+        [m.strip() for m in gpu_models_flag.split(",") if m.strip()]
+        if gpu_models_flag
+        else []
+    )
+    # All requested models (CPU + GPU) for resume checking
+    cpu_model_names = {"lr", "rf", "xgb"}
+    all_requested_models = cpu_model_names | set(gpu_model_list)
+    if gpu_model_list:
+        _echo(f"  GPU models requested: {gpu_model_list}")
+        log.info(
+            "gpu_models_requested",
+            models=gpu_model_list,
+            device=device,
+            finetune=not no_finetune,
+        )
 
     # ── Validate --chunk-size ──
     # 'auto' passes through to iter_feature_chunks which probes row density.
@@ -627,36 +672,51 @@ def run(
         _echo(f"\n{'='*60}")
         _echo(f"Processing evaluator: {e.name}")
 
-        # ── Resume checkpoint: skip if model results already exist ──
-        # GAP-4: Also check that the JSON contains OOF predictions (added in
-        # v0.8.4). JSONs from older runs lack oof_labels and will produce
-        # legacy (leaky) ROC plots. Warn but still skip to avoid re-running
-        # expensive evaluations — user can delete the JSON to force recompute.
+        # ── Resume checkpoint: model-aware skip logic ──
+        # Checks which specific models (auc_lr, auc_rf, auc_tabpfn, etc.) are
+        # already computed. Only skips the evaluator entirely when ALL requested
+        # models have results. Otherwise, tracks which models need to run.
+        existing_results = {}  # loaded JSON for merge (populated if resume + file exists)
+        models_to_skip = set()  # model names that already have AUC results
         if resume:
             checkpoint = out_path / f"{e.name}_model_results.json"
             if checkpoint.exists():
                 try:
-                    import json as _json
-
                     with open(checkpoint) as _f:
-                        _chk = _json.load(_f)
-                    if "oof_labels" not in _chk:
+                        existing_results = json.load(_f)
+                    models_to_skip = {
+                        k.replace("auc_", "")
+                        for k in existing_results
+                        if k.startswith("auc_")
+                        and isinstance(existing_results[k], (int, float))
+                    }
+                    remaining = all_requested_models - models_to_skip
+                    if not remaining:
                         _echo(
-                            f"  SKIP (--resume): {checkpoint.name} exists but MISSING oof_labels. "
-                            f"Delete this file and re-run to get OOF-based ROC plots."
+                            f"  SKIP (--resume): {checkpoint.name} — all "
+                            f"{len(models_to_skip)} models computed: {sorted(models_to_skip)}"
                         )
-                    elif "selection_qc" not in _chk:
-                        _echo(
-                            f"  SKIP (--resume): {checkpoint.name} uses legacy Cohen's D selection. "
-                            f"Delete to re-run with hybrid union feature selection."
-                        )
-                    else:
-                        _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
-                except Exception:
+                        continue
                     _echo(
-                        f"  SKIP (--resume): {checkpoint.name} exists (could not verify contents)"
+                        f"  RESUME: {e.name} — existing: {sorted(models_to_skip)}, "
+                        f"remaining: {sorted(remaining)}"
                     )
-                continue
+                    log.info(
+                        "resume_partial",
+                        evaluator=e.name,
+                        existing=sorted(models_to_skip),
+                        remaining=sorted(remaining),
+                    )
+                except Exception as exc:
+                    log.warning(
+                        "resume_checkpoint_read_failed",
+                        evaluator=e.name,
+                        error=str(exc),
+                    )
+                    _echo(
+                        f"  WARNING: Could not read {checkpoint.name}: {exc}. "
+                        f"Re-running all models."
+                    )
 
         # ── Step 3: Extract features ──
         # Delegates to _extract_evaluator() which handles both SQL pushdown
@@ -866,19 +926,112 @@ def run(
                 if a_types is not None:
                     a_types = a_types.values
 
-                model_res, lr_model, rf_model, xgb_model = cpu_models(
-                    X,
-                    y,
-                    feature_names=top_feats,
-                    cancer_types=c_types,
-                    assays=a_types,
-                    n_folds=cv_folds,
-                )
+                def _fmt(v):
+                    return "N/A" if v is None else f"{v:.3f}"
+
                 model_out = out_path / f"{e.name}_model_results.json"
 
+                # ── CPU models (lr, rf, xgb) ──
+                skip_cpu = cpu_model_names.issubset(models_to_skip)
+                if skip_cpu:
+                    _echo("  CPU models: SKIP (--resume, already computed)")
+                    model_res = existing_results  # use cached results
+                    lr_model, rf_model, xgb_model = None, None, None
+                else:
+                    model_res, lr_model, rf_model, xgb_model = cpu_models(
+                        X,
+                        y,
+                        feature_names=top_feats,
+                        cancer_types=c_types,
+                        assays=a_types,
+                        n_folds=cv_folds,
+                    )
+                    _echo(
+                        f"  CPU: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
+                        f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
+                        f"AUC_XGB={_fmt(model_res.get('auc_xgb'))}"
+                    )
+
+                # ── GPU models (tabpfn, tabicl) ──
+                if gpu_model_list:
+                    # Determine which GPU models still need to run
+                    gpu_remaining = [
+                        m for m in gpu_model_list if m not in models_to_skip
+                    ]
+                    if not gpu_remaining:
+                        _echo("  GPU models: SKIP (--resume, already computed)")
+                    else:
+                        _echo(
+                            f"  Running GPU models: {gpu_remaining} "
+                            f"(device={device}, finetune={not no_finetune})"
+                        )
+                        try:
+                            from kreview.eval_engine import gpu_models
+
+                            gpu_res, gpu_fitted = gpu_models(
+                                X,
+                                y,
+                                feature_names=top_feats,
+                                cancer_types=c_types,
+                                assays=a_types,
+                                n_folds=cv_folds,
+                                models=tuple(gpu_remaining),
+                                device=device,
+                                finetune=not no_finetune,
+                                finetune_epochs=finetune_epochs,
+                            )
+                            # Merge GPU results into the combined dict
+                            model_res.update(gpu_res)
+                            for mn in gpu_remaining:
+                                _echo(
+                                    f"  GPU/{mn}: AUC={_fmt(model_res.get(f'auc_{mn}'))}"
+                                )
+                            log.info(
+                                "gpu_models_complete",
+                                evaluator=e.name,
+                                models=gpu_remaining,
+                                aucs={
+                                    mn: model_res.get(f"auc_{mn}")
+                                    for mn in gpu_remaining
+                                },
+                            )
+                        except ImportError as exc:
+                            log.error(
+                                "gpu_import_failed",
+                                evaluator=e.name,
+                                error=str(exc),
+                                hint="pip install kreview[gpu]",
+                            )
+                            _echo(
+                                f"  ERROR: GPU dependencies not available: {exc}. "
+                                f"Install with: pip install kreview[gpu]"
+                            )
+                        except Exception as exc:
+                            log.error(
+                                "gpu_models_failed",
+                                evaluator=e.name,
+                                error=str(exc),
+                            )
+                            _echo(f"  ERROR: GPU models failed: {exc}")
+
+                # ── Enrich results + save ──
                 if "error" not in model_res:
                     model_res["top_features"] = top_feats
                     model_res["selection_qc"] = selection_qc
+                    # Add sample IDs for multimodal alignment (C5)
+                    if "sample_id" in model_df.columns:
+                        model_res["oof_sample_ids"] = (
+                            model_df["sample_id"].tolist()
+                        )
+                    elif "SAMPLE_ID" in model_df.columns:
+                        model_res["oof_sample_ids"] = (
+                            model_df["SAMPLE_ID"].tolist()
+                        )
+
+                # Merge with any existing results from a partial resume
+                if existing_results and existing_results is not model_res:
+                    existing_results.update(model_res)
+                    model_res = existing_results
 
                 import joblib
 
@@ -896,14 +1049,7 @@ def run(
                 with open(model_out, "w") as f:
                     json.dump(model_res, f, indent=2, default=str)
 
-                def _fmt(v):
-                    return "N/A" if v is None else f"{v:.3f}"
-
-                _echo(
-                    f"  Model: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
-                    f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
-                    f"AUC_XGB={_fmt(model_res.get('auc_xgb'))} -> {model_out}"
-                )
+                _echo(f"  Output: {model_out}")
 
         else:
             n_classes = len(np.unique(y)) if len(y) > 0 else 0
