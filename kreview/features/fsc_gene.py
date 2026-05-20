@@ -9,8 +9,7 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "FSCGeneEvaluator"]
-
+__all__ = ['log', 'FSCGeneEvaluator']
 
 # %% ../../nbs/features/10_fsc_gene.ipynb #4f42d260
 class FSCGeneEvaluator(FeatureEvaluator):
