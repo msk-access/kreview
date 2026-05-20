@@ -718,6 +718,144 @@ def _subgroup_metrics(
     return res
 
 
+# ── Universal Model Evaluator ─────────────────────────────────────────────────
+
+
+def evaluate_model(
+    model,
+    X: np.ndarray,
+    y: np.ndarray,
+    cv: StratifiedKFold,
+    name: str,
+    feature_names: list[str] | None = None,
+    refit: bool = True,
+    compute_shap: bool = False,
+    shap_samples: int = 500,
+) -> tuple[dict, object | None]:
+    """Evaluate any sklearn-compatible model via stratified cross-validation.
+
+    Shared primitive used by cpu_models(), gpu_models(), and multimodal_eval().
+    The model must implement fit() and predict_proba().
+
+    Args:
+        model: sklearn-compatible estimator (Pipeline, RF, XGB, TabPFN, etc.).
+        X: Feature matrix, shape (n_samples, n_features).
+        y: Binary labels (0/1), shape (n_samples,).
+        cv: Pre-configured StratifiedKFold splitter.
+        name: Prefix for all result keys (e.g. "lr", "rf", "tabpfn").
+        feature_names: Optional feature names for importance extraction.
+        refit: If True, refit model on full data after CV.
+        compute_shap: If True, compute SHAP values (requires refit=True).
+        shap_samples: Max samples for SHAP computation.
+
+    Returns:
+        (result_dict, fitted_model_or_None). result_dict keys are prefixed
+        with ``name`` (e.g. ``auc_rf``, ``rf_oof_probs``, ``rf_fold_aucs``).
+    """
+    import time
+
+    result = {}
+
+    # 1. Out-of-fold predictions via cross-validation
+    oof_probs = cross_val_predict(model, X, y, cv=cv, method="predict_proba")[:, 1]
+
+    # 2. Core AUC metric
+    auc_val = roc_auc_score(y, oof_probs)
+    result[f"auc_{name}"] = auc_val
+    result[f"{name}_oof_probs"] = np.round(oof_probs, 6).tolist()
+
+    # 3. Bootstrap 95% CI
+    ci_lo, ci_hi = _bootstrap_auc(y, oof_probs)
+    result[f"auc_{name}_ci_lower"] = ci_lo
+    result[f"auc_{name}_ci_upper"] = ci_hi
+
+    # 4. Optimal threshold + classification metrics
+    threshold = _optimal_threshold(y, oof_probs)
+    result[f"{name}_optimal_threshold"] = threshold
+    cls_rep, cm = _classification_metrics(y, oof_probs, threshold=threshold)
+    result[f"{name}_classification_report"] = cls_rep
+    result[f"{name}_confusion_matrix"] = cm
+
+    # 5. Per-fold AUC tracking
+    try:
+        fold_aucs = _per_fold_auc(y, oof_probs, cv, X)
+        if fold_aucs:
+            result[f"{name}_fold_aucs"] = fold_aucs
+            result[f"{name}_auc_std"] = float(np.std(fold_aucs))
+            log.debug(
+                "fold_aucs_computed",
+                model=name,
+                mean=f"{np.mean(fold_aucs):.3f}",
+                std=f"{np.std(fold_aucs):.3f}",
+            )
+    except Exception as e:
+        log.warning("fold_auc_tracking_failed", model=name, error=str(e))
+
+    # 6. Precision-Recall curve
+    pr_dict, avg_prec = _pr_curve(y, oof_probs)
+    if pr_dict is not None:
+        result[f"{name}_pr_curve"] = pr_dict
+        result[f"{name}_avg_precision"] = avg_prec
+
+    # 7. Calibration curve
+    cal = _calibration(y, oof_probs)
+    if cal is not None:
+        result[f"{name}_calibration"] = cal
+
+    # 8. Refit on full data + training time
+    fitted = None
+    if refit:
+        t0 = time.perf_counter()
+        model.fit(X, y)
+        result[f"{name}_training_time_sec"] = time.perf_counter() - t0
+        fitted = model
+
+    # 9. Feature importances (model-specific)
+    if fitted is not None and feature_names is not None:
+        result[f"{name}_feature_importances"] = _extract_importances(
+            fitted, feature_names, name
+        )
+
+    return result, fitted
+
+
+def _extract_importances(
+    fitted_model, feature_names: list[str], model_name: str
+) -> dict | list | None:
+    """Extract feature importances from a fitted model.
+
+    Supports:
+    - Tree-based models (RF, XGB): feature_importances_ attribute
+    - Linear models / Pipelines: coef_ attribute (abs values)
+    - Others: returns None (no silent failure)
+    """
+    try:
+        # Tree-based models
+        if hasattr(fitted_model, "feature_importances_"):
+            return dict(zip(feature_names, fitted_model.feature_importances_.tolist()))
+
+        # Pipeline: check last step
+        if hasattr(fitted_model, "named_steps"):
+            last_step = list(fitted_model.named_steps.values())[-1]
+            if hasattr(last_step, "coef_"):
+                coefs = np.abs(last_step.coef_[0])
+                return dict(zip(feature_names, coefs.tolist()))
+            if hasattr(last_step, "feature_importances_"):
+                return dict(zip(feature_names, last_step.feature_importances_.tolist()))
+
+        # Direct linear model
+        if hasattr(fitted_model, "coef_"):
+            coefs = np.abs(fitted_model.coef_[0])
+            return dict(zip(feature_names, coefs.tolist()))
+
+    except Exception as e:
+        log.warning(
+            "feature_importance_extraction_failed", model=model_name, error=str(e)
+        )
+
+    return None
+
+
 def single_feature_model(
     X: np.ndarray,  # shape (n_samples, n_sub_metrics)
     y: np.ndarray,  # binary labels (1 = positive class)
