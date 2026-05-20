@@ -43,6 +43,7 @@ __all__ = [
     "decision_curve_analysis",
     "evaluate_model",
     "cpu_models",
+    "gpu_models",
     "single_feature_model",
 ]
 
@@ -1108,3 +1109,279 @@ def cpu_models(
 
 # Backward compatibility alias — existing code and tests use single_feature_model
 single_feature_model = cpu_models
+
+
+# ── GPU Foundation Model Support ──────────────────────────────────────────────
+
+
+def _build_gpu_model(
+    name: str,
+    device: str = "cuda",
+    finetune: bool = True,
+    finetune_epochs: int = 30,
+    finetune_lr: float = 1e-5,
+) -> object | None:
+    """Factory: instantiate a GPU foundation model.
+
+    Fine-tuning is default (matches HPC usage pattern).
+    Returns None with structured log error if import fails.
+
+    Args:
+        name: "tabpfn" or "tabicl".
+        device: PyTorch device string.
+        finetune: If True, use fine-tuned variant (default).
+        finetune_epochs: Epochs for fine-tuning.
+        finetune_lr: Learning rate for fine-tuning.
+    """
+    if name == "tabpfn":
+        try:
+            if finetune:
+                from tabpfn_extensions.fine_tuning import FineTunedTabPFNClassifier
+
+                return FineTunedTabPFNClassifier(
+                    device=device,
+                    n_epochs=finetune_epochs,
+                    learning_rate=finetune_lr,
+                )
+            else:
+                from tabpfn import TabPFNClassifier
+
+                return TabPFNClassifier(device=device)
+        except ImportError as e:
+            log.error(
+                "gpu_model_import_failed",
+                model=name,
+                error=str(e),
+                hint="Install with: pip install kreview[gpu]",
+            )
+            return None
+
+    elif name == "tabicl":
+        try:
+            from tabicl import TabICLClassifier
+
+            return TabICLClassifier(finetune=finetune)
+        except ImportError as e:
+            log.error(
+                "gpu_model_import_failed",
+                model=name,
+                error=str(e),
+                hint="Install with: pip install kreview[gpu]",
+            )
+            return None
+
+    else:
+        log.error("unknown_gpu_model", model=name, known=["tabpfn", "tabicl"])
+        return None
+
+
+def _compute_shap(
+    fitted_model,
+    X: np.ndarray,
+    name: str,
+    feature_names: list[str] | None = None,
+    max_samples: int = 500,
+) -> dict | None:
+    """Compute SHAP values using the best available method for the model type.
+
+    Dispatches to native SHAP implementations for foundation models,
+    TreeExplainer for tree-based, or PermutationExplainer as fallback.
+
+    Returns dict with shap_values (list) and feature_names, or None on failure.
+    """
+    X_shap = X[:max_samples] if len(X) > max_samples else X
+
+    try:
+        # Native TabICL SHAP
+        if name == "tabicl":
+            from tabicl.shap import get_shap_values
+
+            sv = get_shap_values(fitted_model, X_shap)
+            return {
+                "shap_values": sv.tolist() if hasattr(sv, "tolist") else sv,
+                "feature_names": feature_names,
+            }
+
+        # Native TabPFN SHAP via tabpfn-extensions
+        if name == "tabpfn":
+            from tabpfn_extensions.interpretability import shap_values as tabpfn_shap
+
+            sv = tabpfn_shap(fitted_model, X_shap)
+            return {
+                "shap_values": sv.tolist() if hasattr(sv, "tolist") else sv,
+                "feature_names": feature_names,
+            }
+
+        # Tree-based (RF, XGB)
+        import shap
+
+        if hasattr(fitted_model, "feature_importances_"):
+            explainer = shap.TreeExplainer(fitted_model)
+            sv = explainer.shap_values(X_shap)
+            # TreeExplainer may return list of arrays (one per class)
+            if isinstance(sv, list):
+                sv = sv[1]  # positive class
+            return {
+                "shap_values": sv.tolist(),
+                "feature_names": feature_names,
+            }
+
+        # Pipeline: try to get inner model
+        if hasattr(fitted_model, "named_steps"):
+            last = list(fitted_model.named_steps.values())[-1]
+            if hasattr(last, "feature_importances_"):
+                explainer = shap.TreeExplainer(last)
+                # Transform X through pipeline steps before last
+                import sklearn.pipeline
+
+                X_transformed = X_shap
+                for step_name, step in list(fitted_model.named_steps.items())[:-1]:
+                    X_transformed = step.transform(X_transformed)
+                sv = explainer.shap_values(X_transformed)
+                if isinstance(sv, list):
+                    sv = sv[1]
+                return {
+                    "shap_values": sv.tolist(),
+                    "feature_names": feature_names,
+                }
+
+        # Fallback: PermutationExplainer (slow but universal)
+        explainer = shap.PermutationExplainer(fitted_model.predict_proba, X_shap)
+        sv = explainer(X_shap)
+        return {
+            "shap_values": (
+                sv.values[:, :, 1].tolist()
+                if sv.values.ndim == 3
+                else sv.values.tolist()
+            ),
+            "feature_names": feature_names,
+        }
+
+    except Exception as e:
+        log.warning("shap_computation_failed", model=name, error=str(e))
+        return None
+
+
+def gpu_models(
+    X: np.ndarray,
+    y: np.ndarray,
+    feature_names: list[str] | None = None,
+    cancer_types: np.ndarray | None = None,
+    assays: np.ndarray | None = None,
+    n_folds: int = 5,
+    random_state: int = 42,
+    models: tuple[str, ...] = ("tabpfn",),
+    device: str = "cuda",
+    finetune: bool = True,
+    finetune_epochs: int = 30,
+    finetune_lr: float = 1e-5,
+    compute_shap: bool = False,
+    shap_samples: int = 500,
+) -> tuple[dict, dict[str, object]]:
+    """Train GPU foundation models (TabPFN, TabICL) on a feature matrix.
+
+    Same output schema as cpu_models() for each model, using the shared
+    ``evaluate_model()`` primitive. Fine-tuning is ON by default.
+
+    Args:
+        X: Feature matrix, shape (n_samples, n_features).
+        y: Binary labels (0/1).
+        feature_names: Optional feature names.
+        cancer_types: Optional cancer type array for subgroup analysis.
+        assays: Optional assay array for subgroup analysis.
+        n_folds: Number of CV folds.
+        random_state: Random seed.
+        models: Tuple of GPU model names ("tabpfn", "tabicl").
+        device: PyTorch device ("cuda", "cpu").
+        finetune: If True (default), use fine-tuned variants.
+        finetune_epochs: Epochs for fine-tuning.
+        finetune_lr: Learning rate for fine-tuning.
+        compute_shap: If True, compute SHAP values.
+        shap_samples: Max samples for SHAP computation.
+
+    Returns:
+        (results_dict, fitted_models_dict). fitted_models_dict maps
+        model name to fitted model object.
+    """
+    results = {}
+    fitted_models = {}
+
+    try:
+        y = y.astype(int)
+        if len(np.unique(y)) < 2:
+            log.warning("single_class_y", y_unique=np.unique(y).tolist())
+            return {"error": "Only one class present in target array"}, {}
+
+        min_class_counts = np.bincount(y).min()
+        folds = min(n_folds, min_class_counts)
+        if folds < 2:
+            return (
+                {"error": "Not enough samples per class for Stratified CV (<2)"},
+                {},
+            )
+
+        cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
+        results["cv_folds_actual"] = folds
+
+        for model_name in models:
+            model = _build_gpu_model(
+                model_name,
+                device=device,
+                finetune=finetune,
+                finetune_epochs=finetune_epochs,
+                finetune_lr=finetune_lr,
+            )
+            if model is None:
+                log.warning(
+                    "gpu_model_skipped",
+                    model=model_name,
+                    reason="build failed",
+                )
+                continue
+
+            try:
+                model_res, fitted = evaluate_model(
+                    model,
+                    X,
+                    y,
+                    cv,
+                    model_name,
+                    feature_names=feature_names,
+                    refit=True,
+                    compute_shap=compute_shap,
+                    shap_samples=shap_samples,
+                )
+                results.update(model_res)
+                fitted_models[model_name] = fitted
+
+                # SHAP via native dispatchers
+                if compute_shap and fitted is not None:
+                    shap_result = _compute_shap(
+                        fitted, X, model_name, feature_names, shap_samples
+                    )
+                    if shap_result is not None:
+                        results[f"{model_name}_shap"] = shap_result
+
+                log.info(
+                    "gpu_model_evaluated",
+                    model=model_name,
+                    auc=results.get(f"auc_{model_name}"),
+                    finetune=finetune,
+                )
+            except Exception as e:
+                log.error(
+                    "gpu_model_evaluation_failed",
+                    model=model_name,
+                    error=str(e),
+                )
+                continue
+
+        # OOF labels for downstream multimodal alignment
+        results["oof_labels"] = y.tolist()
+
+        return results, fitted_models
+    except Exception as e:
+        import traceback
+
+        log.error("gpu_models_failed", error=str(e), trace=traceback.format_exc())
+        return {"error": str(e)}, {}
