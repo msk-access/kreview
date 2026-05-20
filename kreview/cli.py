@@ -515,7 +515,7 @@ def run(
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
 
-    from kreview.eval_engine import evaluate_feature, single_feature_model
+    from kreview.eval_engine import evaluate_feature, cpu_models
     import glob
     import json
 
@@ -866,7 +866,7 @@ def run(
                 if a_types is not None:
                     a_types = a_types.values
 
-                model_res, lr_model, rf_model, xgb_model = single_feature_model(
+                model_res, lr_model, rf_model, xgb_model = cpu_models(
                     X,
                     y,
                     feature_names=top_feats,

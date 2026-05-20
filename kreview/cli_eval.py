@@ -5,7 +5,7 @@
 # %% auto #0
 __all__ = ['log', 'eval_app', 'eval_cpu', 'eval_gpu', 'eval_multimodal']
 
-# %% ../nbs/91_cli_eval.ipynb #fae48dd7
+# %% ../nbs/91_cli_eval.ipynb #ba11bc60
 """Evaluation CLI subcommands: kreview eval cpu|gpu|multimodal.
 
 Registered in the main CLI via::
