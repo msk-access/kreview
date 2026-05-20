@@ -24,6 +24,17 @@ from kreview.eval_engine import (
     LABEL_ORDER,
 )
 
+# Detect whether XGBoost is usable in this environment.
+# XGBoost may be installed but fail at import due to missing libomp on macOS.
+try:
+    from xgboost import XGBClassifier  # noqa: F401
+    HAS_XGB = True
+except Exception:
+    HAS_XGB = False
+
+# Models to iterate in tests — only include xgb if available
+_MODELS = ["lr", "rf"] + (["xgb"] if HAS_XGB else [])
+
 # ── Fixtures ────────────────────────────────────────────────────────────────────
 
 
@@ -242,7 +253,7 @@ class TestPRCurves:
         """PR curve data should be present for all models."""
         X, y = binary_Xy
         results, *_ = single_feature_model(X, y)
-        for prefix in ["lr", "rf", "xgb"]:
+        for prefix in _MODELS:
             key = f"{prefix}_pr_curve"
             assert key in results, f"Missing {key}"
             assert "precision" in results[key]
@@ -252,7 +263,7 @@ class TestPRCurves:
         """Average precision should be between 0 and 1."""
         X, y = binary_Xy
         results, *_ = single_feature_model(X, y)
-        for prefix in ["lr", "rf", "xgb"]:
+        for prefix in _MODELS:
             key = f"{prefix}_avg_precision"
             assert key in results, f"Missing {key}"
             assert 0 <= results[key] <= 1, f"{key}={results[key]} out of range"
@@ -280,8 +291,9 @@ class TestDCA:
         X, y = binary_Xy
         results, *_ = single_feature_model(X, y)
         assert "rf_dca" in results
-        assert "xgb_dca" in results
         assert "thresholds" in results["rf_dca"]
+        if HAS_XGB:
+            assert "xgb_dca" in results
 
 
 class TestFoldAUC:
@@ -291,7 +303,7 @@ class TestFoldAUC:
         """Fold AUCs should be tracked for LR, RF, and XGBoost."""
         X, y = binary_Xy
         results, *_ = single_feature_model(X, y)
-        for prefix in ["lr", "rf", "xgb"]:
+        for prefix in _MODELS:
             key = f"{prefix}_fold_aucs"
             assert key in results, f"Missing {key}"
             assert isinstance(results[key], list)
@@ -301,7 +313,7 @@ class TestFoldAUC:
         """AUC standard deviation should be computed."""
         X, y = binary_Xy
         results, *_ = single_feature_model(X, y)
-        for prefix in ["lr", "rf", "xgb"]:
+        for prefix in _MODELS:
             key = f"{prefix}_auc_std"
             assert key in results, f"Missing {key}"
             assert results[key] >= 0  # std is non-negative
@@ -391,7 +403,7 @@ class TestTrainingTime:
         """Training time should be recorded for all models."""
         X, y = binary_Xy
         results, *_ = single_feature_model(X, y)
-        for prefix in ["lr", "rf", "xgb"]:
+        for prefix in _MODELS:
             key = f"{prefix}_training_time_sec"
             assert key in results, f"Missing {key}"
             assert results[key] > 0, f"{key} should be positive"
@@ -405,7 +417,8 @@ class TestAUCDeltas:
         X, y = binary_Xy
         results, *_ = single_feature_model(X, y)
         assert "auc_delta_rf_lr" in results
-        assert "auc_delta_xgb_rf" in results
+        if HAS_XGB:
+            assert "auc_delta_xgb_rf" in results
 
     def test_deltas_consistency(self, binary_Xy):
         """RF-LR delta should equal auc_rf - auc_lr."""

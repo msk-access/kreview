@@ -22,16 +22,8 @@ from kreview.core import (
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = [
-    "log",
-    "load_ch_hotspots",
-    "compute_impact_match",
-    "compute_snv_summary",
-    "compute_sv_summary",
-    "compute_cna_summary",
-    "CtDNALabeler",
-]
-
+__all__ = ['log', 'load_ch_hotspots', 'compute_impact_match', 'compute_snv_summary', 'compute_sv_summary', 'compute_cna_summary',
+           'CtDNALabeler']
 
 # %% ../nbs/01_labels.ipynb #ch_hotspots
 from pathlib import Path as _Path

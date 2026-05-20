@@ -9,8 +9,7 @@ import pandas as pd
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "generate_report"]
-
+__all__ = ['log', 'generate_report']
 
 # %% ../nbs/05_report.ipynb #0e657248
 def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
@@ -69,14 +68,15 @@ def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
                     y = df_valid["is_pos"].to_numpy()
 
                     if len(np.unique(y)) > 1:
-                        models = ee.single_feature_model(X, y)
+                        model_results, *_ = ee.cpu_models(X, y)
                         html_parts.append("<h2>Ensemble Predictive Analysis</h2>")
-                        html_parts.append(
-                            f"<p><strong>Random Forest AUC:</strong> {models.get('rf_auc', 'N/A')}</p>"
-                        )
-                        html_parts.append(
-                            f"<p><strong>Logistic Regression AUC:</strong> {models.get('lr_auc', 'N/A')}</p>"
-                        )
+                        # Dynamically render all model AUCs (CPU + GPU)
+                        for k, v in sorted(model_results.items()):
+                            if k.startswith("auc_") and isinstance(v, (int, float)):
+                                model_label = k.replace("auc_", "").upper()
+                                html_parts.append(
+                                    f"<p><strong>{model_label} AUC:</strong> {v:.3f}</p>"
+                                )
             except Exception as e:
                 log.warning("ensemble_model_failed", error=str(e))
 
