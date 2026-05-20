@@ -565,6 +565,159 @@ def decision_curve_analysis(
 
 
 # %% ../nbs/02_eval_engine.ipynb #7a8a3f8d
+# ── Shared Metric Helpers ─────────────────────────────────────────────────────
+# Extracted from single_feature_model() for reuse by evaluate_model(),
+# cpu_models(), and gpu_models(). No closures — pure functions.
+
+
+def _optimal_threshold(y_true: np.ndarray, y_pred_prob: np.ndarray) -> float:
+    """Find threshold maximizing Youden's J (sensitivity + specificity - 1).
+
+    Falls back to 0.5 if roc_curve fails (e.g. single-class fold).
+    """
+    try:
+        fpr, tpr, thresholds = roc_curve(y_true, y_pred_prob)
+        if len(thresholds) > 0:
+            optimal_idx = np.argmax(tpr - fpr)
+            return float(thresholds[optimal_idx])
+    except Exception:
+        log.debug("optimal_threshold_fallback", reason="roc_curve failed")
+    return 0.5
+
+
+def _classification_metrics(
+    y_true: np.ndarray, y_pred_prob: np.ndarray, threshold: float = 0.5
+) -> tuple[dict, list]:
+    """Compute classification report and confusion matrix at given threshold.
+
+    Returns (classification_report_dict, confusion_matrix_list).
+    """
+    from sklearn.metrics import classification_report, confusion_matrix
+
+    y_pred = (y_pred_prob >= threshold).astype(int)
+    rep = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+    cm = confusion_matrix(y_true, y_pred).tolist()
+    return rep, cm
+
+
+def _bootstrap_auc(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    n_boot: int = 1000,
+    seed: int = 42,
+) -> tuple[float | None, float | None]:
+    """Compute 95% bootstrap CI for AUC-ROC.
+
+    Returns (lower, upper) or (None, None) if fewer than 10 valid
+    bootstrap samples could be drawn (e.g. very small dataset).
+    """
+    rng = np.random.RandomState(seed)
+    aucs = []
+    for _ in range(n_boot):
+        idx = rng.randint(0, len(y_true), len(y_true))
+        if len(np.unique(y_true[idx])) < 2:
+            continue
+        aucs.append(roc_auc_score(y_true[idx], y_score[idx]))
+    if len(aucs) < 10:
+        return None, None
+    return float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))
+
+
+def _per_fold_auc(
+    y: np.ndarray,
+    oof_probs: np.ndarray,
+    cv: StratifiedKFold,
+    X: np.ndarray,
+) -> list[float]:
+    """Compute per-fold AUC from out-of-fold predictions.
+
+    Uses the same CV split that produced the OOF predictions
+    (D-01 fix: no independent cross_val_score run).
+    Skips folds with a single class.
+    """
+    fold_aucs = []
+    for _, test_idx in cv.split(X, y):
+        if len(np.unique(y[test_idx])) < 2:
+            continue
+        fold_aucs.append(float(roc_auc_score(y[test_idx], oof_probs[test_idx])))
+    return fold_aucs
+
+
+def _pr_curve(
+    y_true: np.ndarray, y_prob: np.ndarray
+) -> tuple[dict | None, float | None]:
+    """Compute precision-recall curve and average precision.
+
+    Returns (pr_dict, avg_precision) or (None, None) on failure.
+    """
+    try:
+        from sklearn.metrics import precision_recall_curve, average_precision_score
+
+        prec, rec, _ = precision_recall_curve(y_true, y_prob)
+        pr_dict = {"precision": prec.tolist(), "recall": rec.tolist()}
+        avg_prec = float(average_precision_score(y_true, y_prob))
+        return pr_dict, avg_prec
+    except Exception as e:
+        log.warning("pr_curve_failed", error=str(e))
+        return None, None
+
+
+def _calibration(y_true: np.ndarray, y_prob: np.ndarray) -> dict | None:
+    """Compute calibration curve (10 uniform bins).
+
+    Returns dict with prob_true/prob_pred or None on failure.
+    """
+    try:
+        from sklearn.calibration import calibration_curve
+
+        prob_true, prob_pred = calibration_curve(
+            y_true, y_prob, n_bins=10, strategy="uniform"
+        )
+        return {"prob_true": prob_true.tolist(), "prob_pred": prob_pred.tolist()}
+    except Exception as e:
+        log.warning("calibration_failed", error=str(e))
+        return None
+
+
+def _subgroup_metrics(
+    mask: np.ndarray,
+    y_all: np.ndarray,
+    preds_dict: dict[str, np.ndarray],
+) -> dict:
+    """Compute sensitivity/specificity for each model on a subgroup.
+
+    Args:
+        mask: boolean array selecting the subgroup.
+        y_all: full label array.
+        preds_dict: {model_name: binary_predictions_array}.
+
+    Returns dict with {model}_sensitivity and {model}_specificity keys.
+    """
+    from sklearn.metrics import confusion_matrix
+
+    res = {}
+    y_sub = y_all[mask]
+    if len(y_sub) < 5 or len(np.unique(y_sub)) < 2:
+        return res
+
+    for model_name, preds in preds_dict.items():
+        if preds is None:
+            continue
+        try:
+            p_sub = preds[mask]
+            tn, fp, fn, tp = confusion_matrix(y_sub, p_sub, labels=[0, 1]).ravel()
+            res[f"{model_name}_sensitivity"] = (
+                float(tp / (tp + fn)) if (tp + fn) > 0 else None
+            )
+            res[f"{model_name}_specificity"] = (
+                float(tn / (tn + fp)) if (tn + fp) > 0 else None
+            )
+        except Exception as e:
+            log.warning("subgroup_metrics_failed", model=model_name, error=str(e))
+
+    return res
+
+
 def single_feature_model(
     X: np.ndarray,  # shape (n_samples, n_sub_metrics)
     y: np.ndarray,  # binary labels (1 = positive class)
@@ -615,41 +768,6 @@ def single_feature_model(
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         results["cv_folds_actual"] = folds
 
-        # --- Helper: Youden's J optimal threshold ---
-        def get_optimal_threshold(y_true, y_pred_prob):
-            """Find threshold maximizing Youden's J (sensitivity + specificity - 1)."""
-            try:
-                fpr, tpr, thresholds = roc_curve(y_true, y_pred_prob)
-                if len(thresholds) > 0:
-                    optimal_idx = np.argmax(tpr - fpr)
-                    return float(thresholds[optimal_idx])
-            except Exception:
-                # roc_curve can fail with degenerate inputs (all same class)
-                log.debug("optimal_threshold_fallback", reason="roc_curve failed")
-            return 0.5
-
-        def safely_get_metrics(y_true, y_pred_prob, threshold=0.5):
-            """Compute classification report and confusion matrix at given threshold."""
-            y_pred = (y_pred_prob >= threshold).astype(int)
-            rep = classification_report(
-                y_true, y_pred, output_dict=True, zero_division=0
-            )
-            cm = confusion_matrix(y_true, y_pred).tolist()
-            return rep, cm
-
-        def _bootstrap_auc(y_true, y_score, n_boot=1000, seed=42):
-            """Compute 95% bootstrap CI for AUC-ROC."""
-            rng = np.random.RandomState(seed)
-            aucs = []
-            for _ in range(n_boot):
-                idx = rng.randint(0, len(y_true), len(y_true))
-                if len(np.unique(y_true[idx])) < 2:
-                    continue
-                aucs.append(roc_auc_score(y_true[idx], y_score[idx]))
-            if len(aucs) < 10:
-                return None, None
-            return float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))
-
         # ── Logistic Regression (Pipeline prevents scaler leakage) ──
         lr_pipe = Pipeline(
             [
@@ -673,9 +791,9 @@ def single_feature_model(
         lr_ci_low, lr_ci_high = _bootstrap_auc(y, lr_probs)
         results["auc_lr_ci_lower"] = lr_ci_low
         results["auc_lr_ci_upper"] = lr_ci_high
-        lr_opt = get_optimal_threshold(y, lr_probs)
+        lr_opt = _optimal_threshold(y, lr_probs)
         results["lr_optimal_threshold"] = lr_opt
-        lr_rep, lr_cm = safely_get_metrics(y, lr_probs, threshold=lr_opt)
+        lr_rep, lr_cm = _classification_metrics(y, lr_probs, threshold=lr_opt)
         results["lr_classification_report"] = lr_rep
         results["lr_confusion_matrix"] = lr_cm
 
@@ -703,21 +821,12 @@ def single_feature_model(
         results["auc_rf_ci_lower"] = rf_ci_low
         results["auc_rf_ci_upper"] = rf_ci_high
 
-        try:
-            from sklearn.calibration import calibration_curve
-
-            prob_true, prob_pred = calibration_curve(
-                y, rf_probs, n_bins=10, strategy="uniform"
-            )
-            results["rf_calibration"] = {
-                "prob_true": prob_true.tolist(),
-                "prob_pred": prob_pred.tolist(),
-            }
-        except Exception as e:
-            log.warning("calibration_failed", error=str(e))
-        rf_opt = get_optimal_threshold(y, rf_probs)
+        rf_cal = _calibration(y, rf_probs)
+        if rf_cal is not None:
+            results["rf_calibration"] = rf_cal
+        rf_opt = _optimal_threshold(y, rf_probs)
         results["rf_optimal_threshold"] = rf_opt
-        rf_rep, rf_cm = safely_get_metrics(y, rf_probs, threshold=rf_opt)
+        rf_rep, rf_cm = _classification_metrics(y, rf_probs, threshold=rf_opt)
         results["rf_classification_report"] = rf_rep
         results["rf_confusion_matrix"] = rf_cm
 
@@ -756,9 +865,11 @@ def single_feature_model(
                 xgb_ci_low, xgb_ci_high = _bootstrap_auc(y, xgb_probs)
                 results["auc_xgb_ci_lower"] = xgb_ci_low
                 results["auc_xgb_ci_upper"] = xgb_ci_high
-                xgb_opt = get_optimal_threshold(y, xgb_probs)
+                xgb_opt = _optimal_threshold(y, xgb_probs)
                 results["xgb_optimal_threshold"] = xgb_opt
-                xgb_rep, xgb_cm = safely_get_metrics(y, xgb_probs, threshold=xgb_opt)
+                xgb_rep, xgb_cm = _classification_metrics(
+                    y, xgb_probs, threshold=xgb_opt
+                )
                 results["xgb_classification_report"] = xgb_rep
                 results["xgb_confusion_matrix"] = xgb_cm
 
@@ -790,54 +901,29 @@ def single_feature_model(
             results["top_features"] = [f[0] for f in sorted_feats[:10]]
 
         # ── PR curves (precision-recall) ──
-        try:
-            from sklearn.metrics import precision_recall_curve, average_precision_score
-
-            for prefix, probs in [
-                ("lr", lr_probs),
-                ("rf", rf_probs),
-                ("xgb", xgb_probs),
-            ]:
-                if probs is not None:
-                    prec, rec, _ = precision_recall_curve(y, probs)
-                    results[f"{prefix}_pr_curve"] = {
-                        "precision": prec.tolist(),
-                        "recall": rec.tolist(),
-                    }
-                    results[f"{prefix}_avg_precision"] = float(
-                        average_precision_score(y, probs)
-                    )
-        except Exception as e:
-            log.warning("pr_curve_failed", error=str(e))
+        for prefix, probs in [("lr", lr_probs), ("rf", rf_probs), ("xgb", xgb_probs)]:
+            if probs is not None:
+                pr_dict, avg_prec = _pr_curve(y, probs)
+                if pr_dict is not None:
+                    results[f"{prefix}_pr_curve"] = pr_dict
+                    results[f"{prefix}_avg_precision"] = avg_prec
 
         # ── Fold-level AUC tracking (derived from existing OOF predictions) ──
-        # D-01 fix: use the same CV split that produced the official AUC,
-        # instead of a second independent cross_val_score run.
-        try:
-            for _prefix, _probs in [
-                ("lr", lr_probs),
-                ("rf", rf_probs),
-                ("xgb", xgb_probs),
-            ]:
-                if _probs is not None:
-                    _fold_aucs = []
-                    for _, test_idx in cv.split(X, y):
-                        if len(np.unique(y[test_idx])) < 2:
-                            continue
-                        _fold_aucs.append(
-                            float(roc_auc_score(y[test_idx], _probs[test_idx]))
-                        )
-                    if _fold_aucs:
-                        results[f"{_prefix}_fold_aucs"] = _fold_aucs
-                        results[f"{_prefix}_auc_std"] = float(np.std(_fold_aucs))
+        for _prefix, _probs in [("lr", lr_probs), ("rf", rf_probs), ("xgb", xgb_probs)]:
+            if _probs is not None:
+                try:
+                    fold_aucs = _per_fold_auc(y, _probs, cv, X)
+                    if fold_aucs:
+                        results[f"{_prefix}_fold_aucs"] = fold_aucs
+                        results[f"{_prefix}_auc_std"] = float(np.std(fold_aucs))
                         log.debug(
                             "fold_aucs_computed",
                             model=_prefix,
-                            mean=f"{np.mean(_fold_aucs):.3f}",
-                            std=f"{np.std(_fold_aucs):.3f}",
+                            mean=f"{np.mean(fold_aucs):.3f}",
+                            std=f"{np.std(fold_aucs):.3f}",
                         )
-        except Exception as e:
-            log.warning("fold_auc_tracking_failed", error=str(e))
+                except Exception as e:
+                    log.warning("fold_auc_tracking_failed", model=_prefix, error=str(e))
 
         # ── Feature stability across CV folds ──
         if feature_names is not None:
@@ -885,47 +971,12 @@ def single_feature_model(
             log.warning("dca_failed", error=str(e))
 
         # ── Subgroup Analysis using OOF predictions (C-02: unbiased) ──
-        # Use out-of-fold CV predictions, NOT the retrained model
-        rf_oof_preds = (rf_probs >= rf_opt).astype(int)
-        xgb_oof_preds = (
-            (xgb_probs >= results.get("xgb_optimal_threshold", 0.5)).astype(int)
-            if xgb_probs is not None
-            else None
-        )
-
-        def _subgroup_metrics(mask, y_all, rf_preds, xgb_preds_arr):
-            """Compute sensitivity for RF and XGB on a subgroup using OOF predictions."""
-            res = {}
-            y_sub = y_all[mask]
-            if len(y_sub) < 5 or len(np.unique(y_sub)) < 2:
-                return res
-
-            # RF subgroup
-            try:
-                p_sub = rf_preds[mask]
-                tn, fp, fn, tp = confusion_matrix(y_sub, p_sub, labels=[0, 1]).ravel()
-                res["rf_sensitivity"] = float(tp / (tp + fn)) if (tp + fn) > 0 else None
-                res["rf_specificity"] = float(tn / (tn + fp)) if (tn + fp) > 0 else None
-            except Exception as e:
-                log.warning("subgroup_rf_failed", error=str(e))
-
-            # XGB subgroup
-            if xgb_preds_arr is not None:
-                try:
-                    p_sub = xgb_preds_arr[mask]
-                    tn, fp, fn, tp = confusion_matrix(
-                        y_sub, p_sub, labels=[0, 1]
-                    ).ravel()
-                    res["xgb_sensitivity"] = (
-                        float(tp / (tp + fn)) if (tp + fn) > 0 else None
-                    )
-                    res["xgb_specificity"] = (
-                        float(tn / (tn + fp)) if (tn + fp) > 0 else None
-                    )
-                except Exception as e:
-                    log.warning("subgroup_xgb_failed", error=str(e))
-
-            return res
+        # Use out-of-fold CV predictions, NOT the retrained model.
+        # Build a dict of {model_name: binary_preds} for the generalized helper.
+        oof_preds = {"rf": (rf_probs >= rf_opt).astype(int)}
+        if xgb_probs is not None:
+            xgb_thresh = results.get("xgb_optimal_threshold", 0.5)
+            oof_preds["xgb"] = (xgb_probs >= xgb_thresh).astype(int)
 
         # Cancer type subgroup analysis (Top 10)
         if cancer_types is not None:
@@ -940,7 +991,7 @@ def single_feature_model(
                 n_samp = mask.sum()
                 if n_samp < 5:
                     continue
-                res_sub = _subgroup_metrics(mask, y, rf_oof_preds, xgb_oof_preds)
+                res_sub = _subgroup_metrics(mask, y, oof_preds)
                 if res_sub:
                     c_stats.append(
                         {
@@ -963,7 +1014,7 @@ def single_feature_model(
                 n_samp = mask.sum()
                 if n_samp < 5:
                     continue
-                res_sub = _subgroup_metrics(mask, y, rf_oof_preds, xgb_oof_preds)
+                res_sub = _subgroup_metrics(mask, y, oof_preds)
                 if res_sub:
                     a_stats.append(
                         {
