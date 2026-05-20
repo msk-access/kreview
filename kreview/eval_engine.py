@@ -41,6 +41,8 @@ __all__ = [
     "plot_roc_curves",
     "plot_feature_importance",
     "decision_curve_analysis",
+    "evaluate_model",
+    "cpu_models",
     "single_feature_model",
 ]
 
@@ -856,7 +858,7 @@ def _extract_importances(
     return None
 
 
-def single_feature_model(
+def cpu_models(
     X: np.ndarray,  # shape (n_samples, n_sub_metrics)
     y: np.ndarray,  # binary labels (1 = positive class)
     feature_names: list[str] | None = None,
@@ -864,20 +866,24 @@ def single_feature_model(
     assays: np.ndarray | None = None,
     n_folds: int = 5,
     random_state: int = 42,
+    compute_shap: bool = False,
+    shap_samples: int = 500,
 ) -> tuple[dict, object, object, object]:
     """Train LR, RF, and XGB on a feature matrix with stratified CV.
 
+    Delegates per-model evaluation to ``evaluate_model()``, then adds
+    cross-model diagnostics (AUC deltas, top features, threshold sweep,
+    DCA, feature stability, subgroup analysis).
+
     Returns (results_dict, lr_pipeline, rf_model, xgb_model).
 
-    Fixes applied (audit v3):
+    Audit fixes preserved:
       - C-01: LR uses Pipeline(scaler+lr) to prevent data leakage
       - C-02: Subgroup metrics use out-of-fold predictions (unbiased)
       - H-01: LR has class_weight="balanced", XGB has scale_pos_weight
-      - H-07: Bare except replaced with Exception
       - M-02: Bootstrap 95% CI on AUC values
     """
-    import time
-    from sklearn.metrics import classification_report, confusion_matrix
+    from sklearn.metrics import confusion_matrix
 
     try:
         from xgboost import XGBClassifier
@@ -906,7 +912,7 @@ def single_feature_model(
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         results["cv_folds_actual"] = folds
 
-        # ── Logistic Regression (Pipeline prevents scaler leakage) ──
+        # ── Logistic Regression (Pipeline prevents scaler leakage, C-01) ──
         lr_pipe = Pipeline(
             [
                 ("scaler", StandardScaler()),
@@ -920,24 +926,10 @@ def single_feature_model(
                 ),
             ]
         )
-
-        lr_probs = cross_val_predict(lr_pipe, X, y, cv=cv, method="predict_proba")[:, 1]
-        results["auc_lr"] = roc_auc_score(y, lr_probs)
-        results["lr_oof_probs"] = np.round(
-            lr_probs, 6
-        ).tolist()  # D-01: rounded to 6dp for JSON size
-        lr_ci_low, lr_ci_high = _bootstrap_auc(y, lr_probs)
-        results["auc_lr_ci_lower"] = lr_ci_low
-        results["auc_lr_ci_upper"] = lr_ci_high
-        lr_opt = _optimal_threshold(y, lr_probs)
-        results["lr_optimal_threshold"] = lr_opt
-        lr_rep, lr_cm = _classification_metrics(y, lr_probs, threshold=lr_opt)
-        results["lr_classification_report"] = lr_rep
-        results["lr_confusion_matrix"] = lr_cm
-
-        t0 = time.perf_counter()
-        lr_pipe.fit(X, y)
-        results["lr_training_time_sec"] = time.perf_counter() - t0
+        lr_res, lr_pipe = evaluate_model(
+            lr_pipe, X, y, cv, "lr", feature_names=feature_names
+        )
+        results.update(lr_res)
         results["lr_coef_direction"] = (
             "positive" if lr_pipe.named_steps["lr"].coef_[0].mean() > 0 else "negative"
         )
@@ -950,40 +942,14 @@ def single_feature_model(
             random_state=random_state,
             class_weight="balanced",
         )
-        rf_probs = cross_val_predict(rf, X, y, cv=cv, method="predict_proba")[:, 1]
-        results["auc_rf"] = roc_auc_score(y, rf_probs)
-        results["rf_oof_probs"] = np.round(
-            rf_probs, 6
-        ).tolist()  # D-01: rounded to 6dp for JSON size
-        rf_ci_low, rf_ci_high = _bootstrap_auc(y, rf_probs)
-        results["auc_rf_ci_lower"] = rf_ci_low
-        results["auc_rf_ci_upper"] = rf_ci_high
-
-        rf_cal = _calibration(y, rf_probs)
-        if rf_cal is not None:
-            results["rf_calibration"] = rf_cal
-        rf_opt = _optimal_threshold(y, rf_probs)
-        results["rf_optimal_threshold"] = rf_opt
-        rf_rep, rf_cm = _classification_metrics(y, rf_probs, threshold=rf_opt)
-        results["rf_classification_report"] = rf_rep
-        results["rf_confusion_matrix"] = rf_cm
-
-        t0 = time.perf_counter()
-        rf.fit(X, y)
-        results["rf_training_time_sec"] = time.perf_counter() - t0
-        if feature_names is not None:
-            results["rf_feature_importances"] = dict(
-                zip(feature_names, rf.feature_importances_.tolist())
-            )
-        else:
-            results["rf_feature_importances"] = rf.feature_importances_.tolist()
+        rf_res, rf = evaluate_model(rf, X, y, cv, "rf", feature_names=feature_names)
+        results.update(rf_res)
 
         # ── XGBoost ──
         xgb = None
-        xgb_probs = None
         if XGBClassifier is not None:
             pos_weight = len(y[y == 0]) / max(1, len(y[y == 1]))
-            xgb = XGBClassifier(
+            xgb_model = XGBClassifier(
                 n_estimators=100,
                 max_depth=5,
                 learning_rate=0.1,
@@ -993,33 +959,15 @@ def single_feature_model(
                 scale_pos_weight=pos_weight,
             )
             try:
-                xgb_probs = cross_val_predict(xgb, X, y, cv=cv, method="predict_proba")[
-                    :, 1
-                ]
-                results["auc_xgb"] = roc_auc_score(y, xgb_probs)
-                results["xgb_oof_probs"] = np.round(
-                    xgb_probs, 6
-                ).tolist()  # D-01: rounded to 6dp for JSON size
-                xgb_ci_low, xgb_ci_high = _bootstrap_auc(y, xgb_probs)
-                results["auc_xgb_ci_lower"] = xgb_ci_low
-                results["auc_xgb_ci_upper"] = xgb_ci_high
-                xgb_opt = _optimal_threshold(y, xgb_probs)
-                results["xgb_optimal_threshold"] = xgb_opt
-                xgb_rep, xgb_cm = _classification_metrics(
-                    y, xgb_probs, threshold=xgb_opt
+                xgb_res, xgb = evaluate_model(
+                    xgb_model, X, y, cv, "xgb", feature_names=feature_names
                 )
-                results["xgb_classification_report"] = xgb_rep
-                results["xgb_confusion_matrix"] = xgb_cm
-
-                t0 = time.perf_counter()
-                xgb.fit(X, y)
-                results["xgb_training_time_sec"] = time.perf_counter() - t0
+                results.update(xgb_res)
             except Exception as e:
                 log.warning("xgboost_cv_failed", error=str(e))
                 xgb = None
-                xgb_probs = None
 
-        # ── OOF labels (D-01: needed by report template for consistent ROC plots) ──
+        # ── OOF labels (needed by report template for consistent ROC plots) ──
         results["oof_labels"] = y.tolist()
 
         # ── AUC deltas ──
@@ -1038,33 +986,8 @@ def single_feature_model(
             )
             results["top_features"] = [f[0] for f in sorted_feats[:10]]
 
-        # ── PR curves (precision-recall) ──
-        for prefix, probs in [("lr", lr_probs), ("rf", rf_probs), ("xgb", xgb_probs)]:
-            if probs is not None:
-                pr_dict, avg_prec = _pr_curve(y, probs)
-                if pr_dict is not None:
-                    results[f"{prefix}_pr_curve"] = pr_dict
-                    results[f"{prefix}_avg_precision"] = avg_prec
-
-        # ── Fold-level AUC tracking (derived from existing OOF predictions) ──
-        for _prefix, _probs in [("lr", lr_probs), ("rf", rf_probs), ("xgb", xgb_probs)]:
-            if _probs is not None:
-                try:
-                    fold_aucs = _per_fold_auc(y, _probs, cv, X)
-                    if fold_aucs:
-                        results[f"{_prefix}_fold_aucs"] = fold_aucs
-                        results[f"{_prefix}_auc_std"] = float(np.std(fold_aucs))
-                        log.debug(
-                            "fold_aucs_computed",
-                            model=_prefix,
-                            mean=f"{np.mean(fold_aucs):.3f}",
-                            std=f"{np.std(fold_aucs):.3f}",
-                        )
-                except Exception as e:
-                    log.warning("fold_auc_tracking_failed", model=_prefix, error=str(e))
-
         # ── Feature stability across CV folds ──
-        if feature_names is not None:
+        if feature_names is not None and rf is not None:
             try:
                 from collections import Counter
                 from sklearn.base import clone
@@ -1082,39 +1005,50 @@ def single_feature_model(
                 log.warning("feature_stability_failed", error=str(e))
 
         # ── Threshold sensitivity sweep (RF) ──
-        try:
-            thresholds_sweep = np.linspace(0.01, 0.99, 50)
-            sweep_data = []
-            for t in thresholds_sweep:
-                y_pred = (rf_probs >= t).astype(int)
-                tn, fp, fn, tp = confusion_matrix(y, y_pred, labels=[0, 1]).ravel()
-                sweep_data.append(
-                    {
-                        "threshold": round(float(t), 3),
-                        "sensitivity": float(tp / (tp + fn)) if (tp + fn) > 0 else 0.0,
-                        "specificity": float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0,
-                        "ppv": float(tp / (tp + fp)) if (tp + fp) > 0 else 0.0,
-                    }
-                )
-            results["rf_threshold_sweep"] = sweep_data
-        except Exception as e:
-            log.warning("threshold_sweep_failed", error=str(e))
+        rf_probs = np.array(results.get("rf_oof_probs", []))
+        if len(rf_probs) > 0:
+            try:
+                thresholds_sweep = np.linspace(0.01, 0.99, 50)
+                sweep_data = []
+                for t in thresholds_sweep:
+                    y_pred = (rf_probs >= t).astype(int)
+                    tn, fp, fn, tp = confusion_matrix(y, y_pred, labels=[0, 1]).ravel()
+                    sweep_data.append(
+                        {
+                            "threshold": round(float(t), 3),
+                            "sensitivity": (
+                                float(tp / (tp + fn)) if (tp + fn) > 0 else 0.0
+                            ),
+                            "specificity": (
+                                float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0
+                            ),
+                            "ppv": float(tp / (tp + fp)) if (tp + fp) > 0 else 0.0,
+                        }
+                    )
+                results["rf_threshold_sweep"] = sweep_data
+            except Exception as e:
+                log.warning("threshold_sweep_failed", error=str(e))
 
         # ── Decision Curve Analysis ──
         try:
-            for prefix, probs in [("rf", rf_probs), ("xgb", xgb_probs)]:
-                if probs is not None:
+            model_probs = {"rf": rf_probs}
+            if "xgb_oof_probs" in results:
+                model_probs["xgb"] = np.array(results["xgb_oof_probs"])
+            for prefix, probs in model_probs.items():
+                if len(probs) > 0:
                     results[f"{prefix}_dca"] = decision_curve_analysis(y, probs)
         except Exception as e:
             log.warning("dca_failed", error=str(e))
 
         # ── Subgroup Analysis using OOF predictions (C-02: unbiased) ──
-        # Use out-of-fold CV predictions, NOT the retrained model.
-        # Build a dict of {model_name: binary_preds} for the generalized helper.
-        oof_preds = {"rf": (rf_probs >= rf_opt).astype(int)}
-        if xgb_probs is not None:
+        rf_opt = results.get("rf_optimal_threshold", 0.5)
+        oof_preds = {}
+        if len(rf_probs) > 0:
+            oof_preds["rf"] = (rf_probs >= rf_opt).astype(int)
+        if "xgb_oof_probs" in results:
             xgb_thresh = results.get("xgb_optimal_threshold", 0.5)
-            oof_preds["xgb"] = (xgb_probs >= xgb_thresh).astype(int)
+            xgb_probs_arr = np.array(results["xgb_oof_probs"])
+            oof_preds["xgb"] = (xgb_probs_arr >= xgb_thresh).astype(int)
 
         # Cancer type subgroup analysis (Top 10)
         if cancer_types is not None:
@@ -1168,7 +1102,9 @@ def single_feature_model(
     except Exception as e:
         import traceback
 
-        log.error(
-            "single_feature_model_failed", error=str(e), trace=traceback.format_exc()
-        )
+        log.error("cpu_models_failed", error=str(e), trace=traceback.format_exc())
         return {"error": str(e)}, None, None, None
+
+
+# Backward compatibility alias — existing code and tests use single_feature_model
+single_feature_model = cpu_models
