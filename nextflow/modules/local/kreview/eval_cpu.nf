@@ -23,7 +23,7 @@ process KREVIEW_EVAL_CPU {
 
     script:
     def cv_folds = params.cv_folds ?: 5
-    def resume_flag = params.resume ? '--resume' : ''
+    def resume_flag = params.resume_eval ? '--resume' : ''
     """
     set -euo pipefail
 

@@ -60,7 +60,7 @@ def helpMessage() {
 
      Multistage Options (--pipeline_mode multistage):
      --run_gpu_eval             Enable GPU evaluation step (default: false)
-     --gpu_model_type           Model: xgboost, tabicl, tabpfn (default: xgboost)
+     --gpu_models               Comma-separated GPU models: tabpfn,tabicl (default: tabpfn,tabicl)
      --min_evaluators           Min evaluators per sample for fuse (default: 1)
      --gpu_partition            SLURM partition for GPU jobs (default: null)
 
