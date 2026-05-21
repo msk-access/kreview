@@ -254,3 +254,131 @@ class TestCHHotspotFiltering:
         result = load_ch_hotspots(good_file)
         assert len(result) == 2
         assert ("7", 148504724, "C", "T") in result
+
+
+# ── compute_impact_match tests ───────────────────────────────────────────────
+
+
+class TestComputeImpactMatch:
+    """Tests for compute_impact_match() — IMPACT tissue rescue logic.
+
+    Validates:
+      - Shared variant between ACCESS and IMPACT → has_impact_match=True
+      - No shared variant → has_impact_match=False
+      - Patient with IMPACT sample → has_paired_impact=True
+      - Sample with no somatic variants → defaults applied
+      - Empty MAF → returns correct structure
+    """
+
+    @pytest.fixture()
+    def clinical(self):
+        """Clinical sample table with 2 ACCESS + 1 IMPACT sample for same patient."""
+        return pd.DataFrame(
+            {
+                "SAMPLE_ID": ["ACCESS_S1", "ACCESS_S2", "IMPACT_S1"],
+                "PATIENT_ID": ["P1", "P2", "P1"],
+                "GENE_PANEL": ["MSK-ACCESS-v1", "MSK-ACCESS-v1", "IMPACT468"],
+            }
+        )
+
+    @pytest.fixture()
+    def maf_with_match(self):
+        """MAF where ACCESS_S1 and IMPACT_S1 share a somatic variant."""
+        return pd.DataFrame(
+            {
+                "Tumor_Sample_Barcode": [
+                    "ACCESS_S1",  # ACCESS sample: same variant as IMPACT
+                    "IMPACT_S1",  # IMPACT sample: shared variant
+                    "ACCESS_S2",  # ACCESS sample: different variant
+                ],
+                "Mutation_Status": ["SOMATIC", "SOMATIC", "SOMATIC"],
+                "Chromosome": ["7", "7", "12"],
+                "Start_Position": [55249071, 55249071, 25398284],
+                "End_Position": [55249071, 55249071, 25398284],
+                "Reference_Allele": ["C", "C", "G"],
+                "Tumor_Seq_Allele2": ["T", "T", "A"],
+                "t_ref_count": [90, 85, 80],
+                "t_alt_count": [10, 15, 20],
+            }
+        )
+
+    @pytest.fixture()
+    def maf_no_match(self):
+        """MAF where ACCESS and IMPACT have NO shared variants."""
+        return pd.DataFrame(
+            {
+                "Tumor_Sample_Barcode": [
+                    "ACCESS_S1",  # ACCESS variant
+                    "IMPACT_S1",  # IMPACT variant (different position)
+                ],
+                "Mutation_Status": ["SOMATIC", "SOMATIC"],
+                "Chromosome": ["7", "12"],
+                "Start_Position": [55249071, 25398284],
+                "End_Position": [55249071, 25398284],
+                "Reference_Allele": ["C", "G"],
+                "Tumor_Seq_Allele2": ["T", "A"],
+                "t_ref_count": [90, 85],
+                "t_alt_count": [10, 15],
+            }
+        )
+
+    def test_shared_variant_gives_match(self, clinical, maf_with_match):
+        """ACCESS sample sharing variant with IMPACT → has_impact_match=True."""
+        from kreview.labels import compute_impact_match
+
+        result = compute_impact_match({"ACCESS_S1", "ACCESS_S2"}, maf_with_match, clinical)
+        s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
+
+        assert s1["has_impact_match"] == True
+        assert s1["n_impact_confirmed"] >= 1
+
+    def test_no_shared_variant_no_match(self, clinical, maf_no_match):
+        """ACCESS sample with NO shared variant → has_impact_match=False."""
+        from kreview.labels import compute_impact_match
+
+        result = compute_impact_match({"ACCESS_S1"}, maf_no_match, clinical)
+        s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
+
+        assert s1["has_impact_match"] == False
+        assert s1["n_impact_confirmed"] == 0
+
+    def test_has_paired_impact_flag(self, clinical, maf_with_match):
+        """Patient P1 has IMPACT sample → ACCESS_S1 has_paired_impact=True.
+        Patient P2 does NOT → ACCESS_S2 has_paired_impact=False.
+        """
+        from kreview.labels import compute_impact_match
+
+        result = compute_impact_match({"ACCESS_S1", "ACCESS_S2"}, maf_with_match, clinical)
+        s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
+        s2 = result.set_index("SAMPLE_ID").loc["ACCESS_S2"]
+
+        assert s1["has_paired_impact"] == True
+        assert s2["has_paired_impact"] == False
+
+    def test_output_columns(self, clinical, maf_with_match):
+        """Output DataFrame should have expected columns."""
+        from kreview.labels import compute_impact_match
+
+        result = compute_impact_match({"ACCESS_S1"}, maf_with_match, clinical)
+        expected_cols = {"SAMPLE_ID", "has_impact_match", "n_impact_confirmed", "has_paired_impact"}
+
+        assert expected_cols.issubset(set(result.columns))
+
+    def test_empty_maf(self, clinical):
+        """Empty MAF (no rows) → all samples get has_impact_match=False."""
+        from kreview.labels import compute_impact_match
+
+        empty_maf = pd.DataFrame(
+            columns=[
+                "Tumor_Sample_Barcode", "Mutation_Status",
+                "Chromosome", "Start_Position", "End_Position",
+                "Reference_Allele", "Tumor_Seq_Allele2",
+                "t_ref_count", "t_alt_count",
+            ]
+        )
+        result = compute_impact_match({"ACCESS_S1"}, empty_maf, clinical)
+
+        assert len(result) == 1
+        s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
+        assert s1["has_impact_match"] == False
+        assert s1["n_impact_confirmed"] == 0

@@ -535,3 +535,115 @@ class TestMutualInfoScore:
         r1 = mutual_info_score(x, y, random_state=42)
         r2 = mutual_info_score(x, y, random_state=42)
         assert r1 == r2
+
+
+# ── evaluate_model tests ─────────────────────────────────────────────────────
+
+
+class TestEvaluateModel:
+    """Tests for evaluate_model() — the universal model evaluation primitive.
+
+    Validates:
+      - Output dict has expected key prefixes
+      - AUC is within [0, 1]
+      - Bootstrap CI bounds are sane
+      - Per-fold AUCs are present and valid
+      - Classification report structure
+      - Feature importances extraction
+      - refit=False behaviour (no fitted model returned)
+    """
+
+    @pytest.fixture
+    def model_and_data(self, binary_Xy):
+        """Prepare an RF model + StratifiedKFold for evaluate_model tests."""
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.model_selection import StratifiedKFold
+
+        X, y = binary_Xy
+        model = RandomForestClassifier(n_estimators=10, random_state=42)
+        cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        return model, X, y, cv
+
+    def test_output_has_expected_keys(self, model_and_data):
+        """Result dict should contain auc, oof_probs, CI, threshold keys."""
+        from kreview.eval_engine import evaluate_model
+
+        model, X, y, cv = model_and_data
+        result, fitted = evaluate_model(model, X, y, cv, name="rf")
+
+        assert "auc_rf" in result
+        assert "rf_oof_probs" in result
+        assert "auc_rf_ci_lower" in result
+        assert "auc_rf_ci_upper" in result
+        assert "rf_optimal_threshold" in result
+        assert "rf_classification_report" in result
+        assert "rf_confusion_matrix" in result
+
+    def test_auc_in_valid_range(self, model_and_data):
+        """AUC should be between 0 and 1."""
+        from kreview.eval_engine import evaluate_model
+
+        model, X, y, cv = model_and_data
+        result, _ = evaluate_model(model, X, y, cv, name="rf")
+
+        assert 0.0 <= result["auc_rf"] <= 1.0
+
+    def test_ci_bounds_sane(self, model_and_data):
+        """CI lower <= AUC <= CI upper."""
+        from kreview.eval_engine import evaluate_model
+
+        model, X, y, cv = model_and_data
+        result, _ = evaluate_model(model, X, y, cv, name="rf")
+
+        assert result["auc_rf_ci_lower"] <= result["auc_rf"]
+        assert result["auc_rf"] <= result["auc_rf_ci_upper"]
+
+    def test_fold_aucs_present(self, model_and_data):
+        """Per-fold AUCs should be a list with len == n_splits."""
+        from kreview.eval_engine import evaluate_model
+
+        model, X, y, cv = model_and_data
+        result, _ = evaluate_model(model, X, y, cv, name="rf")
+
+        assert "rf_fold_aucs" in result
+        assert len(result["rf_fold_aucs"]) == 3  # n_splits=3
+        for auc in result["rf_fold_aucs"]:
+            assert 0.0 <= auc <= 1.0
+
+    def test_classification_report_structure(self, model_and_data):
+        """Classification report should have per-class and weighted avg keys."""
+        from kreview.eval_engine import evaluate_model
+
+        model, X, y, cv = model_and_data
+        result, _ = evaluate_model(model, X, y, cv, name="rf")
+
+        cr = result["rf_classification_report"]
+        assert isinstance(cr, dict)
+        # Should have entries for class 0 and class 1
+        assert "0" in cr or "0.0" in cr or 0 in cr
+        assert "1" in cr or "1.0" in cr or 1 in cr
+
+    def test_feature_importances_with_names(self, model_and_data):
+        """Feature importances dict should have one entry per feature."""
+        from kreview.eval_engine import evaluate_model
+
+        model, X, y, cv = model_and_data
+        fnames = [f"feat_{i}" for i in range(X.shape[1])]
+        result, fitted = evaluate_model(
+            model, X, y, cv, name="rf", feature_names=fnames
+        )
+
+        assert fitted is not None
+        imp = result.get("rf_feature_importances")
+        assert imp is not None
+        assert set(imp.keys()) == set(fnames)
+
+    def test_refit_false_returns_none(self, model_and_data):
+        """When refit=False, fitted model should be None."""
+        from kreview.eval_engine import evaluate_model
+
+        model, X, y, cv = model_and_data
+        result, fitted = evaluate_model(model, X, y, cv, name="rf", refit=False)
+
+        assert fitted is None
+        assert "rf_training_time_sec" not in result
