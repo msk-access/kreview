@@ -36,17 +36,33 @@ eval_app = typer.Typer(name="eval", help="Model evaluation commands")
 def _load_matrix_and_labels(
     matrix_path: Path,
     label_col: str = "label",
+    impute_strategy: str = "median",
 ) -> tuple[pd.DataFrame, np.ndarray, list[str], np.ndarray | None, np.ndarray | None]:
     """Load a feature matrix parquet and extract features, labels, metadata.
+
+    Delegates label filtering and binary target construction to
+    :func:`kreview.selection.build_binary_target` — the canonical source
+    shared with ``kreview run`` and ``kreview select``.
 
     Uses the canonical ``LABEL_META_COLS`` set from ``kreview.core`` to
     exclude label/metadata columns.  This prevents data leakage — columns
     like ``max_vaf``, ``n_somatic_snvs`` must never be treated as features.
 
-    Returns (model_df, y, feature_cols, cancer_types, assays).
-    Raises typer.Exit on validation errors.
+    Args:
+        matrix_path: Path to a ``*_matrix.parquet`` file.
+        label_col: Column containing label strings (default ``"label"``).
+        impute_strategy: Imputation strategy for NaN values:
+            ``"median"`` (default), ``"mean"``, or ``"zero"``.
+
+    Returns:
+        ``(model_df, y, feature_cols, cancer_types, assays)``
+
+    Raises:
+        typer.Exit: On validation errors (file not found, no features,
+            insufficient data, or single-class target).
     """
     from kreview.core import LABEL_META_COLS
+    from kreview.selection import build_binary_target, _impute
 
     if not matrix_path.exists():
         print(f"ERROR: Matrix not found: {matrix_path}", flush=True)
@@ -55,54 +71,46 @@ def _load_matrix_and_labels(
     df = pd.read_parquet(matrix_path)
     print(f"  Loaded: {df.shape[0]} samples x {df.shape[1]} columns", flush=True)
 
-    # Identify numeric feature columns using the canonical exclusion set.
+    # ── Build binary target via shared library ──
+    # build_binary_target raises ValueError for <20 samples or single-class.
+    try:
+        model_df, y = build_binary_target(df, label_col=label_col)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", flush=True)
+        log.error("load_matrix_target_failed", matrix=str(matrix_path), error=str(exc))
+        raise typer.Exit(code=1)
+
+    # ── Identify numeric feature columns ──
     # LABEL_META_COLS (22 entries) covers all label, metadata, and QC
     # columns that must not be used as model features.
     feature_cols = [
         c
-        for c in df.select_dtypes(include=np.number).columns
+        for c in model_df.select_dtypes(include=np.number).columns
         if c not in LABEL_META_COLS
     ]
 
     if not feature_cols:
         print("ERROR: No feature columns found in matrix", flush=True)
+        log.error("no_feature_columns", matrix=str(matrix_path))
         raise typer.Exit(code=1)
 
-    # Build binary target
-    model_mask = df[label_col].isin(
-        [
-            "True ctDNA+",
-            "Possible ctDNA+",
-            "Healthy Normal",
-            "Possible ctDNA-",
-            "Possible ctDNA\u2212",
-        ]
-    )
-    model_df = df[model_mask].copy()
-    y = model_df[label_col].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
+    # ── Impute NaNs using shared strategy ──
+    model_df[feature_cols] = _impute(model_df[feature_cols], impute_strategy)
 
-    if len(model_df) < 20 or len(np.unique(y)) < 2:
-        print(
-            f"ERROR: Insufficient data (n={len(model_df)}, "
-            f"classes={len(np.unique(y))})",
-            flush=True,
-        )
-        raise typer.Exit(code=1)
-
-    # Impute + drop zero-variance
-    X_df = model_df[feature_cols].copy()
-    X_df = X_df.fillna(X_df.median())
-    nonconst = [c for c in feature_cols if X_df[c].std() > 0]
+    # ── Drop zero-variance features ──
+    nonconst = [c for c in feature_cols if model_df[c].std() > 0]
     n_dropped = len(feature_cols) - len(nonconst)
     if n_dropped > 0:
         print(f"  Dropped {n_dropped} zero-variance features", flush=True)
+        log.info("dropped_zero_variance", n_dropped=n_dropped, matrix=str(matrix_path))
     feature_cols = nonconst
 
     if not feature_cols:
         print("ERROR: All features have zero variance", flush=True)
+        log.error("all_zero_variance", matrix=str(matrix_path))
         raise typer.Exit(code=1)
 
-    # Extract metadata arrays
+    # ── Extract metadata arrays ──
     cancer_types = model_df.get("CANCER_TYPE", None)
     if cancer_types is not None:
         cancer_types = cancer_types.values
@@ -215,7 +223,7 @@ def eval_cpu(
 
         try:
             model_df, y, feature_cols, c_types, a_types = _load_matrix_and_labels(mf)
-            X = model_df[feature_cols].fillna(model_df[feature_cols].median()).values
+            X = model_df[feature_cols].values  # Already imputed by _load_matrix_and_labels
 
             results, lr, rf, xgb = cpu_models(
                 X,
@@ -356,7 +364,7 @@ def eval_gpu(
 
         try:
             model_df, y, feature_cols, c_types, a_types = _load_matrix_and_labels(mf)
-            X = model_df[feature_cols].fillna(model_df[feature_cols].median()).values
+            X = model_df[feature_cols].values  # Already imputed by _load_matrix_and_labels
 
             results, fitted = gpu_models(
                 X,
