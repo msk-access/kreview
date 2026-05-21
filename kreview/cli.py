@@ -19,6 +19,13 @@ from .cli_eval import eval_app
 
 app.add_typer(eval_app, name="eval")
 
+# Register feature selection command (kreview select)
+from .cli_select import select as _select_cmd
+
+app.command(name="select")(  # noqa: E501
+    _select_cmd
+)
+
 
 def version_callback(value: bool):
     if value:
@@ -537,7 +544,7 @@ def run(
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
 
-    from kreview.eval_engine import evaluate_feature, cpu_models
+    from kreview.eval_engine import cpu_models
     import glob
     import json
 
@@ -733,12 +740,30 @@ def run(
         if merged is None:
             continue
 
-        # ── Step 4: Statistical Evaluation ──
-        _echo(f"Step 4: Running statistical evaluation for '{e.name}'...")
+        # ── Step 4: Feature Scoring + Selection ──
+        # Uses the shared functions from selection.py — same code path as
+        # ``kreview select``, guaranteeing identical results for HPC and local.
+        _echo(f"Step 4: Scoring and selecting features for '{e.name}'...")
         t3 = time.time()
 
-        # Identify numeric feature columns (exclude label/metadata cols).
-        # Uses the canonical LABEL_META_COLS set from core — single source of truth.
+        from kreview.selection import score_features, select_features
+
+        try:
+            eval_df = score_features(
+                merged,
+                cv_folds=cv_folds,
+                compute_auc=compute_univariate_auc,
+            )
+        except ValueError as exc:
+            _echo(f"  WARNING: Feature scoring failed for {e.name}: {exc}")
+            log.warning(
+                "feature_scoring_failed",
+                evaluator=e.name,
+                error=str(exc),
+            )
+            continue
+
+        # Identify numeric feature count for logging
         from kreview.core import LABEL_META_COLS
 
         numeric_cols = [
@@ -748,336 +773,220 @@ def run(
         ]
         _echo(f"  Found {len(numeric_cols)} numeric feature columns")
 
-        eval_results = []
-        for col in numeric_cols:
-            res = evaluate_feature(
-                merged[col],
-                merged["label"],
-                total_fragments=merged.get("n_total_somatic_snvs"),
-                max_vaf=merged.get("max_vaf"),
-            )
-            res["feature_column"] = col
-            eval_results.append(res)
-
-        eval_df = pd.DataFrame(eval_results)
-
-        # ── Feature Scoring: Univariate AUC + Mutual Information ──
-        # Build binary target once for both scoring methods.
-        # This target matches the downstream model target (positives vs negatives).
-        _model_mask = merged["label"].isin(
-            [
-                "True ctDNA+",
-                "Possible ctDNA+",
-                "Healthy Normal",
-                "Possible ctDNA-",
-                "Possible ctDNA\u2212",
-            ]
-        )
-        _m_df = merged[_model_mask]
-        _y_scoring = (
-            _m_df["label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
-        )
-
-        if compute_univariate_auc:
-            from kreview.eval_engine import univariate_auc as _uauc
-
-            _echo(f"  Computing univariate AUC for {len(numeric_cols)} features...")
-            uauc_scores = []
-            for col in numeric_cols:
-                auc_val = _uauc(_m_df[col], _y_scoring, n_folds=cv_folds)
-                uauc_scores.append(auc_val)
-            eval_df["univariate_auc"] = uauc_scores
-        else:
+        if "univariate_auc" in eval_df.columns:
             _echo(
-                "  WARNING: Univariate AUC disabled (--no-compute-univariate-auc). "
-                "Feature selection will use mutual information only."
+                f"  AUC > 0.55: {int((eval_df['univariate_auc'] > 0.55).sum())} features"
             )
-            log.warning(
-                "univariate_auc_disabled",
-                evaluator=e.name,
-                impact="selection_mi_only",
-            )
-
-        # Always compute mutual information (fast, no CV needed)
-        from kreview.eval_engine import mutual_info_score as _mi_score
-
-        _echo(f"  Computing mutual information for {len(numeric_cols)} features...")
-        mi_scores = []
-        for col in numeric_cols:
-            mi_val = _mi_score(_m_df[col], _y_scoring)
-            mi_scores.append(mi_val)
-        eval_df["mutual_info"] = mi_scores
-
-        log.info(
-            "feature_scoring_complete",
-            evaluator=e.name,
-            n_features=len(numeric_cols),
-            n_auc_above_055=(
-                int((eval_df["univariate_auc"] > 0.55).sum())
-                if "univariate_auc" in eval_df.columns
-                else 0
-            ),
-            n_mi_above_zero=int((eval_df["mutual_info"] > 0.0).sum()),
-        )
+        _echo(f"  MI > 0: {int((eval_df['mutual_info'] > 0.0).sum())} features")
 
         eval_out = out_path / f"{e.name}_eval_stats.parquet"
         eval_df.to_parquet(eval_out, index=False)
         _echo(f"  Eval stats: {eval_df.shape[0]} features -> {eval_out}")
 
-        # Reuse the scoring target for modeling (same 4-tier label mask).
-        # .copy() ensures downstream mutations don't affect the scoring DataFrame.
-        model_df = _m_df.copy()
-        y = _y_scoring
-        if len(model_df) >= 20 and len(np.unique(y)) == 2:
-            # ── Hybrid Union Feature Selection ──
-            # Select top X% by Univariate AUC ∪ top X% by Mutual Information.
-            # This captures both linear (AUC) and non-linear (MI) predictors,
-            # ensuring the downstream models receive a diverse, high-quality
-            # feature set regardless of evaluator dimensionality.
-            n_keep = max(1, int(len(numeric_cols) * (top_percentile / 100.0)))
-
-            top_by_auc = set()
-            top_by_mi = set()
-
-            if "univariate_auc" in eval_df.columns:
-                top_by_auc = set(
-                    eval_df.nlargest(n_keep, "univariate_auc")["feature_column"]
-                )
-            if "mutual_info" in eval_df.columns:
-                top_by_mi = set(
-                    eval_df.nlargest(n_keep, "mutual_info")["feature_column"]
-                )
-
-            # Union: keep features that are strong in either metric
-            union_feats = list(top_by_auc | top_by_mi)
-
-            # Fallback: if both metrics are empty, take first n_keep features
-            if not union_feats:
-                log.warning(
-                    "selection_fallback",
-                    evaluator=e.name,
-                    reason="no_scored_features",
-                )
-                union_feats = numeric_cols[:n_keep]
-
-            top_feats = union_feats
-
-            # Build selection QC metadata for JSON output and reports
-            selection_qc = {
-                "method": "hybrid_union",
-                "total_input_features": len(numeric_cols),
-                "target_percentile": top_percentile,
-                "n_keep_per_metric": n_keep,
-                "n_selected_union": len(top_feats),
-                "n_overlap_both": len(top_by_auc & top_by_mi),
-                "n_auc_only": len(top_by_auc - top_by_mi),
-                "n_mi_only": len(top_by_mi - top_by_auc),
-            }
-
-            log.info(
-                "feature_selection_complete",
+        # ── Apply hybrid union selection ──
+        try:
+            selected_df, selection_qc = select_features(
+                merged,
+                eval_df,
+                top_percentile=top_percentile,
+                impute_strategy=impute_strategy,
+            )
+        except ValueError as exc:
+            _echo(f"  WARNING: All features constant for {e.name}, skipping model")
+            log.warning(
+                "feature_selection_failed",
                 evaluator=e.name,
-                **selection_qc,
+                error=str(exc),
+            )
+            continue
+
+        # Save selection QC
+        import json as _json
+
+        qc_out = out_path / f"{e.name}_selection_qc.json"
+        with open(qc_out, "w") as _f:
+            _json.dump(selection_qc, _f, indent=2, default=str)
+
+        # Determine selected feature columns from the result
+        top_feats = [
+            c
+            for c in selected_df.select_dtypes(include=np.number).columns
+            if c not in LABEL_META_COLS
+        ]
+
+        _echo(
+            f"  Feature Selection (top {top_percentile}%): "
+            f"{len(top_feats)}/{len(numeric_cols)} features "
+            f"(AUC∩MI={selection_qc['n_overlap_both']}, "
+            f"AUC-only={selection_qc['n_auc_only']}, "
+            f"MI-only={selection_qc['n_mi_only']})"
+        )
+
+        if not top_feats:
+            _echo(
+                f"  WARNING: No features selected for {e.name}, skipping model"
+            )
+            continue
+
+        # ── Prepare model inputs ──
+        # Build binary target from the model-eligible subset of the selected
+        # matrix. This matches what select_features() used internally.
+        from kreview.selection import _build_binary_target
+
+        model_df, y = _build_binary_target(selected_df)
+
+        import warnings
+
+        warnings.filterwarnings("ignore", message=".*use_label_encoder.*")
+
+        _echo(f"  Imputation: {impute_strategy}")
+
+        X = _impute(model_df[top_feats], impute_strategy).values
+        c_types = model_df.get("CANCER_TYPE", None)
+        if c_types is not None:
+            c_types = c_types.values
+        a_types = model_df.get("access_version", None)
+        if a_types is not None:
+            a_types = a_types.values
+
+        def _fmt(v):
+            return "N/A" if v is None else f"{v:.3f}"
+
+        model_out = out_path / f"{e.name}_model_results.json"
+
+        # ── CPU models (lr, rf, xgb) ──
+        skip_cpu = cpu_model_names.issubset(models_to_skip)
+        if skip_cpu:
+            _echo("  CPU models: SKIP (--resume, already computed)")
+            model_res = existing_results  # use cached results
+            lr_model, rf_model, xgb_model = None, None, None
+        else:
+            model_res, lr_model, rf_model, xgb_model = cpu_models(
+                X,
+                y,
+                feature_names=top_feats,
+                cancer_types=c_types,
+                assays=a_types,
+                n_folds=cv_folds,
             )
             _echo(
-                f"  Feature Selection (top {top_percentile}%): "
-                f"{len(top_feats)}/{len(numeric_cols)} features "
-                f"(AUC∩MI={selection_qc['n_overlap_both']}, "
-                f"AUC-only={selection_qc['n_auc_only']}, "
-                f"MI-only={selection_qc['n_mi_only']})"
+                f"  CPU: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
+                f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
+                f"AUC_XGB={_fmt(model_res.get('auc_xgb'))}"
             )
 
-            if top_feats:
-                # Variance guard: drop features that are constant across all model samples.
-                # Constant features produce AUC=0.500 and waste compute.
-                X_imputed = _impute(model_df[top_feats], impute_strategy)
-                nonconst = [c for c in top_feats if X_imputed[c].std() > 0]
-                n_dropped = len(top_feats) - len(nonconst)
-                if n_dropped > 0:
-                    _echo(
-                        f"  WARNING: Dropped {n_dropped} constant features (zero variance)"
-                    )
-                    log.info(
-                        "variance_guard_dropped",
-                        evaluator=e.name,
-                        n_dropped=n_dropped,
-                        n_remaining=len(nonconst),
-                    )
-                    top_feats = nonconst
+        # ── GPU models (tabpfn, tabicl) ──
+        if gpu_model_list:
+            # Determine which GPU models still need to run
+            gpu_remaining = [
+                m for m in gpu_model_list if m not in models_to_skip
+            ]
+            if not gpu_remaining:
+                _echo("  GPU models: SKIP (--resume, already computed)")
+            else:
+                _echo(
+                    f"  Running GPU models: {gpu_remaining} "
+                    f"(device={device}, finetune={not no_finetune})"
+                )
+                try:
+                    from kreview.eval_engine import gpu_models
 
-                if not top_feats:
-                    _echo(
-                        f"  WARNING: All features are constant for {e.name}, skipping model"
-                    )
-                    continue
-
-                import warnings
-
-                warnings.filterwarnings("ignore", message=".*use_label_encoder.*")
-
-                _echo(f"  Imputation: {impute_strategy}")
-
-                # Reuse cached imputed data (re-slice if variance guard dropped columns)
-                X = X_imputed[top_feats].values
-                c_types = model_df.get("CANCER_TYPE", None)
-                if c_types is not None:
-                    c_types = c_types.values
-                a_types = model_df.get("access_version", None)
-                if a_types is not None:
-                    a_types = a_types.values
-
-                def _fmt(v):
-                    return "N/A" if v is None else f"{v:.3f}"
-
-                model_out = out_path / f"{e.name}_model_results.json"
-
-                # ── CPU models (lr, rf, xgb) ──
-                skip_cpu = cpu_model_names.issubset(models_to_skip)
-                if skip_cpu:
-                    _echo("  CPU models: SKIP (--resume, already computed)")
-                    model_res = existing_results  # use cached results
-                    lr_model, rf_model, xgb_model = None, None, None
-                else:
-                    model_res, lr_model, rf_model, xgb_model = cpu_models(
+                    gpu_res, _ = gpu_models(
                         X,
                         y,
                         feature_names=top_feats,
                         cancer_types=c_types,
                         assays=a_types,
                         n_folds=cv_folds,
+                        models=tuple(gpu_remaining),
+                        device=device,
+                        finetune=not no_finetune,
+                        finetune_epochs=finetune_epochs,
+                        compute_shap=False,  # SHAP via kreview eval gpu --shap
+                    )
+                    # Merge GPU results into the combined dict
+                    model_res.update(gpu_res)
+                    for mn in gpu_remaining:
+                        _echo(
+                            f"  GPU/{mn}: AUC={_fmt(model_res.get(f'auc_{mn}'))}"
+                        )
+                    log.info(
+                        "gpu_models_complete",
+                        evaluator=e.name,
+                        models=gpu_remaining,
+                        aucs={
+                            mn: model_res.get(f"auc_{mn}")
+                            for mn in gpu_remaining
+                        },
+                    )
+                except ImportError as exc:
+                    log.error(
+                        "gpu_import_failed",
+                        evaluator=e.name,
+                        error=str(exc),
+                        hint="pip install kreview[gpu]",
                     )
                     _echo(
-                        f"  CPU: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
-                        f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
-                        f"AUC_XGB={_fmt(model_res.get('auc_xgb'))}"
+                        f"  ERROR: GPU dependencies not available: {exc}. "
+                        f"Install with: pip install kreview[gpu]"
                     )
+                except Exception as exc:
+                    log.error(
+                        "gpu_models_failed",
+                        evaluator=e.name,
+                        error=str(exc),
+                    )
+                    _echo(f"  ERROR: GPU models failed: {exc}")
 
-                # ── GPU models (tabpfn, tabicl) ──
-                if gpu_model_list:
-                    # Determine which GPU models still need to run
-                    gpu_remaining = [
-                        m for m in gpu_model_list if m not in models_to_skip
-                    ]
-                    if not gpu_remaining:
-                        _echo("  GPU models: SKIP (--resume, already computed)")
-                    else:
-                        _echo(
-                            f"  Running GPU models: {gpu_remaining} "
-                            f"(device={device}, finetune={not no_finetune})"
-                        )
-                        try:
-                            from kreview.eval_engine import gpu_models
+        # ── Enrich results + save ──
+        if "error" not in model_res:
+            model_res["evaluator"] = e.name
+            model_res["top_features"] = top_feats
+            model_res["selection_qc"] = selection_qc
+            # Add sample IDs for multimodal alignment (C5)
+            if "sample_id" in model_df.columns:
+                model_res["oof_sample_ids"] = (
+                    model_df["sample_id"].tolist()
+                )
+            elif "SAMPLE_ID" in model_df.columns:
+                model_res["oof_sample_ids"] = (
+                    model_df["SAMPLE_ID"].tolist()
+                )
+            # Best model summary — for dashboard ranking and Phase D sorting
+            all_aucs = {
+                k: v
+                for k, v in model_res.items()
+                if k.startswith("auc_")
+                and isinstance(v, (int, float))
+                and not k.endswith("_ci_lower")
+                and not k.endswith("_ci_upper")
+            }
+            if all_aucs:
+                model_res["best_model"] = max(all_aucs, key=all_aucs.get)
+                model_res["best_auc"] = all_aucs[model_res["best_model"]]
 
-                            gpu_res, _ = gpu_models(
-                                X,
-                                y,
-                                feature_names=top_feats,
-                                cancer_types=c_types,
-                                assays=a_types,
-                                n_folds=cv_folds,
-                                models=tuple(gpu_remaining),
-                                device=device,
-                                finetune=not no_finetune,
-                                finetune_epochs=finetune_epochs,
-                                compute_shap=False,  # SHAP via kreview eval gpu --shap
-                            )
-                            # Merge GPU results into the combined dict
-                            model_res.update(gpu_res)
-                            for mn in gpu_remaining:
-                                _echo(
-                                    f"  GPU/{mn}: AUC={_fmt(model_res.get(f'auc_{mn}'))}"
-                                )
-                            log.info(
-                                "gpu_models_complete",
-                                evaluator=e.name,
-                                models=gpu_remaining,
-                                aucs={
-                                    mn: model_res.get(f"auc_{mn}")
-                                    for mn in gpu_remaining
-                                },
-                            )
-                        except ImportError as exc:
-                            log.error(
-                                "gpu_import_failed",
-                                evaluator=e.name,
-                                error=str(exc),
-                                hint="pip install kreview[gpu]",
-                            )
-                            _echo(
-                                f"  ERROR: GPU dependencies not available: {exc}. "
-                                f"Install with: pip install kreview[gpu]"
-                            )
-                        except Exception as exc:
-                            log.error(
-                                "gpu_models_failed",
-                                evaluator=e.name,
-                                error=str(exc),
-                            )
-                            _echo(f"  ERROR: GPU models failed: {exc}")
+        # Merge with any existing results from a partial resume
+        if existing_results and existing_results is not model_res:
+            existing_results.update(model_res)
+            model_res = existing_results
 
-                # ── Enrich results + save ──
-                if "error" not in model_res:
-                    model_res["evaluator"] = e.name
-                    model_res["top_features"] = top_feats
-                    model_res["selection_qc"] = selection_qc
-                    # Add sample IDs for multimodal alignment (C5)
-                    if "sample_id" in model_df.columns:
-                        model_res["oof_sample_ids"] = (
-                            model_df["sample_id"].tolist()
-                        )
-                    elif "SAMPLE_ID" in model_df.columns:
-                        model_res["oof_sample_ids"] = (
-                            model_df["SAMPLE_ID"].tolist()
-                        )
-                    # Best model summary — for dashboard ranking and Phase D sorting
-                    all_aucs = {
-                        k: v
-                        for k, v in model_res.items()
-                        if k.startswith("auc_")
-                        and isinstance(v, (int, float))
-                        and not k.endswith("_ci_lower")
-                        and not k.endswith("_ci_upper")
-                    }
-                    if all_aucs:
-                        model_res["best_model"] = max(all_aucs, key=all_aucs.get)
-                        model_res["best_auc"] = all_aucs[model_res["best_model"]]
+        import joblib
 
-                # Merge with any existing results from a partial resume
-                if existing_results and existing_results is not model_res:
-                    existing_results.update(model_res)
-                    model_res = existing_results
+        # Save models for downstream SHAP / Dashboards
+        if lr_model is not None:
+            joblib_out = out_path / f"{e.name}_lr_model.joblib"
+            joblib.dump(lr_model, joblib_out)
+        if rf_model is not None:
+            joblib_out = out_path / f"{e.name}_rf_model.joblib"
+            joblib.dump(rf_model, joblib_out)
+        if xgb_model is not None:
+            joblib_out = out_path / f"{e.name}_xgb_model.joblib"
+            joblib.dump(xgb_model, joblib_out)
 
-                import joblib
+        with open(model_out, "w") as f:
+            json.dump(model_res, f, indent=2, default=str)
 
-                # Save models for downstream SHAP / Dashboards
-                if lr_model is not None:
-                    joblib_out = out_path / f"{e.name}_lr_model.joblib"
-                    joblib.dump(lr_model, joblib_out)
-                if rf_model is not None:
-                    joblib_out = out_path / f"{e.name}_rf_model.joblib"
-                    joblib.dump(rf_model, joblib_out)
-                if xgb_model is not None:
-                    joblib_out = out_path / f"{e.name}_xgb_model.joblib"
-                    joblib.dump(xgb_model, joblib_out)
-
-                with open(model_out, "w") as f:
-                    json.dump(model_res, f, indent=2, default=str)
-
-                _echo(f"  Output: {model_out}")
-
-        else:
-            n_classes = len(np.unique(y)) if len(y) > 0 else 0
-            _echo(
-                f"  SKIP model: {e.name} — insufficient data "
-                f"(n_samples={len(model_df)}, n_classes={n_classes}, "
-                f"need ≥20 samples and 2 classes)"
-            )
-            log.warning(
-                "model_skip_insufficient_data",
-                evaluator=e.name,
-                n_samples=len(model_df),
-                n_classes=n_classes,
-            )
+        _echo(f"  Output: {model_out}")
 
         eval_sec = time.time() - t3
         _echo(f"  Evaluation complete in {eval_sec:.1f}s")
@@ -1321,7 +1230,7 @@ def extract(
     """
     from kreview.core import Paths, LabelConfig, _calculate_dynamic_chunk_size
     from kreview.labels import CtDNALabeler
-    from kreview.evaluators import get_all_evaluators
+    from kreview.registry import get_all_evaluators
 
     print("=== kreview extract ===", flush=True)
     print("Configuration:", flush=True)

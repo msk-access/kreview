@@ -8,9 +8,11 @@
 //        |
 //   [collect all matrices]
 //        |
+//   KREVIEW_SELECT  (feature scoring + hybrid-union selection)
+//        |
 //     +--------+----------+
 //     |        |          |
-//   FUSE   EVAL_CPU   EVAL_GPU   (all 3 run in parallel)
+//   FUSE   EVAL_CPU   EVAL_GPU   (all 3 run in parallel on SELECTED matrices)
 //     |        |          |
 //     +--------+----------+
 //              |
@@ -20,13 +22,14 @@
 //
 // The pipeline mode is controlled by params.pipeline_mode:
 //   'monolithic' — Original single-process KREVIEW_RUN (backward compat)
-//   'multistage' — Decomposed: Extract(×N) → Fuse + Eval → Report
+//   'multistage' — Decomposed: Extract(×N) → Select → Fuse + Eval → Report
 //
 // Default: 'monolithic' for backward compatibility.
 // ---------------------------------------------------------
 
 include { KREVIEW_RUN      } from '../modules/local/kreview/run'
 include { KREVIEW_EXTRACT  } from '../modules/local/kreview/extract'
+include { KREVIEW_SELECT   } from '../modules/local/kreview/select'
 include { KREVIEW_FUSE     } from '../modules/local/kreview/fuse'
 include { KREVIEW_EVAL_CPU } from '../modules/local/kreview/eval_cpu'
 include { KREVIEW_EVAL_GPU        } from '../modules/local/kreview/eval_gpu'
@@ -50,7 +53,7 @@ workflow KREVIEW_EVAL {
 
     if (params.pipeline_mode == 'multistage') {
         // ── Multistage mode ──
-        // Decompose into: Extract(×N parallel) → Fuse → Eval-CPU + Eval-GPU → Report
+        // Extract(×N) → Select → parallel(FUSE, EVAL_CPU, EVAL_GPU) → Multimodal → Report
 
         // Step 1: Build evaluator name channel for scatter
         if (params.features) {
@@ -82,22 +85,29 @@ workflow KREVIEW_EVAL {
             ch_evaluators
         )
 
-        // Step 3: Collect all matrices for downstream stages
+        // Step 3: Collect all raw matrices
         ch_all_matrices = KREVIEW_EXTRACT.out.matrices.collect()
 
-        // Step 4a: Fuse into super-matrix (for multimodal eval)
-        KREVIEW_FUSE(ch_all_matrices)
+        // Step 3b: Feature scoring + hybrid-union selection
+        // Produces selected matrices (fewer feature columns) + eval stats + QC
+        KREVIEW_SELECT(ch_all_matrices)
+        ch_selected_matrices = KREVIEW_SELECT.out.matrices.collect()
 
-        // Step 4b: CPU evaluation on per-evaluator matrices
-        KREVIEW_EVAL_CPU(ch_all_matrices)
+        // Steps 4a/4b/4c run in PARALLEL (all read selected matrices)
+        // 4a: Fuse selected matrices → super-matrix (for multimodal)
+        KREVIEW_FUSE(ch_selected_matrices)
+
+        // 4b: CPU evaluation on selected per-evaluator matrices
+        KREVIEW_EVAL_CPU(ch_selected_matrices)
         ch_json_stats = KREVIEW_EVAL_CPU.out.json_stats
 
-        // Step 5: GPU evaluation on per-evaluator matrices (optional)
+        // 4c: GPU evaluation on selected per-evaluator matrices (optional)
         if (params.run_gpu_eval) {
-            KREVIEW_EVAL_GPU(ch_all_matrices)
+            KREVIEW_EVAL_GPU(ch_selected_matrices)
         }
 
-        // Step 6: Multimodal cross-evaluator evaluation (optional)
+        // Step 5: Multimodal cross-evaluator evaluation (optional)
+        // Needs: OOF probs from EVAL_CPU/GPU + super_matrix from FUSE
         if (params.run_multimodal_eval) {
             // Collect per-evaluator JSON results from CPU (and optionally GPU)
             ch_cpu_results = KREVIEW_EVAL_CPU.out.json_stats.collect()
@@ -111,9 +121,9 @@ workflow KREVIEW_EVAL {
             )
         }
 
-        // Step 7: Report generation (optional)
+        // Step 6: Report generation (optional)
         if (!params.skip_report) {
-            KREVIEW_REPORT(ch_all_matrices)
+            KREVIEW_REPORT(ch_selected_matrices)
             ch_html_reports = KREVIEW_REPORT.out.html_reports
             ch_static_plots = KREVIEW_REPORT.out.static_plots
         }

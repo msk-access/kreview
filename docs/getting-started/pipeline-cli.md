@@ -6,14 +6,23 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 
 ## Available Commands
 
-`kreview` exposes four subcommands:
+`kreview` provides a modular CLI where each pipeline stage can run independently or together via `kreview run`:
 
-| Command | Purpose |
-|---------|---------|
-| `kreview run` | Full pipeline: label → extract → evaluate → report |
-| `kreview label` | Generate ctDNA labels only (no feature evaluation) |
-| `kreview features-list` | List all registered feature evaluators |
-| `kreview report` | Re-generate HTML dashboard from existing results |
+| Command | Purpose | Pipeline Order |
+|---------|---------|---------------|
+| `kreview label` | Generate ctDNA labels only | 1 |
+| `kreview extract` | Label + extract feature matrices per evaluator | 2 |
+| `kreview select` | Score features (AUC/MI) + hybrid union selection | 3 |
+| `kreview eval cpu` | CPU model evaluation (LR, RF, XGB) | 4a (parallel) |
+| `kreview eval gpu` | GPU model evaluation (TabPFN, TabICL) | 4b (parallel) |
+| `kreview fuse` | Fuse per-evaluator matrices → super-matrix | 4c (parallel) |
+| `kreview eval multimodal` | Cross-evaluator stacking + ablation | 5 (needs 4a+4b+4c) |
+| `kreview report` | Re-generate HTML dashboards | 6 |
+| `kreview run` | Full pipeline: all of the above in sequence | — |
+| `kreview features-list` | List registered evaluators | — |
+
+!!! note "Steps 4a, 4b, and 4c are independent"
+    After feature selection, `eval cpu`, `eval gpu`, and `fuse` can run in **parallel**. They all converge at `eval multimodal`, which needs the OOF predictions from eval + the super-matrix from fuse.
 
 ---
 
@@ -167,6 +176,54 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       --resume
     ```
     *This checks for existing `*_model_results.json` files and skips extractors that have already completed.*
+
+---
+
+## Modular Pipeline (HPC / Nextflow)
+
+The same pipeline can be run step-by-step for HPC parallelization or debugging:
+
+```bash
+# Step 1: Extract matrices (parallelizable per evaluator)
+kreview extract --cancer-samplesheet samplesheet.csv \
+    --healthy-xs1-samplesheet healthy1.csv \
+    --healthy-xs2-samplesheet healthy2.csv \
+    --cbioportal-dir /path/to/cbioportal/ \
+    --krewlyzer-dir /path/to/features/ \
+    --output output/
+
+# Step 2: Feature selection
+kreview select --matrices-dir output/ --top-percentile 50 --output selected/
+# Or overwrite in-place:
+# kreview select --matrices-dir output/ --top-percentile 50 --overwrite
+
+# Steps 3a/3b/3c can run in PARALLEL
+# 3a: CPU model evaluation
+kreview eval cpu --matrices-dir selected/ --output results/
+# 3b: GPU model evaluation (optional)
+kreview eval gpu --matrices-dir selected/ --output results/
+# 3c: Fuse selected matrices → super-matrix
+kreview fuse --output-dir selected/
+
+# Step 4: Multimodal evaluation (needs OOF probs + super_matrix)
+kreview eval multimodal \
+    --results-dir results/ \
+    --super-matrix selected/super_matrix.parquet \
+    --output results/
+
+# Step 5: Report
+kreview report --results-dir results/
+```
+
+!!! tip "kreview select options"
+    | Flag | Default | Description |
+    |------|---------|-------------|
+    | `--matrices-dir` | required | Directory with `*_matrix.parquet` from extract |
+    | `--top-percentile` | 50 | Top N% per metric for hybrid union |
+    | `--cv-folds` | 5 | Folds for univariate AUC scoring |
+    | `--impute-strategy` | median | Imputation for variance check |
+    | `--output` | output/ | Output directory for selected matrices |
+    | `--overwrite` | false | Overwrite originals instead of separate output |
 
 ---
 
