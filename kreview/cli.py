@@ -129,29 +129,10 @@ import numpy as np
 import time
 
 
-def _impute(df, strategy: str):
-    """Apply imputation strategy to a feature DataFrame.
-
-    Args:
-        df: DataFrame with numeric features (may contain NaN).
-        strategy: One of 'zero', 'mean', 'median'.
-
-    Returns:
-        DataFrame with NaN values filled according to strategy.
-    """
-    if strategy == "mean":
-        return df.fillna(df.mean())
-    elif strategy == "median":
-        return df.fillna(df.median())
-    elif strategy != "zero":
-        import structlog
-
-        structlog.get_logger().warning(
-            "unknown_impute_strategy",
-            strategy=strategy,
-            fallback="zero",
-        )
-    return df.fillna(0)  # default: zero
+# Import shared imputation from selection.py — single source of truth.
+# Previously duplicated here; now kreview run, kreview select, and
+# select_features() all use the same implementation.
+from kreview.selection import _impute
 
 
 def _extract_evaluator(
@@ -800,12 +781,16 @@ def run(
             )
             continue
 
-        # Save selection QC
-        import json as _json
+        # Save selected matrix — overwrites the full matrix from extract
+        # so downstream report/DuckDB export use the reduced feature set.
+        matrix_out = out_path / f"{e.name}_matrix.parquet"
+        selected_df.to_parquet(matrix_out, index=False)
+        _echo(f"  Selected matrix: {selected_df.shape[1]} cols -> {matrix_out}")
 
+        # Save selection QC
         qc_out = out_path / f"{e.name}_selection_qc.json"
         with open(qc_out, "w") as _f:
-            _json.dump(selection_qc, _f, indent=2, default=str)
+            json.dump(selection_qc, _f, indent=2, default=str)
 
         # Determine selected feature columns from the result
         top_feats = [
@@ -831,9 +816,9 @@ def run(
         # ── Prepare model inputs ──
         # Build binary target from the model-eligible subset of the selected
         # matrix. This matches what select_features() used internally.
-        from kreview.selection import _build_binary_target
+        from kreview.selection import build_binary_target
 
-        model_df, y = _build_binary_target(selected_df)
+        model_df, y = build_binary_target(selected_df)
 
         import warnings
 

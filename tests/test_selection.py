@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from kreview.selection import (
-    _build_binary_target,
+    build_binary_target,
     _impute,
     score_features,
     select_features,
@@ -80,13 +80,13 @@ def small_matrix():
 
 
 # ---------------------------------------------------------------------------
-# _build_binary_target
+# build_binary_target
 # ---------------------------------------------------------------------------
 
 
 class TestBuildBinaryTarget:
     def test_basic(self, synthetic_matrix):
-        model_df, y = _build_binary_target(synthetic_matrix)
+        model_df, y = build_binary_target(synthetic_matrix)
         assert len(model_df) == 50
         assert y.sum() == 25  # 25 positives
         assert (y == 0).sum() == 25  # 25 negatives
@@ -98,20 +98,20 @@ class TestBuildBinaryTarget:
                 "feat": np.ones(35),
             }
         )
-        model_df, y = _build_binary_target(df)
+        model_df, y = build_binary_target(df)
         assert len(model_df) == 30  # "Unknown" filtered out
 
     def test_insufficient_samples(self):
         df = pd.DataFrame({"label": ["True ctDNA+"] * 5, "feat": np.ones(5)})
         with pytest.raises(ValueError, match="Insufficient samples"):
-            _build_binary_target(df)
+            build_binary_target(df)
 
     def test_single_class(self):
         df = pd.DataFrame(
             {"label": ["True ctDNA+"] * 25, "feat": np.ones(25)}
         )
         with pytest.raises(ValueError, match="Only one class"):
-            _build_binary_target(df)
+            build_binary_target(df)
 
 
 # ---------------------------------------------------------------------------

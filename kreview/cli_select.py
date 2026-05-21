@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 import structlog
+import pandas as pd
 import typer
 
 log = structlog.get_logger()
@@ -98,7 +99,6 @@ def select(
         raise typer.Exit(code=1)
 
     # Discover matrix files (exclude super_matrix and scoreboard files)
-    import pandas as pd
 
     matrix_files = sorted(matrices_dir.glob("*_matrix.parquet"))
     matrix_files = [

@@ -77,6 +77,7 @@ nav:
       - Dashboard Guide: machine-learning/dashboard-guide.md
       - Decision Curve Analysis: machine-learning/decision-curve-analysis.md
   - Developer Guide:
+      - Pipeline Architecture: developer/pipeline-architecture.md
       - nbdev Workflow: developer/nbdev-workflow.md
       - Adding a Feature: developer/adding-a-feature.md
       - DuckDB Architecture: developer/duckdb-architecture.md

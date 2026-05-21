@@ -44,11 +44,11 @@ process KREVIEW_SELECT {
     echo "=== KREVIEW_SELECT ==="
     echo "Input matrices: \$(ls matrices/*_matrix.parquet | wc -l)"
 
-    PYTHONUNBUFFERED=1 kreview select \\
-        --matrices-dir matrices \\
-        --top-percentile ${top_pct} \\
-        --cv-folds ${cv_folds} \\
-        --impute-strategy ${impute} \\
+    PYTHONUNBUFFERED=1 kreview select \
+        --matrices-dir matrices \
+        --top-percentile ${top_pct} \
+        --cv-folds ${cv_folds} \
+        --impute-strategy ${impute} \
         --output selected
 
     echo "Output matrices: \$(ls selected/*_matrix.parquet | wc -l)"
