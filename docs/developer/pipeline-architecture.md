@@ -47,7 +47,7 @@ Every module in `kreview` is auto-generated from an nbdev notebook in `nbs/`. **
 
 | Module | Source Notebook | Functions | Used By |
 |--------|-----------------|-----------|---------|
-| `selection.py` | `nbs/03_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()` | `kreview run`, `kreview select` |
+| `selection.py` | `nbs/04_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()` | `kreview run`, `kreview select` |
 | `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()` | `kreview run`, `kreview eval cpu/gpu`, `selection.py` |
 | `core.py` | `nbs/00_core.ipynb` | `LABEL_META_COLS`, `Paths`, `LabelConfig` | All commands |
 | `registry.py` | `nbs/03_registry.ipynb` | `get_all_evaluators()` | `kreview run`, `kreview extract`, `kreview features-list` |
