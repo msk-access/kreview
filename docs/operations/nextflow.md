@@ -8,13 +8,29 @@ For enterprise environments, `kreview` natively ships a standardized **nf-core D
 
 ## Architecture Overview
 
-All Nextflow pipeline logic resides statically within the `nextflow/` directory:
+All Nextflow pipeline logic resides within the `nextflow/` directory:
 
-- `nextflow/main.nf` (Entrypoint)
-- `nextflow/nextflow.config` (Execution profiles, defaults)
-- `nextflow/modules/local/kreview/run.nf` (Core python engine execution)
+- `nextflow/main.nf` — Entrypoint
+- `nextflow/nextflow.config` — Execution profiles, defaults
+- `nextflow/workflows/kreview_eval.nf` — Pipeline DAG (monolithic or multistage)
+- `nextflow/modules/local/kreview/` — Individual process modules:
+    - `run.nf` — Monolithic mode (backward compatible)
+    - `extract.nf` — Per-evaluator feature extraction
+    - `select.nf` — Feature scoring + hybrid-union selection
+    - `eval_cpu.nf` — CPU model evaluation (LR, RF, XGB)
+    - `eval_gpu.nf` — GPU model evaluation (TabPFN, TabICL)
+    - `fuse.nf` — Super-matrix construction
+    - `eval_multimodal.nf` — Cross-evaluator stacking
+    - `report.nf` — HTML dashboard generation
 
-The workflow transparently wraps the `kreview run` Typer CLI, binding the computation natively to the `ghcr.io/msk-access/kreview:latest` container.
+The pipeline supports two modes controlled by `params.pipeline_mode`:
+
+- **`monolithic`** (default) — Single-process `KREVIEW_RUN` for backward compatibility.
+- **`multistage`** — Decomposed: Extract(×N) → Select → parallel(Fuse, Eval CPU, Eval GPU) → Eval Multimodal → Report.
+
+For a detailed architecture overview with notebook-to-module mappings, see the [Pipeline Architecture](../developer/pipeline-architecture.md) developer guide.
+
+The workflow transparently wraps the `kreview` Typer CLI, binding the computation natively to the `ghcr.io/msk-access/kreview:latest` container.
 
 ## Pipeline Execution
 
