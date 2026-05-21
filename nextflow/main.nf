@@ -10,7 +10,8 @@
 
 nextflow.enable.dsl = 2
 
-include { KREVIEW_EVAL } from './workflows/kreview_eval'
+include { KREVIEW_EVAL }     from './workflows/kreview_eval'
+include { KREVIEW_LABEL_WF } from './workflows/kreview_label'
 
 def helpMessage() {
     log.info """
@@ -29,9 +30,14 @@ def helpMessage() {
      --healthy_xs1_samplesheet  CSV of healthy controls (XS1)
      --healthy_xs2_samplesheet  CSV of healthy controls (XS2)
      --cbioportal_dir           Absolute path to MSK cBioPortal sync directory
-     --krewlyzer_dir            Absolute path to parquet results (or manifest.txt file)
+     --krewlyzer_dir            Absolute path to parquet results (eval workflow only)
 
-     Pipeline Mode:
+     Workflow Selection:
+     --workflow                 'eval' (default) or 'label'
+                                eval  = Label → Extract → Select → Eval → Report
+                                label = Label only (no feature extraction required)
+
+     Pipeline Mode (eval workflow only):
      --pipeline_mode            'monolithic' (default) or 'multistage'
                                 multistage = Label → Extract(×N) → Fuse → Eval → Report
 
@@ -76,7 +82,7 @@ def helpMessage() {
 }
 
 workflow NFCORE_KREVIEW {
-    // Assert required
+    // Assert required (common to all workflows)
     if (!params.cancer_samplesheet) {
         log.error "ERROR: --cancer_samplesheet is required"
         helpMessage()
@@ -87,11 +93,6 @@ workflow NFCORE_KREVIEW {
         helpMessage()
         System.exit(1)
     }
-    if (!params.krewlyzer_dir) {
-        log.error "ERROR: --krewlyzer_dir is required"
-        helpMessage()
-        System.exit(1)
-    }
 
     ch_cancer = Channel.value(file(params.cancer_samplesheet, checkIfExists: true))
     ch_xs1    = Channel.value(file(params.healthy_xs1_samplesheet, checkIfExists: true))
@@ -99,15 +100,40 @@ workflow NFCORE_KREVIEW {
 
     // URIs passed down directly to prevent local `work/` symlink staging explosion
     val_cbioportal_dir = params.cbioportal_dir
-    val_krewlyzer_dir  = params.krewlyzer_dir
 
-    KREVIEW_EVAL(
-        ch_cancer,
-        ch_xs1,
-        ch_xs2,
-        val_cbioportal_dir,
-        val_krewlyzer_dir
-    )
+    // ── Workflow routing ──
+    def wf = params.workflow ?: 'eval'
+
+    if (wf == 'label') {
+        // Label-only: does NOT require krewlyzer_dir
+        log.info "Running LABEL-ONLY workflow (no feature extraction)"
+        KREVIEW_LABEL_WF(
+            ch_cancer,
+            ch_xs1,
+            ch_xs2,
+            val_cbioportal_dir,
+        )
+    } else if (wf == 'eval') {
+        // Full eval pipeline: requires krewlyzer_dir
+        if (!params.krewlyzer_dir) {
+            log.error "ERROR: --krewlyzer_dir is required for the eval workflow"
+            helpMessage()
+            System.exit(1)
+        }
+        val_krewlyzer_dir = params.krewlyzer_dir
+
+        KREVIEW_EVAL(
+            ch_cancer,
+            ch_xs1,
+            ch_xs2,
+            val_cbioportal_dir,
+            val_krewlyzer_dir,
+        )
+    } else {
+        log.error "ERROR: Unknown --workflow '${wf}'. Use 'eval' (default) or 'label'."
+        helpMessage()
+        System.exit(1)
+    }
 }
 
 workflow {
