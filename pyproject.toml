@@ -133,3 +133,30 @@ extend-exclude = '''
 [tool.mypy]
 ignore_missing_imports = true
 disable_error_code = ["arg-type", "assignment", "var-annotated", "misc", "return-value", "attr-defined", "call-overload"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--cov=kreview",
+    "--cov-report=xml:coverage.xml",
+    "--cov-report=term-missing:skip-covered",
+    "--tb=short",
+    "-q",
+]
+timeout = 120
+log_cli_level = "WARNING"
+
+[tool.coverage.run]
+source = ["kreview"]
+omit = [
+    "kreview/_modidx.py",
+    "kreview/templates/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "raise NotImplementedError",
+]
+show_missing = true
