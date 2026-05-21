@@ -916,7 +916,73 @@ def run(
         eval_sec = time.time() - t3
         _echo(f"  Evaluation complete in {eval_sec:.1f}s")
 
-    # ── Step 4b: Build Cross-Evaluator Scoreboard ──
+    # ── Step 4a: Fuse per-evaluator matrices into super-matrix ──
+    _echo("\nStep 4a: Fusing per-evaluator matrices...")
+    super_matrix_path = None
+    try:
+        from kreview.core import fuse_matrices
+
+        fused_df = fuse_matrices(out_path)
+        if fused_df.empty:
+            _echo("  SKIP fuse: no matrices found or all samples filtered.")
+            log.warning("fuse_skip_empty", output_dir=str(out_path))
+        else:
+            super_matrix_path = out_path / "super_matrix.parquet"
+            n_features = len([c for c in fused_df.columns if "__" in c])
+            _echo(
+                f"  Fused: {len(fused_df)} samples x {n_features} features "
+                f"-> {super_matrix_path}"
+            )
+            log.info(
+                "fuse_complete",
+                n_samples=len(fused_df),
+                n_features=n_features,
+                output=str(super_matrix_path),
+            )
+    except Exception as exc:
+        _echo(f"  ERROR: Fuse failed: {exc}")
+        log.error("fuse_failed", error=str(exc))
+
+    # ── Step 4b: Cross-evaluator multimodal evaluation ──
+    multimodal_out = out_path / "multimodal_results.json"
+    if super_matrix_path is not None and super_matrix_path.exists():
+        _echo("\nStep 4b: Running multimodal evaluation (stacking + ablation)...")
+        try:
+            from kreview.eval_engine import multimodal_eval
+
+            mm_results = multimodal_eval(
+                results_dir=out_path,
+                super_matrix_path=super_matrix_path,
+                n_folds=cv_folds,
+            )
+            with open(multimodal_out, "w") as f:
+                json.dump(mm_results, f, indent=2, default=str)
+
+            # Display summary
+            best_single = mm_results.get("best_single_evaluator", "?")
+            best_single_auc = mm_results.get("best_single_auc", 0)
+            _echo(f"  Best single evaluator: {best_single} (AUC={best_single_auc:.3f})")
+
+            stacking = mm_results.get("stacking", {})
+            for k, v in sorted(stacking.items()):
+                if k.startswith("auc_stacking_") and not k.endswith(("_ci_lower", "_ci_upper")):
+                    mn = k.replace("auc_stacking_", "")
+                    _echo(f"  Stacking/{mn}: AUC={v:.3f}")
+
+            _echo(f"  Output: {multimodal_out}")
+            log.info(
+                "multimodal_complete",
+                best_single=best_single,
+                best_single_auc=best_single_auc,
+                n_evaluators=mm_results.get("n_evaluators", 0),
+            )
+        except Exception as exc:
+            _echo(f"  ERROR: Multimodal evaluation failed: {exc}")
+            log.error("multimodal_failed", error=str(exc))
+    else:
+        _echo("\nStep 4b: SKIP multimodal — no super-matrix available.")
+        log.info("multimodal_skip", reason="no super-matrix")
+    # ── Step 4c: Build Cross-Evaluator Scoreboard ──
     # Check if any evaluators produced model results
     model_jsons = list(out_path.glob("*_model_results.json"))
     if not model_jsons:
@@ -1154,7 +1220,15 @@ def extract(
         None, help="Comma-separated evaluator names (default: all)"
     ),
     tier: Optional[int] = typer.Option(None, help="Run only this tier"),
-    chunk_size: int = typer.Option(5000, help="Rows per DuckDB chunk"),
+    chunk_size: str = typer.Option(
+        "auto",
+        "--chunk-size",
+        help=(
+            "Samples per DuckDB read batch. 'auto' (default) probes parquet "
+            "row density at runtime, or pass an integer to override "
+            "(e.g. --chunk-size 200)."
+        ),
+    ),
 ):
     """Label samples and extract feature matrices (no eval/model/report).
 
@@ -1162,7 +1236,7 @@ def extract(
     evaluator into ``*_matrix.parquet`` files. This is the first half of
     ``kreview run``, designed for parallelized Nextflow execution.
     """
-    from kreview.core import Paths, LabelConfig, _calculate_dynamic_chunk_size
+    from kreview.core import Paths, LabelConfig
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
 
@@ -1229,7 +1303,21 @@ def extract(
     out_path.mkdir(parents=True, exist_ok=True)
     all_sample_ids = list(labels_df["SAMPLE_ID"].unique())
 
-    effective_chunk = _calculate_dynamic_chunk_size(chunk_size, len(all_sample_ids))
+    # Parse chunk_size: 'auto' passes through to iter_feature_chunks,
+    # integer string is converted, anything else is rejected.
+    effective_chunk: int | str = chunk_size
+    if chunk_size != "auto":
+        try:
+            effective_chunk = int(chunk_size)
+            if effective_chunk < 1:
+                raise ValueError("chunk_size must be positive")
+        except ValueError:
+            print(
+                f"ERROR: --chunk-size must be 'auto' or a positive integer, "
+                f"got '{chunk_size}'",
+                flush=True,
+            )
+            raise typer.Exit(code=1)
     print(f"  Effective chunk size: {effective_chunk}", flush=True)
 
     # ── Step 3: Extract each evaluator ──

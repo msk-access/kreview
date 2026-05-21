@@ -28,9 +28,10 @@ process KREVIEW_SELECT {
     path "selected/*_selection_qc.json",     emit: selection_qc
 
     script:
-    def top_pct  = params.top_percentile ?: 50
+    def top_pct  = params.top_percentile ?: 10
     def cv_folds = params.cv_folds       ?: 5
     def impute   = params.impute_strategy ?: "median"
+    def auc_flag = params.compute_univariate_auc ? '' : '--no-compute-univariate-auc'
     """
     set -euo pipefail
 
@@ -49,6 +50,7 @@ process KREVIEW_SELECT {
         --top-percentile ${top_pct} \
         --cv-folds ${cv_folds} \
         --impute-strategy ${impute} \
+        ${auc_flag} \
         --output selected
 
     echo "Output matrices: \$(ls selected/*_matrix.parquet | wc -l)"

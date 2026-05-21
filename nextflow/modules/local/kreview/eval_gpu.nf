@@ -27,7 +27,7 @@ process KREVIEW_EVAL_GPU {
     def device_arg = params.gpu_device ?: 'cuda'
     def finetune_flag = params.gpu_no_finetune ? '--no-finetune' : ''
     def epochs_arg = params.gpu_finetune_epochs ?: 30
-    def resume_flag = params.resume ? '--resume' : ''
+    def resume_flag = params.resume_eval ? '--resume' : ''
     """
     set -euo pipefail
 
