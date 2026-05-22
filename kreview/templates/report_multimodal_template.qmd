@@ -192,70 +192,59 @@ THEME = {
 # Clamp SHAP display count to actual selected feature count (top_percentile may select fewer)
 _shap_display_n = min(_shap_display_n, len(top_feats))
 import shap
-lr_model = None
-rf_model = None
-xgb_model = None
-
 shap_df_sample = None
 X_shap = None
 y_shap = None
+legacy_shap_preds = {}
 
-lr_preds = None
-rf_preds = None
-xgb_preds = None
-rf_preds_all = None
+best_preds_all = None
 kde_labels = None
 oof_y = None
 oof_preds = {}
 
 if mres is not None and top_feats:
-    rf_joblib = Path(matrix_path).parent / f"{feature_name}_rf_model.joblib"
-    lr_joblib = Path(matrix_path).parent / f"{feature_name}_lr_model.joblib"
-    xgb_joblib = Path(matrix_path).parent / f"{feature_name}_xgb_model.joblib"
-    
-    if lr_joblib.exists(): lr_model = joblib.load(lr_joblib)
-    if rf_joblib.exists(): rf_model = joblib.load(rf_joblib)
-    if xgb_joblib.exists(): xgb_model = joblib.load(xgb_joblib)
-        
+    # ── Find Best Model Prefix ──
+    all_aucs = {k.replace('auc_', ''): v for k, v in mres.items() if k.startswith('auc_') and not k.endswith(('_ci_lower', '_ci_upper', '_std'))}
+    best_m = max(all_aucs, key=all_aucs.get) if all_aucs else None
+
     # ── D-01: Load OOF predictions for ROC & KDE (consistent with official AUC) ──
-    oof_y = np.array(mres["oof_labels"]) if "oof_labels" in mres else None
-    oof_preds = {}
+    _oof_lbl_key = next((k for k in mres if k.endswith("_oof_labels")), None)
+    oof_y = np.array(mres[_oof_lbl_key]) if _oof_lbl_key else None
+    
     for _pfx, _nice in DYNAMIC_MODELS:
         _key = f"{_pfx}_oof_probs"
         if _key in mres:
             oof_preds[_nice] = np.array(mres[_key])
 
     # ── S-03 fix: KDE density from OOF predictions (not retrained model) ──
-    # Retrained model predictions on subsampled data leak training info.
-    # OOF predictions are held-out and cover the full model cohort.
-    rf_preds_all = None
-    kde_labels = None
-    _kde_pfx = next((p for p, _ in DYNAMIC_MODELS if f"{p}_oof_probs" in mres), None)
-    if _kde_pfx and "oof_labels" in mres:
-        rf_preds_all = np.array(mres[f"{_kde_pfx}_oof_probs"])
+    _best_oof_key = f"{best_m}_oof_probs" if best_m else None
+    if _best_oof_key and _best_oof_key in mres and _oof_lbl_key:
+        best_preds_all = np.array(mres[_best_oof_key])
         # Map binary OOF labels back to string labels for KDE grouping
         model_mask = df["label"].isin([
             "True ctDNA+", "Possible ctDNA+",
             "Healthy Normal", "Possible ctDNA-", "Possible ctDNA−"
         ])
         kde_labels = df.loc[model_mask, "label"].values
-        if len(kde_labels) != len(rf_preds_all):
+        if len(kde_labels) != len(best_preds_all):
             import structlog as _stlog; _stlog.get_logger().warning(
-                "oof_length_mismatch", preds=len(rf_preds_all), labels=len(kde_labels)
+                "oof_length_mismatch", preds=len(best_preds_all), labels=len(kde_labels)
             )
-            rf_preds_all = None
+            best_preds_all = None
             kde_labels = None
-    elif rf_model is not None:
+    elif best_m:
         # Legacy fallback for results generated before OOF saving
-        try:
-            _kde_n = min(2000, len(df))
-            kde_idx = df.sample(n=_kde_n, random_state=99).index
-            rf_preds_all = rf_model.predict_proba(df.loc[kde_idx, top_feats].fillna(0))[:, 1]
-            kde_labels = df.loc[kde_idx, "label"].values
-        except Exception as e:
-            import structlog as _stlog; _stlog.get_logger().warning("rf_kde_prediction_failed", error=str(e))
-            rf_preds_all = None
-            kde_labels = None
+        best_joblib = Path(matrix_path).parent / f"{feature_name}_{best_m}_model.joblib"
+        if best_joblib.exists():
+            try:
+                model = joblib.load(best_joblib)
+                if hasattr(model, "predict_proba"):
+                    _kde_n = min(2000, len(df))
+                    kde_idx = df.sample(n=_kde_n, random_state=99).index
+                    best_preds_all = model.predict_proba(df.loc[kde_idx, top_feats].fillna(0))[:, 1]
+                    kde_labels = df.loc[kde_idx, "label"].values
+            except Exception as e:
+                import structlog as _stlog; _stlog.get_logger().warning(f"{best_m}_kde_prediction_failed", error=str(e))
 
     model_label = df["label"].isin([
         "True ctDNA+", "Possible ctDNA+",
@@ -276,21 +265,17 @@ if mres is not None and top_feats:
         y_shap = shap_df.loc[sample_idx, "label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
         shap_df_sample = shap_df.loc[sample_idx, ["label"] + (["sample_id"] if "sample_id" in shap_df.columns else [])].copy()
 
-        if lr_model is not None:
-            try:
-                lr_preds = lr_model.predict_proba(X_shap)[:, 1]
-            except Exception as e:
-                import structlog as _stlog; _stlog.get_logger().warning("lr_shap_prediction_failed", error=str(e))
-        if rf_model is not None:
-            try:
-                rf_preds = rf_model.predict_proba(X_shap)[:, 1]
-            except Exception as e:
-                import structlog as _stlog; _stlog.get_logger().warning("rf_shap_prediction_failed", error=str(e))
-        if xgb_model is not None:
-            try:
-                xgb_preds = xgb_model.predict_proba(X_shap)[:, 1]
-            except Exception as e:
-                import structlog as _stlog; _stlog.get_logger().warning("xgb_shap_prediction_failed", error=str(e))
+        # Generate legacy predictions for SHAP subsample ROC if OOF is not available
+        if oof_y is None:
+            for _pfx, _nice in DYNAMIC_MODELS:
+                model_joblib = Path(matrix_path).parent / f"{feature_name}_{_pfx}_model.joblib"
+                if model_joblib.exists():
+                    try:
+                        model = joblib.load(model_joblib)
+                        if hasattr(model, "predict_proba"):
+                            legacy_shap_preds[_nice] = model.predict_proba(X_shap)[:, 1]
+                    except Exception as e:
+                        import structlog as _stlog; _stlog.get_logger().warning(f"{_pfx}_shap_prediction_failed", error=str(e))
 
     del shap_df
     import gc; gc.collect()
@@ -371,8 +356,8 @@ dict(value=best_str, color="success", icon="trophy")
 #| content: valuebox
 #| title: "Sensitivity @ Optimal"
 sens = "N/A"
-if mres and "rf_classification_report" in mres:
-    rep = mres["rf_classification_report"]
+if mres and best_m and f"{best_m}_classification_report" in mres:
+    rep = mres[f"{best_m}_classification_report"]
     if "1" in rep:
         sens = f"{rep['1']['recall']:.2f}"
 dict(value=sens, color="warning", icon="bullseye")
@@ -382,8 +367,8 @@ dict(value=sens, color="warning", icon="bullseye")
 #| content: valuebox
 #| title: "Specificity @ Optimal"
 spec = "N/A"
-if mres and "rf_classification_report" in mres:
-    rep = mres["rf_classification_report"]
+if mres and best_m and f"{best_m}_classification_report" in mres:
+    rep = mres[f"{best_m}_classification_report"]
     if "0" in rep:
         spec = f"{rep['0']['recall']:.2f}"
 dict(value=spec, color="info", icon="shield-check")
@@ -435,9 +420,7 @@ if oof_y is not None and len(oof_preds) > 0:
 elif y_shap is not None:
     # Legacy fallback: SHAP subsample predictions
     _roc_y = y_shap
-    if lr_preds is not None: _roc_scores["Logistic Regression"] = lr_preds
-    if rf_preds is not None: _roc_scores["Random Forest"] = rf_preds
-    if xgb_preds is not None: _roc_scores["XGBoost"] = xgb_preds
+    _roc_scores = legacy_shap_preds
     _roc_title = "Multi-Model ROC (SHAP Subsample \u2013 Legacy)"
 
 if _roc_y is not None and len(_roc_scores) > 0:
@@ -459,29 +442,36 @@ else:
 
 ```{python}
 #| title: "Calibration Reliability"
-if mres is not None and "rf_calibration" in mres:
-    cal = mres["rf_calibration"]
+has_cal = False
+if mres is not None:
     fig_cal = go.Figure()
-    _ = fig_cal.add_trace(go.Scatter(
-        x=cal["prob_pred"], y=cal["prob_true"],
-        mode="lines+markers", name="RF Calibration",
-        line=dict(color=THEME["models"][1], width=2),
-        marker=dict(size=8)
-    ))
-    _ = fig_cal.add_trace(go.Scatter(
-        x=[0, 1], y=[0, 1],
-        mode="lines", name="Perfectly Calibrated",
-        line=dict(color="gray", dash="dash", width=1)
-    ))
-    _ = fig_cal.update_layout(
-        **LAYOUT_DEFAULTS,
-        height=350,
-        title="RF Calibration Curve",
-        xaxis_title="Mean Predicted Probability",
-        yaxis_title="Fraction of Positives"
-    )
-    show_plotly(fig_cal, filename="calibration")
-else:
+    for i, (prefix, name) in enumerate(DYNAMIC_MODELS):
+        cal = mres.get(f"{prefix}_calibration")
+        if cal is not None:
+            has_cal = True
+            _ = fig_cal.add_trace(go.Scatter(
+                x=cal["prob_pred"], y=cal["prob_true"],
+                mode="lines+markers", name=name,
+                line=dict(color=THEME["models"][i % len(THEME["models"])], width=2),
+                marker=dict(size=8)
+            ))
+            
+    if has_cal:
+        _ = fig_cal.add_trace(go.Scatter(
+            x=[0, 1], y=[0, 1],
+            mode="lines", name="Perfectly Calibrated",
+            line=dict(color="gray", dash="dash", width=1)
+        ))
+        _ = fig_cal.update_layout(
+            **LAYOUT_DEFAULTS,
+            height=350,
+            title="Model Calibration",
+            xaxis_title="Mean Predicted Probability",
+            yaxis_title="Fraction of Positives"
+        )
+        show_plotly(fig_cal, filename="calibration")
+
+if not has_cal:
     display(Markdown("> Calibration data not available."))
 ```
 
@@ -627,9 +617,7 @@ _ci_y = oof_y if oof_y is not None else y_shap
 _ci_scores = oof_preds if len(oof_preds) > 0 else {}
 if not _ci_scores and y_shap is not None:
     # Legacy fallback
-    if lr_preds is not None: _ci_scores["Logistic Regression"] = lr_preds
-    if rf_preds is not None: _ci_scores["Random Forest"] = rf_preds
-    if xgb_preds is not None: _ci_scores["XGBoost"] = xgb_preds
+    _ci_scores = legacy_shap_preds
 
 if _ci_y is not None and len(_ci_scores) > 0:
     fig_roc2 = go.Figure()
@@ -906,18 +894,24 @@ if mres is not None and "cancer_type_stats" in mres:
     ct_stats = mres["cancer_type_stats"]
     if ct_stats:
         ct_df = pd.DataFrame(ct_stats)
-        if "rf_sensitivity" in ct_df.columns:
+        
+        # Discover all models that have _sensitivity in the dataframe
+        val_vars = [col for col in ct_df.columns if col.endswith("_sensitivity")]
+        
+        if val_vars:
             melt_cols = ["cancer_type", "n_positives", "n_samples"]
-            val_vars = ["rf_sensitivity"]
-            if "xgb_sensitivity" in ct_df.columns:
-                val_vars.append("xgb_sensitivity")
-                
             long_df = pd.melt(ct_df, id_vars=melt_cols, value_vars=val_vars, var_name="Model", value_name="Sensitivity")
-            long_df["Model"] = long_df["Model"].map({"rf_sensitivity": "Random Forest", "xgb_sensitivity": "XGBoost"})
+            
+            # Map prefix_sensitivity -> Display Name
+            name_map = {f"{pfx}_sensitivity": name for pfx, name in DYNAMIC_MODELS}
+            long_df["Model"] = long_df["Model"].map(lambda x: name_map.get(x, x.replace("_sensitivity", "").title()))
             long_df = long_df.dropna(subset=["Sensitivity"])
             
             if not long_df.empty:
-                sort_order = ct_df.sort_values(by="rf_sensitivity", ascending=True)["cancer_type"].tolist()
+                # Sort based on the best model's sensitivity (if available)
+                best_sens = f"{best_m}_sensitivity" if best_m else val_vars[0]
+                sort_col = best_sens if best_sens in ct_df.columns else val_vars[0]
+                sort_order = ct_df.sort_values(by=sort_col, ascending=True)["cancer_type"].tolist()
                 fig_ct = px.bar(
                     long_df, x="Sensitivity", y="cancer_type", color="Model", orientation="h",
                     barmode="group",
@@ -946,18 +940,20 @@ if mres is not None and "assay_stats" in mres:
     a_stats = mres["assay_stats"]
     if a_stats:
         a_df = pd.DataFrame(a_stats)
-        if "rf_sensitivity" in a_df.columns:
+        
+        val_vars = [col for col in a_df.columns if col.endswith("_sensitivity")]
+        if val_vars:
             melt_cols = ["assay", "n_positives", "n_samples"]
-            val_vars = ["rf_sensitivity"]
-            if "xgb_sensitivity" in a_df.columns:
-                val_vars.append("xgb_sensitivity")
-                
             long_df = pd.melt(a_df, id_vars=melt_cols, value_vars=val_vars, var_name="Model", value_name="Sensitivity")
-            long_df["Model"] = long_df["Model"].map({"rf_sensitivity": "Random Forest", "xgb_sensitivity": "XGBoost"})
+            
+            name_map = {f"{pfx}_sensitivity": name for pfx, name in DYNAMIC_MODELS}
+            long_df["Model"] = long_df["Model"].map(lambda x: name_map.get(x, x.replace("_sensitivity", "").title()))
             long_df = long_df.dropna(subset=["Sensitivity"])
             
             if not long_df.empty:
-                sort_order = a_df.sort_values(by="rf_sensitivity", ascending=True)["assay"].tolist()
+                best_sens = f"{best_m}_sensitivity" if best_m else val_vars[0]
+                sort_col = best_sens if best_sens in a_df.columns else val_vars[0]
+                sort_order = a_df.sort_values(by=sort_col, ascending=True)["assay"].tolist()
                 fig_a = px.bar(
                     long_df, x="Sensitivity", y="assay", color="Model", orientation="h",
                     barmode="group",
@@ -1001,25 +997,30 @@ if oof_y is not None and len(oof_preds) > 0:
 
 ```{python}
 #| echo: false
-if mres is not None and "rf_feature_importances" in mres:
-    imp = mres["rf_feature_importances"]
-    if isinstance(imp, dict):
-        imp_df = pd.DataFrame(
-            sorted(imp.items(), key=lambda x: x[1], reverse=True)[:20],
-            columns=["Feature", "Importance"]
-        ).iloc[::-1]
-        fig_imp = px.bar(
-            imp_df, x="Importance", y="Feature", orientation="h",
-            color="Importance", color_continuous_scale="Oranges"
-        )
-        _ = fig_imp.update_layout(
-            **LAYOUT_DEFAULTS, showlegend=False,
-            title="RF Feature Importances (Top 20)",
-            margin=dict(l=10, r=10, t=40, b=10),
-            xaxis_title="Gini Importance", yaxis_title=""
-        )
-        show_plotly(fig_imp, filename="feature_importances")
-else:
+has_imp = False
+if mres is not None:
+    for pfx, name in DYNAMIC_MODELS:
+        imp = mres.get(f"{pfx}_feature_importances")
+        if imp and isinstance(imp, dict):
+            has_imp = True
+            imp_df = pd.DataFrame(
+                sorted(imp.items(), key=lambda x: x[1], reverse=True)[:20],
+                columns=["Feature", "Importance"]
+            ).iloc[::-1]
+            fig_imp = px.bar(
+                imp_df, x="Importance", y="Feature", orientation="h",
+                color="Importance", color_continuous_scale="Oranges"
+            )
+            _ = fig_imp.update_layout(
+                **LAYOUT_DEFAULTS, showlegend=False,
+                title=f"{name} Feature Importances (Top 20)",
+                margin=dict(l=10, r=10, t=40, b=10),
+                xaxis_title="Importance", yaxis_title=""
+            )
+            show_plotly(fig_imp, filename=f"feature_importances_{pfx}")
+            break # Only show for the highest ranked model that supports it
+
+if not has_imp:
     display(Markdown("> Feature importances not available."))
 ```
 
@@ -1331,10 +1332,10 @@ except Exception as e:
 
 ```{python}
 #| echo: false
-if rf_preds_all is not None and kde_labels is not None:
+if best_preds_all is not None and kde_labels is not None:
     from plotly.figure_factory import create_distplot
     
-    probs = rf_preds_all
+    probs = best_preds_all
     hist_data = []
     group_labels = []
     colors = []
