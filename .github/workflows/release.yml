@@ -56,16 +56,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push CPU Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
+          target: cpu
           push: true
           tags: ghcr.io/msk-access/kreview:${{ github.ref_name }},ghcr.io/msk-access/kreview:latest
           platforms: linux/amd64
           annotations: |
             org.opencontainers.image.title=kreview
             org.opencontainers.image.description=Evaluate cfDNA fragmentomics features for ctDNA detection
+            org.opencontainers.image.url=https://github.com/msk-access/kreview
+            org.opencontainers.image.source=https://github.com/msk-access/kreview
+            org.opencontainers.image.vendor=MSK-ACCESS
+            org.opencontainers.image.licenses=AGPL-3.0
+            org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: Build and push GPU Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: gpu
+          push: true
+          tags: ghcr.io/msk-access/kreview:${{ github.ref_name }}-gpu,ghcr.io/msk-access/kreview:latest-gpu
+          platforms: linux/amd64
+          annotations: |
+            org.opencontainers.image.title=kreview-gpu
+            org.opencontainers.image.description=Evaluate cfDNA fragmentomics features for ctDNA detection (GPU Runtime)
             org.opencontainers.image.url=https://github.com/msk-access/kreview
             org.opencontainers.image.source=https://github.com/msk-access/kreview
             org.opencontainers.image.vendor=MSK-ACCESS
