@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.10] - 2026-05-22
+### Added
+- **Modular CLI**: Extracted `run` into atomic sub-commands (`label`, `extract`, `fuse`, `eval`, `select`, `report`).
+- **Nextflow DAG**: Complete rebuild of monolithic pipeline into a multi-stage, per-evaluator parallelized workflow.
+- **GPU Evaluation**: Native support for PyTorch-based GPU models (TabPFN, TabICL) via the `kreview eval --gpu-models` target.
+- **Multimodal Models**: Cross-evaluator stacking capability allowing evaluation of multiple fragmentomics assays simultaneously.
+- **Testing Optimizaton**: Dropped unit testing execution time from >6min to <30s via module-scoped caching.
+- **Docker Containers**: Stabilized multi-target release action generating discrete CPU and GPU containers cleanly.
+
 ## [0.0.9] - 2026-05-07
 ### Changed
 - **Feature Selection**: Replaced Cohen's D `--top-n` selection with hybrid union: top X% by Univariate AUC ∪ top X% by Mutual Information. This captures both linear and non-linear predictors.

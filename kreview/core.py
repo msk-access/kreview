@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from functools import lru_cache
+import math
 import pandas as pd
 import duckdb
 import structlog
@@ -21,6 +22,7 @@ __all__ = [
     "ACCESS_PANELS",
     "VARIANT_KEY_COLS",
     "MAF_USECOLS",
+    "LABEL_META_COLS",
     "LabelConfig",
     "Paths",
     "load_samplesheet",
@@ -33,12 +35,15 @@ __all__ = [
     "clear_cbioportal_caches",
     "get_duckdb_conn",
     "discover_available_samples",
+    "iter_feature_chunks",
     "load_feature_cohort",
     "load_metadata_cohort",
+    "run_feature_sql",
     "load_sample_feature",
     "load_sample_metadata",
     "make_variant_key",
     "EvalRun",
+    "fuse_matrices",
 ]
 
 # %% ../nbs/00_core.ipynb #80f7c27c
@@ -77,13 +82,15 @@ class LabelConfig:
     min_fragments: int = 2000  # Min fragments for Depth QC
     access_panels: tuple[str, ...] = ACCESS_PANELS
     impact_panels: tuple[str, ...] = IMPACT_PANELS
-    chunk_size: int = 500  # Batch size for file loading
+    chunk_size: int = 15_000  # Metadata is ~1 row/sample; load in single batch
+    ch_hotspot_maf: Path | None = None  # Optional CH hotspot MAF for variant demotion
 
     def __repr__(self) -> str:
         return (
             f"LabelConfig(min_vaf={self.min_vaf}, "
             f"min_variants={self.min_variants}, "
             f"chunk_size={self.chunk_size}, "
+            f"ch_hotspot_maf={self.ch_hotspot_maf}, "
             f"panels={self.access_panels})"
         )
 
@@ -322,27 +329,26 @@ def discover_available_samples(
 
 
 # %% ../nbs/00_core.ipynb #9b1bb0f9
-def load_feature_cohort(
+def _discover_feature_paths(
     feature_suffix: str,
     results_dirs: list[Path],
     sample_ids: list[str] | set[str] | None = None,
-    conn: duckdb.DuckDBPyConnection | None = None,
-    chunk_size: int = 500,
-) -> pd.DataFrame:
-    """Load one feature type across available samples using explicit file list.
+) -> list[str]:
+    """Discover and return the list of parquet file paths for a feature type.
 
-    ARCHITECTURE NOTE: We build an explicit file list from discovered samples
-    instead of using a glob pattern. This avoids DuckDB scanning thousands of
-    directories over network mounts (SFTP/NFS), which causes multi-minute stalls.
+    This is a pure I/O function (filesystem ls) — no parquet reads occur.
+    It is the shared first stage for both `load_feature_cohort` (batch) and
+    `iter_feature_chunks` (streaming).
+
+    Returns:
+        Sorted list of absolute file path strings. Empty list if no files found.
+
+    Raises:
+        ValueError: If results_dirs is empty.
     """
-    start_time = time.time()
-
     if not results_dirs:
         log.error("results_dirs_empty")
         raise ValueError("Must provide at least one krewlyzer results directory")
-
-    if conn is None:
-        conn = get_duckdb_conn()
 
     # Step 1: Discover valid samples (fast filesystem ls, no parquet reads)
     log.info("discovering_samples", n_dirs=len(results_dirs))
@@ -363,7 +369,7 @@ def load_feature_cohort(
 
     if not final_samples:
         log.warning("no_samples_available_for_cohort", feature=feature_suffix)
-        return pd.DataFrame()
+        return []
 
     log.info("building_file_list", n_samples=len(final_samples))
 
@@ -388,11 +394,28 @@ def load_feature_cohort(
 
     if not file_paths:
         log.warning("no_feature_files_found", feature=feature_suffix)
-        return pd.DataFrame()
 
-    log.info("reading_parquet_files", n_files=len(file_paths), chunk_size=chunk_size)
+    return file_paths
 
-    # Step 3: Read explicit file list (pass Python list directly, no subquery)
+
+def _read_parquet_chunk(
+    conn: duckdb.DuckDBPyConnection,
+    file_paths: list[str],
+    feature_suffix: str,
+    chunk_label: str = "",
+) -> pd.DataFrame:
+    """Read a batch of parquet files via DuckDB with retry logic.
+
+    Args:
+        conn: DuckDB connection (must be in the calling thread).
+        file_paths: List of absolute parquet file paths to read.
+        feature_suffix: Feature name for logging context.
+        chunk_label: Human-readable label for log messages.
+
+    Returns:
+        DataFrame with all rows from the batch, or empty DataFrame on
+        permanent failure after 3 retries.
+    """
     query = """
         SELECT *,
             regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id
@@ -403,42 +426,187 @@ def load_feature_cohort(
             hive_partitioning=false
         )
     """
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return conn.execute(query, [file_paths]).df()
+        except Exception as e:
+            err_str = str(e)
+            if attempt < max_retries - 1:
+                log.warning(
+                    "duckdb_io_retry",
+                    feature=feature_suffix,
+                    attempt=attempt + 1,
+                    chunk=chunk_label,
+                    error=err_str,
+                )
+                time.sleep(2**attempt)  # Exponential backoff for transient I/O
+            else:
+                log.error(
+                    "duckdb_chunk_read_failed",
+                    feature=feature_suffix,
+                    chunk=chunk_label,
+                    error=err_str,
+                )
+                return pd.DataFrame()
+    return pd.DataFrame()
+
+
+def _calculate_dynamic_chunk_size(
+    conn: duckdb.DuckDBPyConnection,
+    file_paths: list[str],
+    target_rows: int = 15_000_000,
+) -> int:
+    """Probe the first 5 parquet files to estimate a safe chunk size.
+
+    Uses ``COUNT(*)`` only — no data is loaded into Python memory.
+    The resulting chunk size is clamped to ``[50, 15_000]`` so that:
+    - Heavy features (FSC, ~30K rows/sample) → chunk ~500
+    - Tiny features  (MDS, ~1 row/sample)   → chunk 15_000 (single sweep)
+
+    Falls back to 500 if the probe fails (e.g. network I/O error).
+    """
+    if not file_paths:
+        return 500
+
+    probe = file_paths[: min(5, len(file_paths))]
+    try:
+        row = conn.execute(
+            "SELECT count(*) FROM read_parquet(?, hive_partitioning=false)",
+            [probe],
+        ).fetchone()
+        n_rows = row[0] if row else 0
+        avg_rows = max(1, n_rows // len(probe))
+        size = max(50, min(15_000, target_rows // avg_rows))
+        log.info(
+            "dynamic_chunk_size_calculated",
+            probe_files=len(probe),
+            total_probe_rows=n_rows,
+            avg_rows_per_sample=avg_rows,
+            chunk_size=size,
+        )
+        return size
+    except Exception as exc:
+        log.warning(
+            "dynamic_chunk_probe_failed",
+            error=str(exc),
+            fallback=500,
+        )
+        return 500
+
+
+def iter_feature_chunks(
+    feature_suffix: str,
+    results_dirs: list[Path],
+    sample_ids: list[str] | set[str] | None = None,
+    conn: duckdb.DuckDBPyConnection | None = None,
+    chunk_size: int | str = "auto",
+):
+    """Stream feature data as chunks without accumulating in memory.
+
+    This is the memory-safe alternative to `load_feature_cohort`. Each chunk
+    contains complete samples (one parquet file = one sample), so chunk
+    boundaries never split a sample's data.
+
+    Args:
+        feature_suffix: Parquet file suffix (e.g. '.FSC.ontarget.parquet').
+        results_dirs: Krewlyzer output directories to scan.
+        sample_ids: Optional subset of samples to include.
+        conn: Optional DuckDB connection (created if not provided).
+        chunk_size: Number of files per batch. 'auto' (default) probes the
+            first 5 files to estimate rows-per-sample and self-tunes the
+            batch size to target ~15M rows per chunk.
+
+    Yields:
+        (chunk_df, chunk_idx, n_chunks): A tuple of the DataFrame chunk,
+        the zero-based chunk index, and total number of chunks.
+
+    Raises:
+        ValueError: If results_dirs is empty.
+    """
+    file_paths = _discover_feature_paths(feature_suffix, results_dirs, sample_ids)
+    if not file_paths:
+        return  # Generator yields nothing — caller sees an empty iteration
+
+    if conn is None:
+        conn = get_duckdb_conn()
 
     conn.execute("SET threads=4;")  # Throttle SFTP I/O bursts
 
-    df_list = []
-    for i in range(0, len(file_paths), chunk_size):
-        chunk = file_paths[i : i + chunk_size]
-        max_retries = 3
+    # Resolve dynamic chunk sizing before entering the streaming loop
+    if chunk_size == "auto":
+        chunk_size = _calculate_dynamic_chunk_size(conn, file_paths)
+    assert isinstance(chunk_size, int)
 
-        for attempt in range(max_retries):
-            try:
-                df_chunk = conn.execute(query, [chunk]).df()
-                df_list.append(df_chunk)
-                break
-            except Exception as e:
-                err_str = str(e)
-                if attempt < max_retries - 1:
-                    log.warning(
-                        "duckdb_io_retry",
-                        feature=feature_suffix,
-                        attempt=attempt + 1,
-                        chunk_start=i,
-                        error=err_str,
-                    )
-                    time.sleep(
-                        2**attempt
-                    )  # Exponential backoff for transient I/O failures
-                else:
-                    log.error(
-                        "feature_cohort_load_failed",
-                        feature=feature_suffix,
-                        error=err_str,
-                        chunk_start=i,
-                    )
-                    return pd.DataFrame()  # Permanent failure
+    n_chunks = math.ceil(len(file_paths) / chunk_size)
+    log.info(
+        "streaming_parquet_files",
+        feature=feature_suffix,
+        n_files=len(file_paths),
+        chunk_size=chunk_size,
+        n_chunks=n_chunks,
+    )
 
-    df = pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
+    for chunk_idx in range(n_chunks):
+        start = chunk_idx * chunk_size
+        batch = file_paths[start : start + chunk_size]
+        chunk_label = f"{chunk_idx + 1}/{n_chunks}"
+
+        df_chunk = _read_parquet_chunk(conn, batch, feature_suffix, chunk_label)
+
+        if df_chunk.empty:
+            log.warning(
+                "empty_chunk",
+                feature=feature_suffix,
+                chunk=chunk_label,
+                n_files=len(batch),
+            )
+            continue  # Skip empty chunks, don't abort the whole stream
+
+        log.info(
+            "chunk_loaded",
+            feature=feature_suffix,
+            chunk=chunk_label,
+            n_samples=(
+                df_chunk["sample_id"].nunique()
+                if "sample_id" in df_chunk.columns
+                else 0
+            ),
+            n_rows=len(df_chunk),
+        )
+        yield df_chunk, chunk_idx, n_chunks
+
+
+def load_feature_cohort(
+    feature_suffix: str,
+    results_dirs: list[Path],
+    sample_ids: list[str] | set[str] | None = None,
+    conn: duckdb.DuckDBPyConnection | None = None,
+    chunk_size: int | str = "auto",
+) -> pd.DataFrame:
+    """Load one feature type across available samples into a single DataFrame.
+
+    This is the backward-compatible batch loader. For memory-constrained
+    environments (e.g., HPC with 64GB RAM), use `iter_feature_chunks` instead
+    to process data in a streaming fashion.
+
+    Args:
+        chunk_size: 'auto' (default) probes parquet row density at runtime.
+            Pass an integer to override (e.g. 500 for large features).
+
+    ARCHITECTURE NOTE: We build an explicit file list from discovered samples
+    instead of using a glob pattern. This avoids DuckDB scanning thousands of
+    directories over network mounts (SFTP/NFS), which causes multi-minute stalls.
+    """
+    start_time = time.time()
+
+    chunks = []
+    for df_chunk, _idx, _total in iter_feature_chunks(
+        feature_suffix, results_dirs, sample_ids, conn, chunk_size
+    ):
+        chunks.append(df_chunk)
+
+    df = pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
 
     elapsed = time.time() - start_time
     if df.empty:
@@ -451,23 +619,92 @@ def load_feature_cohort(
             feature=feature_suffix,
             n_samples=df["sample_id"].nunique(),
             n_rows=len(df),
-            elapsed_sec=round(elapsed, 2),
-        )
-        log.info(
-            "load_complete",
-            n_samples=df["sample_id"].nunique(),
-            n_rows=len(df),
             elapsed_sec=round(elapsed, 1),
         )
     return df
 
 
 def load_metadata_cohort(
-    results_dirs: list[Path], sample_ids=None, chunk_size: int = 500
+    results_dirs: list[Path], sample_ids=None, chunk_size: int | str = "auto"
 ):
+    """Load metadata for all samples. Thin wrapper around load_feature_cohort.
+
+    Metadata files are ~1 row per sample, so 'auto' will resolve to
+    chunk_size=15_000 (single-sweep load) on first probe.
+    """
     return load_feature_cohort(
         ".metadata.parquet", results_dirs, sample_ids, chunk_size=chunk_size
     )
+
+
+def run_feature_sql(
+    sql_query: str,
+    feature_suffix: str,
+    results_dirs: list[Path],
+    sample_ids: list[str] | set[str] | None = None,
+    conn: duckdb.DuckDBPyConnection | None = None,
+) -> pd.DataFrame:
+    """Execute a full-cohort SQL extraction in a single DuckDB pass.
+
+    This is the SQL pushdown alternative to ``iter_feature_chunks`` +
+    per-sample ``extract()``. It runs the evaluator's SQL query against
+    all discovered parquet files at once, returning one row per sample.
+
+    The query must contain a ``read_parquet(?, ...)`` placeholder that
+    accepts the file path list.
+
+    Args:
+        sql_query: DuckDB SQL with ``?`` placeholder for file paths.
+        feature_suffix: Parquet suffix (e.g. '.MDS.ontarget.parquet').
+        results_dirs: Krewlyzer output directories to scan.
+        sample_ids: Optional subset to filter to.
+        conn: Optional DuckDB connection.
+
+    Returns:
+        DataFrame with one row per sample, or empty DataFrame on failure.
+    """
+    file_paths = _discover_feature_paths(feature_suffix, results_dirs, sample_ids)
+    if not file_paths:
+        log.warning("run_feature_sql_no_files", feature=feature_suffix)
+        return pd.DataFrame()
+
+    if conn is None:
+        conn = get_duckdb_conn()
+
+    start = time.time()
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            df = conn.execute(sql_query, [file_paths]).df()
+            elapsed = time.time() - start
+            log.info(
+                "sql_pushdown_complete",
+                feature=feature_suffix,
+                n_files=len(file_paths),
+                n_rows=len(df),
+                n_samples=(
+                    df["sample_id"].nunique() if "sample_id" in df.columns else len(df)
+                ),
+                elapsed_sec=round(elapsed, 1),
+            )
+            return df
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                log.warning(
+                    "sql_pushdown_retry",
+                    feature=feature_suffix,
+                    attempt=attempt + 1,
+                    error=str(exc),
+                )
+                time.sleep(2**attempt)
+            else:
+                log.error(
+                    "sql_pushdown_failed",
+                    feature=feature_suffix,
+                    error=str(exc),
+                )
+                return pd.DataFrame()
+    return pd.DataFrame()
 
 
 # %% ../nbs/00_core.ipynb #6d814a93
@@ -550,3 +787,219 @@ class EvalRun:
         except Exception as e:
             log.error("eval_run_save_failed", path=str(path), error=str(e))
             raise
+
+
+# %% ../nbs/00_core.ipynb #fuse_matrices
+# Metadata columns that every *_matrix.parquet carries from the labeling step.
+# These are NOT features — they must be deduplicated, not prefixed, during fusion.
+LABEL_META_COLS = {
+    "SAMPLE_ID",
+    "PATIENT_ID",
+    "CANCER_TYPE",
+    "CANCER_TYPE_DETAILED",
+    "ONCOTREE_CODE",
+    "SAMPLE_TYPE",
+    "GENE_PANEL",
+    "label",
+    "has_impact_match",
+    "has_snv",
+    "has_sv",
+    "has_cna",
+    "has_paired_impact",
+    "max_vaf",
+    "mean_vaf",
+    "std_vaf",
+    "n_impact_confirmed",
+    "n_somatic_snvs",
+    "n_total_somatic_snvs",
+    "n_somatic_svs",
+    "n_cna_events",
+    "n_ch_variants",
+    "n_non_ch_variants",
+    "access_version",
+    "min_vaf_used",
+    "min_variants_used",
+    "total_fragments_pf",
+    "sample_id",
+    "filename",
+    "assay",
+}
+
+
+def fuse_matrices(
+    output_dir: str | Path,
+    *,
+    min_evaluators: int = 1,
+    drop_low_variance: bool = True,
+    variance_threshold: float = 0.0,
+    output_name: str = "super_matrix.parquet",
+) -> pd.DataFrame:
+    """Discover per-evaluator matrices and fuse into a single super-matrix.
+
+    Each ``*_matrix.parquet`` file in ``output_dir`` contains label/metadata
+    columns plus evaluator-specific feature columns. This function:
+
+    1. Discovers all ``*_matrix.parquet`` files (skips ``super_matrix.parquet``
+       and ``scoreboard_*`` files).
+    2. Extracts metadata columns once from the first matrix.
+    3. Prefixes each evaluator's feature columns with the evaluator name
+       to prevent collisions (e.g., ``FSCOnTarget__ratio_short``).
+    4. Outer-joins all feature DataFrames on ``SAMPLE_ID``.
+    5. Filters to samples appearing in at least ``min_evaluators`` matrices.
+    6. Drops low-variance features (cross-evaluator QC) when enabled.
+    7. Writes the result to ``output_dir / output_name``.
+
+    Args:
+        output_dir: Directory containing ``*_matrix.parquet`` files.
+        min_evaluators: Minimum number of evaluators a sample must appear in.
+        drop_low_variance: If True, drop features with variance at or below
+            ``variance_threshold`` after fusion. Eliminates constant columns
+            that carry no discriminative signal (step 3A.3 of the plan).
+        variance_threshold: Features with variance <= this value are dropped.
+            Default 0.0 drops only exactly-constant features.
+        output_name: Filename for the output parquet.
+
+    Returns:
+        The fused DataFrame.
+    """
+    import glob
+
+    out_path = Path(output_dir)
+    matrix_paths = sorted(glob.glob(str(out_path / "*_matrix.parquet")))
+
+    # Exclude the output itself and scoreboard files to avoid recursion
+    matrix_paths = [
+        p
+        for p in matrix_paths
+        if not Path(p).name.startswith("super_matrix")
+        and not Path(p).name.startswith("scoreboard_")
+    ]
+
+    if not matrix_paths:
+        log.warning("fuse_no_matrices", output_dir=str(out_path))
+        return pd.DataFrame()
+
+    log.info("fuse_started", n_matrices=len(matrix_paths), output_dir=str(out_path))
+
+    metadata_df = None
+    feature_dfs = []
+    evaluator_names = []
+
+    for matrix_path in matrix_paths:
+        eval_name = Path(matrix_path).name.replace("_matrix.parquet", "")
+        evaluator_names.append(eval_name)
+
+        try:
+            df = pd.read_parquet(matrix_path)
+        except Exception as exc:
+            log.error(
+                "fuse_read_failed",
+                evaluator=eval_name,
+                path=matrix_path,
+                error=str(exc),
+            )
+            continue
+
+        if "SAMPLE_ID" not in df.columns:
+            log.error("fuse_missing_sample_id", evaluator=eval_name, path=matrix_path)
+            continue
+
+        # Separate metadata from feature columns
+        present_meta = [c for c in df.columns if c in LABEL_META_COLS]
+        feature_cols = [c for c in df.columns if c not in LABEL_META_COLS]
+
+        # Capture metadata from the first valid matrix
+        if metadata_df is None and present_meta:
+            metadata_df = df[present_meta].copy()
+            log.info(
+                "fuse_metadata_captured",
+                evaluator=eval_name,
+                n_samples=len(metadata_df),
+                n_meta_cols=len(present_meta),
+            )
+
+        if not feature_cols:
+            log.warning("fuse_no_features", evaluator=eval_name)
+            continue
+
+        # Prefix feature columns with evaluator name to prevent collisions
+        feat_df = df[["SAMPLE_ID"] + feature_cols].copy()
+        feat_df = feat_df.rename(columns={c: f"{eval_name}__{c}" for c in feature_cols})
+
+        feature_dfs.append(feat_df)
+        log.info(
+            "fuse_evaluator_loaded",
+            evaluator=eval_name,
+            n_samples=len(feat_df),
+            n_features=len(feature_cols),
+        )
+
+    if not feature_dfs:
+        log.error("fuse_no_valid_matrices", output_dir=str(out_path))
+        return pd.DataFrame()
+
+    # Outer-join all feature DataFrames on SAMPLE_ID
+    fused = feature_dfs[0]
+    for feat_df in feature_dfs[1:]:
+        fused = pd.merge(fused, feat_df, on="SAMPLE_ID", how="outer")
+
+    # Count how many evaluators each sample appears in
+    eval_presence = pd.DataFrame({"SAMPLE_ID": fused["SAMPLE_ID"]})
+    for i, feat_df in enumerate(feature_dfs):
+        eval_presence[f"_eval_{i}"] = eval_presence["SAMPLE_ID"].isin(
+            feat_df["SAMPLE_ID"]
+        )
+    fused["n_evaluators"] = eval_presence.iloc[:, 1:].sum(axis=1).astype(int)
+
+    # Filter by min_evaluators
+    before_filter = len(fused)
+    fused = fused[fused["n_evaluators"] >= min_evaluators].copy()
+    n_dropped = before_filter - len(fused)
+    if n_dropped > 0:
+        log.info(
+            "fuse_min_evaluator_filter",
+            min_evaluators=min_evaluators,
+            n_dropped=n_dropped,
+            n_remaining=len(fused),
+        )
+
+    # Re-attach metadata via left join
+    if metadata_df is not None:
+        # Deduplicate metadata (same sample may appear in multiple matrices)
+        metadata_df = metadata_df.drop_duplicates(subset=["SAMPLE_ID"])
+        fused = pd.merge(metadata_df, fused, on="SAMPLE_ID", how="right")
+
+    # ── Cross-evaluator feature selection (Plan step 3A.3) ──
+    # Remove features with near-zero variance that can't contribute to
+    # discrimination. This runs AFTER fusion across all evaluators — a
+    # global QC step rather than per-evaluator.
+    if drop_low_variance:
+        feature_cols = [c for c in fused.columns if "__" in c]
+        numeric_feats = fused[feature_cols].select_dtypes(include="number")
+        variances = numeric_feats.var()
+        low_var_cols = variances[variances <= variance_threshold].index.tolist()
+        if low_var_cols:
+            fused = fused.drop(columns=low_var_cols)
+            log.info(
+                "fuse_low_variance_dropped",
+                n_dropped=len(low_var_cols),
+                threshold=variance_threshold,
+                examples=low_var_cols[:5],
+            )
+
+    # Write output
+    out_file = out_path / output_name
+    fused.to_parquet(out_file, index=False)
+
+    n_features = len([c for c in fused.columns if "__" in c])
+    log.info(
+        "fuse_complete",
+        n_samples=len(fused),
+        n_total_cols=len(fused.columns),
+        n_feature_cols=n_features,
+        n_evaluators_fused=len(feature_dfs),
+        evaluators=evaluator_names,
+        output=str(out_file),
+    )
+
+    return fused

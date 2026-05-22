@@ -25,6 +25,7 @@ process KREVIEW_RUN {
     def cvd_flag      = params.cvd_safe     ? "--cvd-safe"                        : ""
     def uauc_flag     = params.compute_univariate_auc ? "--compute-univariate-auc" : ""
     def duckdb_flag   = params.export_duckdb ? "--export-duckdb"                   : ""
+    def ch_maf_flag   = params.ch_hotspot_maf ? "--ch-hotspot-maf \"${params.ch_hotspot_maf}\"" : ""
     // Use persistent output dir so --resume finds results across Nextflow retries
     def persistent_out = params.outdir + "/evaluators"
     
@@ -42,13 +43,15 @@ process KREVIEW_RUN {
         --healthy-xs2-samplesheet ${healthy_xs2} \\
         --cbioportal-dir "${cbioportal_dir}" \\
         --krewlyzer-dir "${krewlyzer_results}" \\
+        --min-vaf ${params.min_vaf ?: 0.01} \\
+        --min-fragments ${params.min_fragments ?: 2000} \\
+        --min-variants ${params.min_variants ?: 1} \\
         --cv-folds ${params.cv_folds ?: 5} \\
-        --top-n ${params.top_n ?: 50} \\
+        --top-percentile ${params.top_percentile ?: 10.0} \\
         --impute-strategy ${params.impute_strategy ?: 'median'} \\
         --chunk-size ${params.chunk_size} \\
         --shap-samples ${params.shap_samples ?: 500} \\
         --shap-features ${params.shap_features ?: 10} \\
-        --workers ${task.cpus} \\
         ${features_flag} \\
         ${tier_flag} \\
         --resume \\
@@ -56,6 +59,7 @@ process KREVIEW_RUN {
         ${cvd_flag} \\
         ${uauc_flag} \\
         ${duckdb_flag} \\
+        ${ch_maf_flag} \\
         --output ${persistent_out}
     
     # 3. Copy results to output/ for Nextflow publishDir collection

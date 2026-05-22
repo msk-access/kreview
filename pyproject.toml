@@ -28,7 +28,8 @@ dependencies = [
     "shap>=0.40.0",
     "joblib>=1.3.0",
     "statsmodels>=0.14.0",
-    "xgboost>=2.0.0"
+    "xgboost>=2.0.0",
+    "quarto-cli>=1.6.0"
 ]
 
 [project.optional-dependencies]
@@ -56,6 +57,12 @@ docs = [
     "mkdocs-git-revision-date-localized-plugin>=1.5.1",
     "mkdocs-panzoom-plugin>=0.5.2",
     "mkdocs-pdf>=0.1.2"
+]
+gpu = [
+    "torch>=2.0",
+    "tabpfn>=2.0",
+    "tabpfn-extensions[interpretability]",
+    "tabicl[finetune]",
 ]
 all = [
     "papermill>=2.5.0",
@@ -113,9 +120,44 @@ ignore = ["E402", "F401", "E501", "E712", "E741", "E701"]
 
 [tool.black]
 target-version = ["py310"]
+# Notebooks are formatted by nbdev_clean, not black directly.
+# Running black --check on .ipynb files causes CI flakiness across black versions.
+extend-exclude = '''
+(
+  \.ipynb
+)
+'''
+
 
 [tool.nbdev]
 
 [tool.mypy]
 ignore_missing_imports = true
 disable_error_code = ["arg-type", "assignment", "var-annotated", "misc", "return-value", "attr-defined", "call-overload"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--cov=kreview",
+    "--cov-report=xml:coverage.xml",
+    "--cov-report=term-missing:skip-covered",
+    "--tb=short",
+    "-q",
+]
+timeout = 120
+log_cli_level = "WARNING"
+
+[tool.coverage.run]
+source = ["kreview"]
+omit = [
+    "kreview/_modidx.py",
+    "kreview/templates/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "raise NotImplementedError",
+]
+show_missing = true

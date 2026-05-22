@@ -140,11 +140,19 @@ _shap_display_n = int(shap_features)
 if model_path.exists():
     with open(model_path) as f:
         mres = json.load(f)
-    top_feats = mres.get("top_features", numeric_cols)
+    top_feats = mres.get("stacking_features", mres.get("top_features", numeric_cols))
+    
+    # Flatten multimodal structure if present
+    if "stacking" in mres:
+        mres.update(mres["stacking"])
     
     # Dynamic model discovery
     DYNAMIC_MODELS = []
-    _name_map = {"lr": "Logistic Regression", "rf": "Random Forest", "xgb": "XGBoost", "tabpfn": "TabPFN", "tabicl": "TabICL"}
+    _name_map = {
+        "lr": "Logistic Regression", "rf": "Random Forest", "xgb": "XGBoost", "tabpfn": "TabPFN", "tabicl": "TabICL",
+        "stacking_lr": "Stacking LR", "stacking_rf": "Stacking RF", "stacking_xgb": "Stacking XGB",
+        "stacking_tabpfn": "Stacking TabPFN", "stacking_tabicl": "Stacking TabICL"
+    }
     for k in mres.keys():
         if k.startswith('auc_') and not k.endswith('_ci_lower') and not k.endswith('_ci_upper') and not k.startswith('auc_delta_'):
             m_id = k.replace('auc_', '')
@@ -180,10 +188,10 @@ THEME = {
     "axis": "#88c0d0"
 }
 
-
 # Load Models
 # Clamp SHAP display count to actual selected feature count (top_percentile may select fewer)
 _shap_display_n = min(_shap_display_n, len(top_feats))
+import shap
 shap_df_sample = None
 X_shap = None
 y_shap = None
@@ -209,8 +217,6 @@ if mres is not None and top_feats:
             oof_preds[_nice] = np.array(mres[_key])
 
     # ── S-03 fix: KDE density from OOF predictions (not retrained model) ──
-    # Retrained model predictions on subsampled data leak training info.
-    # OOF predictions are held-out and cover the full model cohort.
     _best_oof_key = f"{best_m}_oof_probs" if best_m else None
     if _best_oof_key and _best_oof_key in mres and _oof_lbl_key:
         best_preds_all = np.array(mres[_best_oof_key])
@@ -697,17 +703,17 @@ if mres is not None:
     fig_dca = go.Figure()
     colors = THEME["models"]
     
-    for i, (prefix, name) in enumerate([("rf", "Random Forest"), ("xgb", "XGBoost")]):
+    for i, (prefix, name) in enumerate(DYNAMIC_MODELS):
         dca = mres.get(f"{prefix}_dca")
         if dca is not None:
             _ = fig_dca.add_trace(go.Scatter(
                 x=dca["thresholds"], y=dca["net_benefit_model"],
                 mode="lines", name=name,
-                line=dict(color=colors[i+1] if i < len(colors)-1 else colors[0], width=2)
+                line=dict(color=colors[i % len(colors)], width=2)
             ))
     
-    # Add Treat All reference
-    _dca_ref = mres.get(f"{best_m}_dca") if best_m else next((mres.get(f"{pfx}_dca") for pfx, _ in DYNAMIC_MODELS if f"{pfx}_dca" in mres), None)
+    # Add Treat All reference from the first available DCA
+    _dca_ref = next((mres.get(f"{p}_dca") for p, _ in DYNAMIC_MODELS if f"{p}_dca" in mres), None)
     if _dca_ref:
         _ = fig_dca.add_trace(go.Scatter(
             x=_dca_ref["thresholds"], y=_dca_ref["net_benefit_treat_all"],
@@ -755,11 +761,17 @@ if mres is not None:
                 line=dict(color=color, width=2)
             ))
         
-        # Mark optimal threshold for this model
-        opt = mres.get(f"{_sweep_pfx}_optimal_threshold")
-        if opt is not None:
-            _ = fig_sweep.add_vline(x=opt, line_dash="dash", line_color=THEME["axis"],
-                                    annotation_text=f"Optimal ({opt:.3f})")
+        # Mark optimal threshold
+        best_opt = None
+        if mres:
+            all_aucs = {k.replace('auc_', ''): v for k, v in mres.items() if k.startswith('auc_') and not k.endswith(('_ci_lower', '_ci_upper', '_std'))}
+            if all_aucs:
+                best_m = max(all_aucs, key=all_aucs.get)
+                best_opt = mres.get(f"{best_m}_optimal_threshold")
+        
+        if best_opt is not None:
+            _ = fig_sweep.add_vline(x=best_opt, line_dash="dash", line_color=THEME["axis"],
+                                    annotation_text=f"Optimal ({best_opt:.3f})")
         
         _name = dict(DYNAMIC_MODELS).get(_sweep_pfx, _sweep_pfx.upper())
         _ = fig_sweep.update_layout(

@@ -2,6 +2,8 @@
 
 # %% ../nbs/02_eval_engine.ipynb #792e3b1f
 from __future__ import annotations
+import json
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -29,6 +31,7 @@ __all__ = [
     "NEON_COLORS",
     "CVD_SAFE_COLORS",
     "LABEL_COLORS",
+    "single_feature_model",
     "FeatureEvaluator",
     "parse_array",
     "univariate_auc",
@@ -41,7 +44,10 @@ __all__ = [
     "plot_roc_curves",
     "plot_feature_importance",
     "decision_curve_analysis",
-    "single_feature_model",
+    "evaluate_model",
+    "cpu_models",
+    "gpu_models",
+    "multimodal_eval",
 ]
 
 
@@ -49,6 +55,10 @@ __all__ = [
 class FeatureEvaluator:
     """Base class for all feature evaluators.
     Defines the extraction contract that transforms raw DuckDB queries into 1D arrays.
+
+    Subclasses must implement ``extract()`` for per-sample Python extraction.
+    Optionally, override ``extract_sql()`` to return a DuckDB SQL query that
+    performs full-cohort extraction in a single pass (no Python loop).
     """
 
     name: str = "base"
@@ -62,6 +72,24 @@ class FeatureEvaluator:
         raise NotImplementedError(
             "Feature evaluators must implement the extract() method."
         )
+
+    def extract_sql(self) -> str | None:
+        """Return a DuckDB SQL query for full-cohort extraction, or None.
+
+        If implemented, the query should:
+        - Accept a ``read_parquet(?, ...)`` placeholder for file paths
+        - GROUP BY sample_id to produce one row per sample
+        - SELECT all extracted feature columns with their final names
+
+        Returning ``None`` (the default) means this evaluator does not
+        support SQL pushdown and will use the chunked Python path.
+        """
+        return None
+
+    @property
+    def supports_sql(self) -> bool:
+        """True if this evaluator provides a SQL pushdown query."""
+        return self.extract_sql() is not None
 
 
 def parse_array(s) -> list[float]:
@@ -543,7 +571,298 @@ def decision_curve_analysis(
 
 
 # %% ../nbs/02_eval_engine.ipynb #7a8a3f8d
-def single_feature_model(
+# ── Shared Metric Helpers ─────────────────────────────────────────────────────
+# Extracted from single_feature_model() for reuse by evaluate_model(),
+# cpu_models(), and gpu_models(). No closures — pure functions.
+
+
+def _optimal_threshold(y_true: np.ndarray, y_pred_prob: np.ndarray) -> float:
+    """Find threshold maximizing Youden's J (sensitivity + specificity - 1).
+
+    Falls back to 0.5 if roc_curve fails (e.g. single-class fold).
+    """
+    try:
+        fpr, tpr, thresholds = roc_curve(y_true, y_pred_prob)
+        if len(thresholds) > 0:
+            optimal_idx = np.argmax(tpr - fpr)
+            return float(thresholds[optimal_idx])
+    except Exception:
+        log.debug("optimal_threshold_fallback", reason="roc_curve failed")
+    return 0.5
+
+
+def _classification_metrics(
+    y_true: np.ndarray, y_pred_prob: np.ndarray, threshold: float = 0.5
+) -> tuple[dict, list]:
+    """Compute classification report and confusion matrix at given threshold.
+
+    Returns (classification_report_dict, confusion_matrix_list).
+    """
+    from sklearn.metrics import classification_report, confusion_matrix
+
+    y_pred = (y_pred_prob >= threshold).astype(int)
+    rep = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+    cm = confusion_matrix(y_true, y_pred).tolist()
+    return rep, cm
+
+
+def _bootstrap_auc(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    n_boot: int = 1000,
+    seed: int = 42,
+) -> tuple[float | None, float | None]:
+    """Compute 95% bootstrap CI for AUC-ROC.
+
+    Returns (lower, upper) or (None, None) if fewer than 10 valid
+    bootstrap samples could be drawn (e.g. very small dataset).
+    """
+    rng = np.random.RandomState(seed)
+    aucs = []
+    for _ in range(n_boot):
+        idx = rng.randint(0, len(y_true), len(y_true))
+        if len(np.unique(y_true[idx])) < 2:
+            continue
+        aucs.append(roc_auc_score(y_true[idx], y_score[idx]))
+    if len(aucs) < 10:
+        return None, None
+    return float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))
+
+
+def _per_fold_auc(
+    y: np.ndarray,
+    oof_probs: np.ndarray,
+    cv: StratifiedKFold,
+    X: np.ndarray,
+) -> list[float]:
+    """Compute per-fold AUC from out-of-fold predictions.
+
+    Uses the same CV split that produced the OOF predictions
+    (D-01 fix: no independent cross_val_score run).
+    Skips folds with a single class.
+    """
+    fold_aucs = []
+    for _, test_idx in cv.split(X, y):
+        if len(np.unique(y[test_idx])) < 2:
+            continue
+        fold_aucs.append(float(roc_auc_score(y[test_idx], oof_probs[test_idx])))
+    return fold_aucs
+
+
+def _pr_curve(
+    y_true: np.ndarray, y_prob: np.ndarray
+) -> tuple[dict | None, float | None]:
+    """Compute precision-recall curve and average precision.
+
+    Returns (pr_dict, avg_precision) or (None, None) on failure.
+    """
+    try:
+        from sklearn.metrics import precision_recall_curve, average_precision_score
+
+        prec, rec, _ = precision_recall_curve(y_true, y_prob)
+        pr_dict = {"precision": prec.tolist(), "recall": rec.tolist()}
+        avg_prec = float(average_precision_score(y_true, y_prob))
+        return pr_dict, avg_prec
+    except Exception as e:
+        log.warning("pr_curve_failed", error=str(e))
+        return None, None
+
+
+def _calibration(y_true: np.ndarray, y_prob: np.ndarray) -> dict | None:
+    """Compute calibration curve (10 uniform bins).
+
+    Returns dict with prob_true/prob_pred or None on failure.
+    """
+    try:
+        from sklearn.calibration import calibration_curve
+
+        prob_true, prob_pred = calibration_curve(
+            y_true, y_prob, n_bins=10, strategy="uniform"
+        )
+        return {"prob_true": prob_true.tolist(), "prob_pred": prob_pred.tolist()}
+    except Exception as e:
+        log.warning("calibration_failed", error=str(e))
+        return None
+
+
+def _subgroup_metrics(
+    mask: np.ndarray,
+    y_all: np.ndarray,
+    preds_dict: dict[str, np.ndarray],
+) -> dict:
+    """Compute sensitivity/specificity for each model on a subgroup.
+
+    Args:
+        mask: boolean array selecting the subgroup.
+        y_all: full label array.
+        preds_dict: {model_name: binary_predictions_array}.
+
+    Returns dict with {model}_sensitivity and {model}_specificity keys.
+    """
+    from sklearn.metrics import confusion_matrix
+
+    res = {}
+    y_sub = y_all[mask]
+    if len(y_sub) < 5 or len(np.unique(y_sub)) < 2:
+        return res
+
+    for model_name, preds in preds_dict.items():
+        if preds is None:
+            continue
+        try:
+            p_sub = preds[mask]
+            tn, fp, fn, tp = confusion_matrix(y_sub, p_sub, labels=[0, 1]).ravel()
+            res[f"{model_name}_sensitivity"] = (
+                float(tp / (tp + fn)) if (tp + fn) > 0 else None
+            )
+            res[f"{model_name}_specificity"] = (
+                float(tn / (tn + fp)) if (tn + fp) > 0 else None
+            )
+        except Exception as e:
+            log.warning("subgroup_metrics_failed", model=model_name, error=str(e))
+
+    return res
+
+
+# ── Universal Model Evaluator ─────────────────────────────────────────────────
+
+
+def evaluate_model(
+    model,
+    X: np.ndarray,
+    y: np.ndarray,
+    cv: StratifiedKFold,
+    name: str,
+    feature_names: list[str] | None = None,
+    refit: bool = True,
+    compute_shap: bool = False,
+    shap_samples: int = 500,
+) -> tuple[dict, object | None]:
+    """Evaluate any sklearn-compatible model via stratified cross-validation.
+
+    Shared primitive used by cpu_models(), gpu_models(), and multimodal_eval().
+    The model must implement fit() and predict_proba().
+
+    Args:
+        model: sklearn-compatible estimator (Pipeline, RF, XGB, TabPFN, etc.).
+        X: Feature matrix, shape (n_samples, n_features).
+        y: Binary labels (0/1), shape (n_samples,).
+        cv: Pre-configured StratifiedKFold splitter.
+        name: Prefix for all result keys (e.g. "lr", "rf", "tabpfn").
+        feature_names: Optional feature names for importance extraction.
+        refit: If True, refit model on full data after CV.
+        compute_shap: If True, compute SHAP values (requires refit=True).
+        shap_samples: Max samples for SHAP computation.
+
+    Returns:
+        (result_dict, fitted_model_or_None). result_dict keys are prefixed
+        with ``name`` (e.g. ``auc_rf``, ``rf_oof_probs``, ``rf_fold_aucs``).
+    """
+    import time
+
+    result = {}
+
+    # 1. Out-of-fold predictions via cross-validation
+    oof_probs = cross_val_predict(model, X, y, cv=cv, method="predict_proba")[:, 1]
+
+    # 2. Core AUC metric
+    auc_val = roc_auc_score(y, oof_probs)
+    result[f"auc_{name}"] = auc_val
+    result[f"{name}_oof_probs"] = np.round(oof_probs, 6).tolist()
+
+    # 3. Bootstrap 95% CI
+    ci_lo, ci_hi = _bootstrap_auc(y, oof_probs)
+    result[f"auc_{name}_ci_lower"] = ci_lo
+    result[f"auc_{name}_ci_upper"] = ci_hi
+
+    # 4. Optimal threshold + classification metrics
+    threshold = _optimal_threshold(y, oof_probs)
+    result[f"{name}_optimal_threshold"] = threshold
+    cls_rep, cm = _classification_metrics(y, oof_probs, threshold=threshold)
+    result[f"{name}_classification_report"] = cls_rep
+    result[f"{name}_confusion_matrix"] = cm
+
+    # 5. Per-fold AUC tracking
+    try:
+        fold_aucs = _per_fold_auc(y, oof_probs, cv, X)
+        if fold_aucs:
+            result[f"{name}_fold_aucs"] = fold_aucs
+            result[f"{name}_auc_std"] = float(np.std(fold_aucs))
+            log.debug(
+                "fold_aucs_computed",
+                model=name,
+                mean=f"{np.mean(fold_aucs):.3f}",
+                std=f"{np.std(fold_aucs):.3f}",
+            )
+    except Exception as e:
+        log.warning("fold_auc_tracking_failed", model=name, error=str(e))
+
+    # 6. Precision-Recall curve
+    pr_dict, avg_prec = _pr_curve(y, oof_probs)
+    if pr_dict is not None:
+        result[f"{name}_pr_curve"] = pr_dict
+        result[f"{name}_avg_precision"] = avg_prec
+
+    # 7. Calibration curve
+    cal = _calibration(y, oof_probs)
+    if cal is not None:
+        result[f"{name}_calibration"] = cal
+
+    # 8. Refit on full data + training time
+    fitted = None
+    if refit:
+        t0 = time.perf_counter()
+        model.fit(X, y)
+        result[f"{name}_training_time_sec"] = time.perf_counter() - t0
+        fitted = model
+
+    # 9. Feature importances (model-specific)
+    if fitted is not None and feature_names is not None:
+        result[f"{name}_feature_importances"] = _extract_importances(
+            fitted, feature_names, name
+        )
+
+    return result, fitted
+
+
+def _extract_importances(
+    fitted_model, feature_names: list[str], model_name: str
+) -> dict | list | None:
+    """Extract feature importances from a fitted model.
+
+    Supports:
+    - Tree-based models (RF, XGB): feature_importances_ attribute
+    - Linear models / Pipelines: coef_ attribute (abs values)
+    - Others: returns None (no silent failure)
+    """
+    try:
+        # Tree-based models
+        if hasattr(fitted_model, "feature_importances_"):
+            return dict(zip(feature_names, fitted_model.feature_importances_.tolist()))
+
+        # Pipeline: check last step
+        if hasattr(fitted_model, "named_steps"):
+            last_step = list(fitted_model.named_steps.values())[-1]
+            if hasattr(last_step, "coef_"):
+                coefs = np.abs(last_step.coef_[0])
+                return dict(zip(feature_names, coefs.tolist()))
+            if hasattr(last_step, "feature_importances_"):
+                return dict(zip(feature_names, last_step.feature_importances_.tolist()))
+
+        # Direct linear model
+        if hasattr(fitted_model, "coef_"):
+            coefs = np.abs(fitted_model.coef_[0])
+            return dict(zip(feature_names, coefs.tolist()))
+
+    except Exception as e:
+        log.warning(
+            "feature_importance_extraction_failed", model=model_name, error=str(e)
+        )
+
+    return None
+
+
+def cpu_models(
     X: np.ndarray,  # shape (n_samples, n_sub_metrics)
     y: np.ndarray,  # binary labels (1 = positive class)
     feature_names: list[str] | None = None,
@@ -551,20 +870,24 @@ def single_feature_model(
     assays: np.ndarray | None = None,
     n_folds: int = 5,
     random_state: int = 42,
+    compute_shap: bool = False,
+    shap_samples: int = 500,
 ) -> tuple[dict, object, object, object]:
     """Train LR, RF, and XGB on a feature matrix with stratified CV.
 
+    Delegates per-model evaluation to ``evaluate_model()``, then adds
+    cross-model diagnostics (AUC deltas, top features, threshold sweep,
+    DCA, feature stability, subgroup analysis).
+
     Returns (results_dict, lr_pipeline, rf_model, xgb_model).
 
-    Fixes applied (audit v3):
+    Audit fixes preserved:
       - C-01: LR uses Pipeline(scaler+lr) to prevent data leakage
       - C-02: Subgroup metrics use out-of-fold predictions (unbiased)
       - H-01: LR has class_weight="balanced", XGB has scale_pos_weight
-      - H-07: Bare except replaced with Exception
       - M-02: Bootstrap 95% CI on AUC values
     """
-    import time
-    from sklearn.metrics import classification_report, confusion_matrix
+    from sklearn.metrics import confusion_matrix
 
     try:
         from xgboost import XGBClassifier
@@ -593,42 +916,7 @@ def single_feature_model(
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         results["cv_folds_actual"] = folds
 
-        # --- Helper: Youden's J optimal threshold ---
-        def get_optimal_threshold(y_true, y_pred_prob):
-            """Find threshold maximizing Youden's J (sensitivity + specificity - 1)."""
-            try:
-                fpr, tpr, thresholds = roc_curve(y_true, y_pred_prob)
-                if len(thresholds) > 0:
-                    optimal_idx = np.argmax(tpr - fpr)
-                    return float(thresholds[optimal_idx])
-            except Exception:
-                # roc_curve can fail with degenerate inputs (all same class)
-                log.debug("optimal_threshold_fallback", reason="roc_curve failed")
-            return 0.5
-
-        def safely_get_metrics(y_true, y_pred_prob, threshold=0.5):
-            """Compute classification report and confusion matrix at given threshold."""
-            y_pred = (y_pred_prob >= threshold).astype(int)
-            rep = classification_report(
-                y_true, y_pred, output_dict=True, zero_division=0
-            )
-            cm = confusion_matrix(y_true, y_pred).tolist()
-            return rep, cm
-
-        def _bootstrap_auc(y_true, y_score, n_boot=1000, seed=42):
-            """Compute 95% bootstrap CI for AUC-ROC."""
-            rng = np.random.RandomState(seed)
-            aucs = []
-            for _ in range(n_boot):
-                idx = rng.randint(0, len(y_true), len(y_true))
-                if len(np.unique(y_true[idx])) < 2:
-                    continue
-                aucs.append(roc_auc_score(y_true[idx], y_score[idx]))
-            if len(aucs) < 10:
-                return None, None
-            return float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))
-
-        # ── Logistic Regression (Pipeline prevents scaler leakage) ──
+        # ── Logistic Regression (Pipeline prevents scaler leakage, C-01) ──
         lr_pipe = Pipeline(
             [
                 ("scaler", StandardScaler()),
@@ -642,24 +930,10 @@ def single_feature_model(
                 ),
             ]
         )
-
-        lr_probs = cross_val_predict(lr_pipe, X, y, cv=cv, method="predict_proba")[:, 1]
-        results["auc_lr"] = roc_auc_score(y, lr_probs)
-        results["lr_oof_probs"] = np.round(
-            lr_probs, 6
-        ).tolist()  # D-01: rounded to 6dp for JSON size
-        lr_ci_low, lr_ci_high = _bootstrap_auc(y, lr_probs)
-        results["auc_lr_ci_lower"] = lr_ci_low
-        results["auc_lr_ci_upper"] = lr_ci_high
-        lr_opt = get_optimal_threshold(y, lr_probs)
-        results["lr_optimal_threshold"] = lr_opt
-        lr_rep, lr_cm = safely_get_metrics(y, lr_probs, threshold=lr_opt)
-        results["lr_classification_report"] = lr_rep
-        results["lr_confusion_matrix"] = lr_cm
-
-        t0 = time.perf_counter()
-        lr_pipe.fit(X, y)
-        results["lr_training_time_sec"] = time.perf_counter() - t0
+        lr_res, lr_pipe = evaluate_model(
+            lr_pipe, X, y, cv, "lr", feature_names=feature_names
+        )
+        results.update(lr_res)
         results["lr_coef_direction"] = (
             "positive" if lr_pipe.named_steps["lr"].coef_[0].mean() > 0 else "negative"
         )
@@ -672,83 +946,31 @@ def single_feature_model(
             random_state=random_state,
             class_weight="balanced",
         )
-        rf_probs = cross_val_predict(rf, X, y, cv=cv, method="predict_proba")[:, 1]
-        results["auc_rf"] = roc_auc_score(y, rf_probs)
-        results["rf_oof_probs"] = np.round(
-            rf_probs, 6
-        ).tolist()  # D-01: rounded to 6dp for JSON size
-        rf_ci_low, rf_ci_high = _bootstrap_auc(y, rf_probs)
-        results["auc_rf_ci_lower"] = rf_ci_low
-        results["auc_rf_ci_upper"] = rf_ci_high
-
-        try:
-            from sklearn.calibration import calibration_curve
-
-            prob_true, prob_pred = calibration_curve(
-                y, rf_probs, n_bins=10, strategy="uniform"
-            )
-            results["rf_calibration"] = {
-                "prob_true": prob_true.tolist(),
-                "prob_pred": prob_pred.tolist(),
-            }
-        except Exception as e:
-            log.warning("calibration_failed", error=str(e))
-        rf_opt = get_optimal_threshold(y, rf_probs)
-        results["rf_optimal_threshold"] = rf_opt
-        rf_rep, rf_cm = safely_get_metrics(y, rf_probs, threshold=rf_opt)
-        results["rf_classification_report"] = rf_rep
-        results["rf_confusion_matrix"] = rf_cm
-
-        t0 = time.perf_counter()
-        rf.fit(X, y)
-        results["rf_training_time_sec"] = time.perf_counter() - t0
-        if feature_names is not None:
-            results["rf_feature_importances"] = dict(
-                zip(feature_names, rf.feature_importances_.tolist())
-            )
-        else:
-            results["rf_feature_importances"] = rf.feature_importances_.tolist()
+        rf_res, rf = evaluate_model(rf, X, y, cv, "rf", feature_names=feature_names)
+        results.update(rf_res)
 
         # ── XGBoost ──
         xgb = None
-        xgb_probs = None
         if XGBClassifier is not None:
             pos_weight = len(y[y == 0]) / max(1, len(y[y == 1]))
-            xgb = XGBClassifier(
+            xgb_model = XGBClassifier(
                 n_estimators=100,
                 max_depth=5,
                 learning_rate=0.1,
                 random_state=random_state,
                 eval_metric="logloss",
-                use_label_encoder=False,
                 scale_pos_weight=pos_weight,
             )
             try:
-                xgb_probs = cross_val_predict(xgb, X, y, cv=cv, method="predict_proba")[
-                    :, 1
-                ]
-                results["auc_xgb"] = roc_auc_score(y, xgb_probs)
-                results["xgb_oof_probs"] = np.round(
-                    xgb_probs, 6
-                ).tolist()  # D-01: rounded to 6dp for JSON size
-                xgb_ci_low, xgb_ci_high = _bootstrap_auc(y, xgb_probs)
-                results["auc_xgb_ci_lower"] = xgb_ci_low
-                results["auc_xgb_ci_upper"] = xgb_ci_high
-                xgb_opt = get_optimal_threshold(y, xgb_probs)
-                results["xgb_optimal_threshold"] = xgb_opt
-                xgb_rep, xgb_cm = safely_get_metrics(y, xgb_probs, threshold=xgb_opt)
-                results["xgb_classification_report"] = xgb_rep
-                results["xgb_confusion_matrix"] = xgb_cm
-
-                t0 = time.perf_counter()
-                xgb.fit(X, y)
-                results["xgb_training_time_sec"] = time.perf_counter() - t0
+                xgb_res, xgb = evaluate_model(
+                    xgb_model, X, y, cv, "xgb", feature_names=feature_names
+                )
+                results.update(xgb_res)
             except Exception as e:
                 log.warning("xgboost_cv_failed", error=str(e))
                 xgb = None
-                xgb_probs = None
 
-        # ── OOF labels (D-01: needed by report template for consistent ROC plots) ──
+        # ── OOF labels (needed by report template for consistent ROC plots) ──
         results["oof_labels"] = y.tolist()
 
         # ── AUC deltas ──
@@ -767,58 +989,8 @@ def single_feature_model(
             )
             results["top_features"] = [f[0] for f in sorted_feats[:10]]
 
-        # ── PR curves (precision-recall) ──
-        try:
-            from sklearn.metrics import precision_recall_curve, average_precision_score
-
-            for prefix, probs in [
-                ("lr", lr_probs),
-                ("rf", rf_probs),
-                ("xgb", xgb_probs),
-            ]:
-                if probs is not None:
-                    prec, rec, _ = precision_recall_curve(y, probs)
-                    results[f"{prefix}_pr_curve"] = {
-                        "precision": prec.tolist(),
-                        "recall": rec.tolist(),
-                    }
-                    results[f"{prefix}_avg_precision"] = float(
-                        average_precision_score(y, probs)
-                    )
-        except Exception as e:
-            log.warning("pr_curve_failed", error=str(e))
-
-        # ── Fold-level AUC tracking (derived from existing OOF predictions) ──
-        # D-01 fix: use the same CV split that produced the official AUC,
-        # instead of a second independent cross_val_score run.
-        try:
-            for _prefix, _probs in [
-                ("lr", lr_probs),
-                ("rf", rf_probs),
-                ("xgb", xgb_probs),
-            ]:
-                if _probs is not None:
-                    _fold_aucs = []
-                    for _, test_idx in cv.split(X, y):
-                        if len(np.unique(y[test_idx])) < 2:
-                            continue
-                        _fold_aucs.append(
-                            float(roc_auc_score(y[test_idx], _probs[test_idx]))
-                        )
-                    if _fold_aucs:
-                        results[f"{_prefix}_fold_aucs"] = _fold_aucs
-                        results[f"{_prefix}_auc_std"] = float(np.std(_fold_aucs))
-                        log.debug(
-                            "fold_aucs_computed",
-                            model=_prefix,
-                            mean=f"{np.mean(_fold_aucs):.3f}",
-                            std=f"{np.std(_fold_aucs):.3f}",
-                        )
-        except Exception as e:
-            log.warning("fold_auc_tracking_failed", error=str(e))
-
         # ── Feature stability across CV folds ──
-        if feature_names is not None:
+        if feature_names is not None and rf is not None:
             try:
                 from collections import Counter
                 from sklearn.base import clone
@@ -836,74 +1008,50 @@ def single_feature_model(
                 log.warning("feature_stability_failed", error=str(e))
 
         # ── Threshold sensitivity sweep (RF) ──
-        try:
-            thresholds_sweep = np.linspace(0.01, 0.99, 50)
-            sweep_data = []
-            for t in thresholds_sweep:
-                y_pred = (rf_probs >= t).astype(int)
-                tn, fp, fn, tp = confusion_matrix(y, y_pred, labels=[0, 1]).ravel()
-                sweep_data.append(
-                    {
-                        "threshold": round(float(t), 3),
-                        "sensitivity": float(tp / (tp + fn)) if (tp + fn) > 0 else 0.0,
-                        "specificity": float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0,
-                        "ppv": float(tp / (tp + fp)) if (tp + fp) > 0 else 0.0,
-                    }
-                )
-            results["rf_threshold_sweep"] = sweep_data
-        except Exception as e:
-            log.warning("threshold_sweep_failed", error=str(e))
+        rf_probs = np.array(results.get("rf_oof_probs", []))
+        if len(rf_probs) > 0:
+            try:
+                thresholds_sweep = np.linspace(0.01, 0.99, 50)
+                sweep_data = []
+                for t in thresholds_sweep:
+                    y_pred = (rf_probs >= t).astype(int)
+                    tn, fp, fn, tp = confusion_matrix(y, y_pred, labels=[0, 1]).ravel()
+                    sweep_data.append(
+                        {
+                            "threshold": round(float(t), 3),
+                            "sensitivity": (
+                                float(tp / (tp + fn)) if (tp + fn) > 0 else 0.0
+                            ),
+                            "specificity": (
+                                float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0
+                            ),
+                            "ppv": float(tp / (tp + fp)) if (tp + fp) > 0 else 0.0,
+                        }
+                    )
+                results["rf_threshold_sweep"] = sweep_data
+            except Exception as e:
+                log.warning("threshold_sweep_failed", error=str(e))
 
         # ── Decision Curve Analysis ──
         try:
-            for prefix, probs in [("rf", rf_probs), ("xgb", xgb_probs)]:
-                if probs is not None:
+            model_probs = {"rf": rf_probs}
+            if "xgb_oof_probs" in results:
+                model_probs["xgb"] = np.array(results["xgb_oof_probs"])
+            for prefix, probs in model_probs.items():
+                if len(probs) > 0:
                     results[f"{prefix}_dca"] = decision_curve_analysis(y, probs)
         except Exception as e:
             log.warning("dca_failed", error=str(e))
 
         # ── Subgroup Analysis using OOF predictions (C-02: unbiased) ──
-        # Use out-of-fold CV predictions, NOT the retrained model
-        rf_oof_preds = (rf_probs >= rf_opt).astype(int)
-        xgb_oof_preds = (
-            (xgb_probs >= results.get("xgb_optimal_threshold", 0.5)).astype(int)
-            if xgb_probs is not None
-            else None
-        )
-
-        def _subgroup_metrics(mask, y_all, rf_preds, xgb_preds_arr):
-            """Compute sensitivity for RF and XGB on a subgroup using OOF predictions."""
-            res = {}
-            y_sub = y_all[mask]
-            if len(y_sub) < 5 or len(np.unique(y_sub)) < 2:
-                return res
-
-            # RF subgroup
-            try:
-                p_sub = rf_preds[mask]
-                tn, fp, fn, tp = confusion_matrix(y_sub, p_sub, labels=[0, 1]).ravel()
-                res["rf_sensitivity"] = float(tp / (tp + fn)) if (tp + fn) > 0 else None
-                res["rf_specificity"] = float(tn / (tn + fp)) if (tn + fp) > 0 else None
-            except Exception as e:
-                log.warning("subgroup_rf_failed", error=str(e))
-
-            # XGB subgroup
-            if xgb_preds_arr is not None:
-                try:
-                    p_sub = xgb_preds_arr[mask]
-                    tn, fp, fn, tp = confusion_matrix(
-                        y_sub, p_sub, labels=[0, 1]
-                    ).ravel()
-                    res["xgb_sensitivity"] = (
-                        float(tp / (tp + fn)) if (tp + fn) > 0 else None
-                    )
-                    res["xgb_specificity"] = (
-                        float(tn / (tn + fp)) if (tn + fp) > 0 else None
-                    )
-                except Exception as e:
-                    log.warning("subgroup_xgb_failed", error=str(e))
-
-            return res
+        rf_opt = results.get("rf_optimal_threshold", 0.5)
+        oof_preds = {}
+        if len(rf_probs) > 0:
+            oof_preds["rf"] = (rf_probs >= rf_opt).astype(int)
+        if "xgb_oof_probs" in results:
+            xgb_thresh = results.get("xgb_optimal_threshold", 0.5)
+            xgb_probs_arr = np.array(results["xgb_oof_probs"])
+            oof_preds["xgb"] = (xgb_probs_arr >= xgb_thresh).astype(int)
 
         # Cancer type subgroup analysis (Top 10)
         if cancer_types is not None:
@@ -918,7 +1066,7 @@ def single_feature_model(
                 n_samp = mask.sum()
                 if n_samp < 5:
                     continue
-                res_sub = _subgroup_metrics(mask, y, rf_oof_preds, xgb_oof_preds)
+                res_sub = _subgroup_metrics(mask, y, oof_preds)
                 if res_sub:
                     c_stats.append(
                         {
@@ -941,7 +1089,7 @@ def single_feature_model(
                 n_samp = mask.sum()
                 if n_samp < 5:
                     continue
-                res_sub = _subgroup_metrics(mask, y, rf_oof_preds, xgb_oof_preds)
+                res_sub = _subgroup_metrics(mask, y, oof_preds)
                 if res_sub:
                     a_stats.append(
                         {
@@ -957,7 +1105,933 @@ def single_feature_model(
     except Exception as e:
         import traceback
 
-        log.error(
-            "single_feature_model_failed", error=str(e), trace=traceback.format_exc()
-        )
+        log.error("cpu_models_failed", error=str(e), trace=traceback.format_exc())
         return {"error": str(e)}, None, None, None
+
+
+# Backward compatibility alias — existing code and tests use single_feature_model
+single_feature_model = cpu_models
+
+
+# ── GPU Foundation Model Support ──────────────────────────────────────────────
+
+
+def _build_gpu_model(
+    name: str,
+    device: str = "cuda",
+    finetune: bool = True,
+    finetune_epochs: int = 30,
+    finetune_lr: float = 1e-5,
+) -> object | None:
+    """Factory: instantiate a GPU foundation model.
+
+    Fine-tuning is default (matches HPC usage pattern).
+    Returns None with structured log error if import fails.
+
+    Args:
+        name: "tabpfn" or "tabicl".
+        device: PyTorch device string.
+        finetune: If True, use fine-tuned variant (default).
+        finetune_epochs: Epochs for fine-tuning.
+        finetune_lr: Learning rate for fine-tuning.
+    """
+    if name == "tabpfn":
+        try:
+            if finetune:
+                from tabpfn_extensions.fine_tuning import FineTunedTabPFNClassifier
+
+                return FineTunedTabPFNClassifier(
+                    device=device,
+                    n_epochs=finetune_epochs,
+                    learning_rate=finetune_lr,
+                )
+            else:
+                from tabpfn import TabPFNClassifier
+
+                return TabPFNClassifier(device=device)
+        except ImportError as e:
+            log.error(
+                "gpu_model_import_failed",
+                model=name,
+                error=str(e),
+                hint="Install with: pip install kreview[gpu]",
+            )
+            return None
+
+    elif name == "tabicl":
+        try:
+            from tabicl import TabICLClassifier
+
+            return TabICLClassifier(finetune=finetune)
+        except ImportError as e:
+            log.error(
+                "gpu_model_import_failed",
+                model=name,
+                error=str(e),
+                hint="Install with: pip install kreview[gpu]",
+            )
+            return None
+
+    else:
+        log.error("unknown_gpu_model", model=name, known=["tabpfn", "tabicl"])
+        return None
+
+
+def _compute_shap(
+    fitted_model,
+    X: np.ndarray,
+    name: str,
+    feature_names: list[str] | None = None,
+    max_samples: int = 500,
+) -> dict | None:
+    """Compute SHAP values using the best available method for the model type.
+
+    Dispatches to native SHAP implementations for foundation models,
+    TreeExplainer for tree-based, or PermutationExplainer as fallback.
+
+    Returns dict with shap_values (list) and feature_names, or None on failure.
+    """
+    X_shap = X[:max_samples] if len(X) > max_samples else X
+
+    try:
+        # Native TabICL SHAP
+        if name == "tabicl":
+            from tabicl.shap import get_shap_values
+
+            sv = get_shap_values(fitted_model, X_shap)
+            return {
+                "shap_values": sv.tolist() if hasattr(sv, "tolist") else sv,
+                "feature_names": feature_names,
+            }
+
+        # Native TabPFN SHAP via tabpfn-extensions
+        if name == "tabpfn":
+            from tabpfn_extensions.interpretability import shap_values as tabpfn_shap
+
+            sv = tabpfn_shap(fitted_model, X_shap)
+            return {
+                "shap_values": sv.tolist() if hasattr(sv, "tolist") else sv,
+                "feature_names": feature_names,
+            }
+
+        # Tree-based (RF, XGB)
+        import shap
+
+        if hasattr(fitted_model, "feature_importances_"):
+            explainer = shap.TreeExplainer(fitted_model)
+            sv = explainer.shap_values(X_shap)
+            # TreeExplainer may return list of arrays (one per class)
+            if isinstance(sv, list):
+                sv = sv[1]  # positive class
+            return {
+                "shap_values": sv.tolist(),
+                "feature_names": feature_names,
+            }
+
+        # Pipeline: try to get inner model
+        if hasattr(fitted_model, "named_steps"):
+            last = list(fitted_model.named_steps.values())[-1]
+            if hasattr(last, "feature_importances_"):
+                explainer = shap.TreeExplainer(last)
+                # Transform X through pipeline steps before last
+
+                X_transformed = X_shap
+                for step_name, step in list(fitted_model.named_steps.items())[:-1]:
+                    X_transformed = step.transform(X_transformed)
+                sv = explainer.shap_values(X_transformed)
+                if isinstance(sv, list):
+                    sv = sv[1]
+                return {
+                    "shap_values": sv.tolist(),
+                    "feature_names": feature_names,
+                }
+
+        # Fallback: PermutationExplainer (slow but universal)
+        explainer = shap.PermutationExplainer(fitted_model.predict_proba, X_shap)
+        sv = explainer(X_shap)
+        return {
+            "shap_values": (
+                sv.values[:, :, 1].tolist()
+                if sv.values.ndim == 3
+                else sv.values.tolist()
+            ),
+            "feature_names": feature_names,
+        }
+
+    except Exception as e:
+        log.warning("shap_computation_failed", model=name, error=str(e))
+        return None
+
+
+def gpu_models(
+    X: np.ndarray,
+    y: np.ndarray,
+    feature_names: list[str] | None = None,
+    cancer_types: np.ndarray | None = None,
+    assays: np.ndarray | None = None,
+    n_folds: int = 5,
+    random_state: int = 42,
+    models: tuple[str, ...] = ("tabpfn",),
+    device: str = "cuda",
+    finetune: bool = True,
+    finetune_epochs: int = 30,
+    finetune_lr: float = 1e-5,
+    compute_shap: bool = False,
+    shap_samples: int = 500,
+) -> tuple[dict, dict[str, object]]:
+    """Train GPU foundation models (TabPFN, TabICL) on a feature matrix.
+
+    Same output schema as cpu_models() for each model, using the shared
+    ``evaluate_model()`` primitive. Fine-tuning is ON by default.
+
+    Args:
+        X: Feature matrix, shape (n_samples, n_features).
+        y: Binary labels (0/1).
+        feature_names: Optional feature names.
+        cancer_types: Optional cancer type array for subgroup analysis.
+        assays: Optional assay array for subgroup analysis.
+        n_folds: Number of CV folds.
+        random_state: Random seed.
+        models: Tuple of GPU model names ("tabpfn", "tabicl").
+        device: PyTorch device ("cuda", "cpu").
+        finetune: If True (default), use fine-tuned variants.
+        finetune_epochs: Epochs for fine-tuning.
+        finetune_lr: Learning rate for fine-tuning.
+        compute_shap: If True, compute SHAP values.
+        shap_samples: Max samples for SHAP computation.
+
+    Returns:
+        (results_dict, fitted_models_dict). fitted_models_dict maps
+        model name to fitted model object.
+    """
+    results = {}
+    fitted_models = {}
+
+    try:
+        y = y.astype(int)
+        if len(np.unique(y)) < 2:
+            log.warning("single_class_y", y_unique=np.unique(y).tolist())
+            return {"error": "Only one class present in target array"}, {}
+
+        min_class_counts = np.bincount(y).min()
+        folds = min(n_folds, min_class_counts)
+        if folds < 2:
+            return (
+                {"error": "Not enough samples per class for Stratified CV (<2)"},
+                {},
+            )
+
+        cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
+        results["cv_folds_actual"] = folds
+
+        for model_name in models:
+            model = _build_gpu_model(
+                model_name,
+                device=device,
+                finetune=finetune,
+                finetune_epochs=finetune_epochs,
+                finetune_lr=finetune_lr,
+            )
+            if model is None:
+                log.warning(
+                    "gpu_model_skipped",
+                    model=model_name,
+                    reason="build failed",
+                )
+                continue
+
+            try:
+                model_res, fitted = evaluate_model(
+                    model,
+                    X,
+                    y,
+                    cv,
+                    model_name,
+                    feature_names=feature_names,
+                    refit=True,
+                    compute_shap=compute_shap,
+                    shap_samples=shap_samples,
+                )
+                results.update(model_res)
+                fitted_models[model_name] = fitted
+
+                # SHAP via native dispatchers
+                if compute_shap and fitted is not None:
+                    shap_result = _compute_shap(
+                        fitted, X, model_name, feature_names, shap_samples
+                    )
+                    if shap_result is not None:
+                        results[f"{model_name}_shap"] = shap_result
+
+                log.info(
+                    "gpu_model_evaluated",
+                    model=model_name,
+                    auc=results.get(f"auc_{model_name}"),
+                    finetune=finetune,
+                )
+            except Exception as e:
+                log.error(
+                    "gpu_model_evaluation_failed",
+                    model=model_name,
+                    error=str(e),
+                )
+                continue
+
+        # OOF labels for downstream multimodal alignment
+        results["oof_labels"] = y.tolist()
+
+        return results, fitted_models
+    except Exception as e:
+        import traceback
+
+        log.error("gpu_models_failed", error=str(e), trace=traceback.format_exc())
+        return {"error": str(e)}, {}
+
+
+# ── Phase D: Multimodal Evaluation ──────────────────────────────────────────
+
+
+def _load_per_evaluator_baselines(
+    results_dir: str | Path,
+) -> dict:
+    """Load all ``*_model_results.json`` files from a directory.
+
+    Extracts per-evaluator OOF probabilities, labels, sample IDs, and
+    AUC baselines needed for multimodal stacking.
+
+    Args:
+        results_dir: Directory containing ``*_model_results.json`` files
+            produced by ``kreview eval cpu`` or ``kreview eval gpu``.
+
+    Returns:
+        A dict keyed by evaluator name::
+
+            {
+                "FSCOnTarget": {
+                    "models": ["lr", "rf", "xgb"],
+                    "oof_probs": {"lr": [...], "rf": [...], ...},
+                    "oof_labels": [...],
+                    "oof_sample_ids": [...],
+                    "aucs": {"lr": 0.85, "rf": 0.88, ...},
+                    "best_model": "auc_rf",
+                    "best_auc": 0.88,
+                },
+                ...
+            }
+
+    Raises:
+        FileNotFoundError: If ``results_dir`` does not exist.
+        ValueError: If no valid JSON files are found.
+    """
+    import glob
+
+    results_dir = Path(results_dir)
+    if not results_dir.exists():
+        raise FileNotFoundError(f"Results directory not found: {results_dir}")
+
+    json_paths = sorted(glob.glob(str(results_dir / "*_model_results.json")))
+    if not json_paths:
+        raise ValueError(f"No *_model_results.json files in {results_dir}")
+
+    baselines = {}
+    n_loaded, n_skipped = 0, 0
+
+    for jp in json_paths:
+        eval_name = Path(jp).stem.replace("_model_results", "")
+        try:
+            with open(jp) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            log.error(
+                "multimodal_json_load_failed",
+                path=jp,
+                error=str(exc),
+            )
+            n_skipped += 1
+            continue
+
+        # Skip error results
+        if "error" in data:
+            log.warning(
+                "multimodal_skip_errored_evaluator",
+                evaluator=eval_name,
+                error=data["error"],
+            )
+            n_skipped += 1
+            continue
+
+        # Discover which models have OOF probs
+        model_names = []
+        oof_probs = {}
+        aucs = {}
+        for k, v in data.items():
+            if k.endswith("_oof_probs") and isinstance(v, list):
+                mn = k.replace("_oof_probs", "")
+                model_names.append(mn)
+                oof_probs[mn] = v
+            if k.startswith("auc_") and isinstance(v, (int, float)):
+                # Exclude CI bounds
+                if not k.endswith("_ci_lower") and not k.endswith("_ci_upper"):
+                    aucs[k.replace("auc_", "")] = v
+
+        if not model_names:
+            log.warning(
+                "multimodal_no_oof_probs",
+                evaluator=eval_name,
+                keys_sample=list(data.keys())[:10],
+            )
+            n_skipped += 1
+            continue
+
+        # Extract labels and sample IDs
+        oof_labels = data.get("oof_labels")
+        oof_sample_ids = data.get("oof_sample_ids")
+
+        if oof_labels is None:
+            log.warning("multimodal_missing_oof_labels", evaluator=eval_name)
+            n_skipped += 1
+            continue
+
+        baselines[eval_name] = {
+            "models": model_names,
+            "oof_probs": oof_probs,
+            "oof_labels": oof_labels,
+            "oof_sample_ids": oof_sample_ids,
+            "aucs": aucs,
+            "best_model": data.get("best_model"),
+            "best_auc": data.get("best_auc"),
+        }
+        n_loaded += 1
+
+    log.info(
+        "multimodal_baselines_loaded",
+        n_loaded=n_loaded,
+        n_skipped=n_skipped,
+        evaluators=sorted(baselines.keys()),
+    )
+
+    if not baselines:
+        raise ValueError(
+            f"No valid evaluator baselines found in {results_dir} "
+            f"({n_skipped} skipped)"
+        )
+
+    return baselines
+
+
+def _build_stacking_matrix(
+    baselines: dict,
+    *,
+    model_filter: str | None = None,
+) -> tuple[pd.DataFrame, np.ndarray]:
+    """Build a meta-feature matrix from OOF predictions across evaluators.
+
+    Each column is ``{evaluator}_{model}`` containing that model's OOF
+    probability for the given evaluator.  Rows are aligned by
+    ``oof_sample_ids`` via outer-join so all samples are represented.
+
+    Args:
+        baselines: Output of :func:`_load_per_evaluator_baselines`.
+        model_filter: If provided, only include this model's OOF probs
+            (e.g. ``"rf"``).  None means include all available models.
+
+    Returns:
+        (stacking_df, y) where ``stacking_df`` has columns like
+        ``FSCOnTarget_rf``, ``MdsOnTarget_lr``, etc., and ``y`` is the
+        aligned binary label array.
+
+    Raises:
+        ValueError: If no stacking columns can be built (e.g. no
+            evaluators have ``oof_sample_ids``).
+    """
+    frames = []
+    evaluators_with_ids = 0
+    evaluators_without_ids = 0
+
+    for eval_name, info in sorted(baselines.items()):
+        sample_ids = info.get("oof_sample_ids")
+        if sample_ids is None:
+            log.warning(
+                "stacking_missing_sample_ids",
+                evaluator=eval_name,
+                hint="Run with oof_sample_ids for correct alignment",
+            )
+            evaluators_without_ids += 1
+            continue
+
+        evaluators_with_ids += 1
+        models_to_use = (
+            [model_filter]
+            if model_filter and model_filter in info["oof_probs"]
+            else info["models"]
+        )
+
+        eval_data = {"_sample_id": sample_ids}
+        for mn in models_to_use:
+            probs = info["oof_probs"].get(mn)
+            if probs is not None and len(probs) == len(sample_ids):
+                eval_data[f"{eval_name}_{mn}"] = probs
+            elif probs is not None:
+                log.warning(
+                    "stacking_length_mismatch",
+                    evaluator=eval_name,
+                    model=mn,
+                    n_probs=len(probs),
+                    n_ids=len(sample_ids),
+                )
+
+        # Also carry the labels for this evaluator
+        eval_data["_oof_labels"] = info["oof_labels"]
+
+        if (
+            len(eval_data) > 2
+        ):  # Has at least one model column beyond _sample_id and _oof_labels
+            frames.append(pd.DataFrame(eval_data))
+
+    if not frames:
+        raise ValueError(
+            f"Cannot build stacking matrix: {evaluators_without_ids} evaluators "
+            f"missing oof_sample_ids, {evaluators_with_ids} had IDs but no probs"
+        )
+
+    # Outer-join on sample ID to handle evaluators with different sample sets
+    stacking = frames[0]
+    for df in frames[1:]:
+        stacking = pd.merge(
+            stacking, df, on="_sample_id", how="outer", suffixes=("", "_dup")
+        )
+        # Resolve duplicate _oof_labels columns (keep first)
+        dup_cols = [c for c in stacking.columns if c.endswith("_dup")]
+        if dup_cols:
+            stacking = stacking.drop(columns=dup_cols)
+
+    # Extract labels (should be consistent across evaluators)
+    y = stacking["_oof_labels"].values.astype(int)
+    sample_ids = stacking["_sample_id"].tolist()
+
+    # Drop internal columns
+    feature_cols = [
+        c for c in stacking.columns if c not in ("_sample_id", "_oof_labels")
+    ]
+    stacking_features = stacking[feature_cols].copy()
+
+    n_nans = stacking_features.isna().sum().sum()
+    log.info(
+        "stacking_matrix_built",
+        n_samples=len(stacking_features),
+        n_features=len(feature_cols),
+        n_evaluators=evaluators_with_ids,
+        n_nans=int(n_nans),
+        feature_cols=feature_cols[:10],
+        sample_ids_head=sample_ids[:3],
+    )
+
+    return stacking_features, y
+
+
+def _select_multimodal_features(
+    df: pd.DataFrame,
+    y: np.ndarray,
+    *,
+    max_nan_frac: float = 0.80,
+    top_k: int = 50,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Feature selection pipeline for multimodal evaluation.
+
+    Steps:
+        1. Drop columns with > ``max_nan_frac`` NaN
+        2. Median-impute remaining NaNs
+        3. Drop zero-variance columns
+        4. Rank by mutual information → keep top-K
+
+    Args:
+        df: Feature DataFrame (numeric columns only).
+        y: Binary label array (same length as ``df``).
+        max_nan_frac: Maximum fraction of NaN allowed per column.
+        top_k: Number of features to retain after MI ranking.
+
+    Returns:
+        (selected_df, selected_feature_names)
+    """
+    from sklearn.feature_selection import mutual_info_classif
+
+    n_initial = len(df.columns)
+
+    # Step 1: Drop columns with too many NaNs
+    nan_fracs = df.isna().mean()
+    high_nan = nan_fracs[nan_fracs > max_nan_frac].index.tolist()
+    if high_nan:
+        df = df.drop(columns=high_nan)
+        log.info(
+            "multimodal_feature_nan_drop",
+            n_dropped=len(high_nan),
+            max_nan_frac=max_nan_frac,
+            examples=high_nan[:5],
+        )
+
+    # Step 2: Impute remaining NaNs using shared strategy
+    n_nans = int(df.isna().sum().sum())
+    if n_nans > 0:
+        from kreview.selection import _impute
+
+        df = _impute(df, "median")
+        log.info("multimodal_feature_imputed", n_nans=n_nans, strategy="median")
+
+    # Step 3: Drop zero-variance
+    variances = df.var()
+    zero_var = variances[variances <= 0].index.tolist()
+    if zero_var:
+        df = df.drop(columns=zero_var)
+        log.info("multimodal_feature_zerovar_drop", n_dropped=len(zero_var))
+
+    if df.empty or len(df.columns) == 0:
+        log.error("multimodal_no_features_after_selection")
+        return df, []
+
+    # Step 4: Mutual information ranking → top-K
+    if len(df.columns) > top_k:
+        mi_scores = mutual_info_classif(df.values, y, random_state=42)
+        mi_ranked = sorted(zip(df.columns, mi_scores), key=lambda x: x[1], reverse=True)
+        selected = [name for name, _ in mi_ranked[:top_k]]
+        df = df[selected]
+        log.info(
+            "multimodal_feature_mi_selected",
+            n_before=len(mi_ranked),
+            n_after=len(selected),
+            top_5=[(name, f"{score:.3f}") for name, score in mi_ranked[:5]],
+        )
+    else:
+        selected = list(df.columns)
+
+    log.info(
+        "multimodal_feature_selection_complete",
+        n_initial=n_initial,
+        n_final=len(selected),
+    )
+    return df, selected
+
+
+def multimodal_eval(
+    results_dir: str | Path,
+    super_matrix_path: str | Path | None = None,
+    *,
+    models: tuple[str, ...] = ("rf", "xgb"),
+    n_folds: int = 5,
+    top_k: int = 50,
+    random_state: int = 42,
+) -> dict:
+    """Cross-evaluator multimodal evaluation.
+
+    Implements three complementary strategies:
+
+    1. **Stacking**: Meta-learner trained on OOF predictions from all
+       per-evaluator models.  Each column is one evaluator's OOF
+       probability.  This measures how much combining multiple
+       fragmentomics signals improves classification.
+
+    2. **Raw features** (optional): If ``super_matrix_path`` is provided,
+       trains directly on the fused feature matrix with MI-based
+       feature selection.
+
+    3. **Ablation**: Leave-one-evaluator-out analysis on the stacking
+       matrix, showing each evaluator's marginal contribution.
+
+    Args:
+        results_dir: Directory with ``*_model_results.json`` files.
+        super_matrix_path: Optional path to ``super_matrix.parquet``.
+        models: Model names to use (``rf``, ``xgb``, ``lr``).
+        n_folds: Cross-validation folds.
+        top_k: Top-K features for raw-feature strategy.
+        random_state: Reproducibility seed.
+
+    Returns:
+        A comprehensive results dict with keys for each strategy.
+    """
+    from kreview.core import LABEL_META_COLS
+
+    results = {
+        "strategy": "multimodal",
+        "models_requested": list(models),
+    }
+
+    # ── Load baselines ──
+    log.info("multimodal_eval_start", results_dir=str(results_dir))
+    baselines = _load_per_evaluator_baselines(results_dir)
+    results["n_evaluators"] = len(baselines)
+    results["evaluators"] = sorted(baselines.keys())
+
+    # Capture per-evaluator best AUCs for comparison
+    single_aucs = {}
+    for eval_name, info in baselines.items():
+        if info.get("best_auc") is not None:
+            single_aucs[eval_name] = info["best_auc"]
+    results["single_evaluator_aucs"] = single_aucs
+
+    best_single_name = max(single_aucs, key=single_aucs.get) if single_aucs else None
+    best_single_auc = (
+        single_aucs.get(best_single_name, 0.0) if best_single_name else 0.0
+    )
+    results["best_single_evaluator"] = best_single_name
+    results["best_single_auc"] = best_single_auc
+
+    # ── Strategy 1: Stacking ──
+    log.info("multimodal_stacking_start")
+    try:
+        stacking_df, y_stack = _build_stacking_matrix(baselines)
+
+        # Impute NaNs from outer-join mismatches
+        n_nans = int(stacking_df.isna().sum().sum())
+        if n_nans > 0:
+            stacking_df = stacking_df.fillna(0.5)  # Neutral probability
+            log.info("stacking_nan_imputed", n_nans=n_nans, fill_value=0.5)
+
+        cv = StratifiedKFold(
+            n_splits=min(n_folds, len(y_stack) // 2),
+            shuffle=True,
+            random_state=random_state,
+        )
+
+        stacking_results = {}
+        for model_name in models:
+            try:
+                model = _build_model(model_name, random_state)
+                res, _ = evaluate_model(
+                    model,
+                    stacking_df.values,
+                    y_stack,
+                    cv,
+                    f"stacking_{model_name}",
+                    feature_names=list(stacking_df.columns),
+                )
+                stacking_results.update(res)
+
+                stacking_auc = res.get(f"auc_stacking_{model_name}")
+                if stacking_auc is not None and best_single_auc > 0:
+                    delta = stacking_auc - best_single_auc
+                    stacking_results[f"stacking_{model_name}_vs_best_single"] = delta
+                    log.info(
+                        "stacking_model_complete",
+                        model=model_name,
+                        auc=stacking_auc,
+                        delta_vs_best_single=delta,
+                    )
+            except Exception as e:
+                log.error("stacking_model_failed", model=model_name, error=str(e))
+                stacking_results[f"stacking_{model_name}_error"] = str(e)
+
+        results["stacking"] = stacking_results
+        results["stacking_n_features"] = len(stacking_df.columns)
+        results["stacking_features"] = list(stacking_df.columns)
+
+    except Exception as e:
+        log.error("multimodal_stacking_failed", error=str(e))
+        results["stacking_error"] = str(e)
+
+    # ── Strategy 2: Raw features (optional) ──
+    if super_matrix_path is not None:
+        log.info("multimodal_raw_start", super_matrix=str(super_matrix_path))
+        try:
+            super_df = pd.read_parquet(super_matrix_path)
+            log.info(
+                "super_matrix_loaded",
+                n_samples=len(super_df),
+                n_cols=len(super_df.columns),
+            )
+
+            # Extract labels
+            if "label" not in super_df.columns:
+                raise ValueError("super_matrix must contain 'label' column")
+
+            # Use shared build_binary_target to filter and encode labels
+            # — single source of truth for label → binary mapping.
+            from kreview.selection import build_binary_target
+
+            super_df, y_raw = build_binary_target(super_df, "label")
+
+            # Select numeric feature columns (exclude metadata)
+            feature_cols = [
+                c
+                for c in super_df.select_dtypes(include=np.number).columns
+                if c not in LABEL_META_COLS
+            ]
+
+            if not feature_cols:
+                raise ValueError("No numeric feature columns in super_matrix")
+
+            X_raw = super_df[feature_cols]
+            X_selected, selected_names = _select_multimodal_features(
+                X_raw, y_raw, top_k=top_k
+            )
+
+            if X_selected.empty:
+                raise ValueError("No features survived selection")
+
+            cv_raw = StratifiedKFold(
+                n_splits=min(n_folds, len(y_raw) // 2),
+                shuffle=True,
+                random_state=random_state,
+            )
+
+            raw_results = {}
+            for model_name in models:
+                try:
+                    model = _build_model(model_name, random_state)
+                    res, _ = evaluate_model(
+                        model,
+                        X_selected.values,
+                        y_raw,
+                        cv_raw,
+                        f"raw_{model_name}",
+                        feature_names=selected_names,
+                    )
+                    raw_results.update(res)
+
+                    raw_auc = res.get(f"auc_raw_{model_name}")
+                    if raw_auc is not None and best_single_auc > 0:
+                        raw_results[f"raw_{model_name}_vs_best_single"] = (
+                            raw_auc - best_single_auc
+                        )
+                except Exception as e:
+                    log.error("raw_model_failed", model=model_name, error=str(e))
+                    raw_results[f"raw_{model_name}_error"] = str(e)
+
+            results["raw_features"] = raw_results
+            results["raw_n_features_selected"] = len(selected_names)
+            results["raw_features_selected"] = selected_names[:20]
+
+        except Exception as e:
+            log.error("multimodal_raw_failed", error=str(e))
+            results["raw_features_error"] = str(e)
+
+    # ── Strategy 3: Ablation (leave-one-evaluator-out) ──
+    if "stacking" in results and "stacking_error" not in results:
+        log.info("multimodal_ablation_start")
+        try:
+            ablation = {}
+            # Use the best stacking model for ablation
+            best_stack_model = None
+            best_stack_auc = 0.0
+            for mn in models:
+                auc_val = results["stacking"].get(f"auc_stacking_{mn}", 0.0)
+                if auc_val and auc_val > best_stack_auc:
+                    best_stack_auc = auc_val
+                    best_stack_model = mn
+
+            if best_stack_model is not None:
+                # Drop each evaluator's columns and retrain
+                for eval_name in sorted(baselines.keys()):
+                    cols_to_drop = [
+                        c for c in stacking_df.columns if c.startswith(f"{eval_name}_")
+                    ]
+                    if not cols_to_drop:
+                        continue
+
+                    X_ablated = stacking_df.drop(columns=cols_to_drop)
+                    if X_ablated.empty:
+                        continue
+
+                    try:
+                        model = _build_model(best_stack_model, random_state)
+                        res, _ = evaluate_model(
+                            model,
+                            X_ablated.values,
+                            y_stack,
+                            cv,
+                            f"ablation_{eval_name}",
+                            feature_names=list(X_ablated.columns),
+                        )
+                        ablated_auc = res.get(f"auc_ablation_{eval_name}", 0.0)
+                        delta = best_stack_auc - (ablated_auc or 0.0)
+                        ablation[eval_name] = {
+                            "auc_without": ablated_auc,
+                            "delta": delta,
+                            "n_cols_removed": len(cols_to_drop),
+                        }
+                        log.info(
+                            "ablation_evaluator",
+                            evaluator=eval_name,
+                            auc_without=ablated_auc,
+                            delta=delta,
+                        )
+                    except Exception as e:
+                        log.error(
+                            "ablation_evaluator_failed",
+                            evaluator=eval_name,
+                            error=str(e),
+                        )
+                        ablation[eval_name] = {"error": str(e)}
+
+                # Sort by delta (most important first)
+                ablation_sorted = dict(
+                    sorted(
+                        ablation.items(),
+                        key=lambda x: x[1].get("delta", 0.0),
+                        reverse=True,
+                    )
+                )
+                results["ablation"] = ablation_sorted
+                results["ablation_model"] = best_stack_model
+                results["ablation_baseline_auc"] = best_stack_auc
+
+        except Exception as e:
+            log.error("multimodal_ablation_failed", error=str(e))
+            results["ablation_error"] = str(e)
+
+    log.info(
+        "multimodal_eval_complete",
+        strategies=["stacking"]
+        + (["raw_features"] if "raw_features" in results else [])
+        + (["ablation"] if "ablation" in results else []),
+        n_evaluators=len(baselines),
+    )
+
+    return results
+
+
+def _build_model(model_name: str, random_state: int):
+    """Instantiate a model by name for multimodal evaluation.
+
+    Centralises model construction so that ``multimodal_eval`` does not
+    duplicate sklearn import/init logic for every strategy × model
+    combination.
+
+    Args:
+        model_name: One of ``lr``, ``rf``, ``xgb``.
+        random_state: Seed for reproducibility.
+
+    Returns:
+        An sklearn-compatible estimator.
+
+    Raises:
+        ValueError: If ``model_name`` is not recognised.
+    """
+    if model_name == "lr":
+        return Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("lr", LogisticRegression(max_iter=1000, random_state=random_state)),
+            ]
+        )
+    elif model_name == "rf":
+        return RandomForestClassifier(
+            n_estimators=200, max_depth=6, random_state=random_state, n_jobs=-1
+        )
+    elif model_name == "xgb":
+        try:
+            from xgboost import XGBClassifier
+
+            return XGBClassifier(
+                n_estimators=200,
+                max_depth=4,
+                learning_rate=0.1,
+                random_state=random_state,
+                use_label_encoder=False,
+                eval_metric="logloss",
+                verbosity=0,
+                n_jobs=-1,
+            )
+        except ImportError:
+            log.error("xgb_import_failed", hint="pip install xgboost")
+            raise
+    else:
+        raise ValueError(f"Unknown model: {model_name!r}. Choose from: lr, rf, xgb")

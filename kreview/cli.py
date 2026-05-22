@@ -10,6 +10,8 @@ __all__ = [
     "features_list",
     "run",
     "report",
+    "extract",
+    "fuse",
 ]
 
 # %% ../nbs/90_cli.ipynb #27a890c5
@@ -22,6 +24,16 @@ import structlog
 
 log = structlog.get_logger()
 app = typer.Typer(name="kreview", help="ctDNA fragmentomics feature evaluation")
+
+# Register evaluation subcommands (kreview eval cpu|gpu|multimodal)
+from .cli_eval import eval_app
+
+app.add_typer(eval_app, name="eval")
+
+# Register select command (kreview select)
+from .cli_select import select
+
+app.command(name="select")(select)
 
 
 def version_callback(value: bool):
@@ -57,13 +69,16 @@ def label(
     min_vaf: float = typer.Option(
         0.01, help="Min VAF for Possible ctDNA+ (default 1%)"
     ),
+    min_fragments: int = typer.Option(
+        2000, help="Min fragments PF for Depth QC (samples below are Insufficient Data)"
+    ),
     min_variants: int = typer.Option(
         1, help="Min # variants passing VAF for Possible ctDNA+"
     ),
-    chunk_size: int = typer.Option(
-        500,
-        "--chunk-size",
-        help="Batch size for DuckDB file loading over SFTP network mounts",
+    ch_hotspot_maf: Path = typer.Option(
+        None,
+        help="Optional TSV of CH hotspot variants for CH-only demotion. "
+        "Samples with only CH mutations are demoted to Possible ctDNA−.",
     ),
 ):
     """Generate ctDNA labels without feature evaluation."""
@@ -79,7 +94,7 @@ def label(
     print(f"  --output            : {output}", flush=True)
     print(f"  --min-vaf           : {min_vaf}", flush=True)
     print(f"  --min-variants      : {min_variants}", flush=True)
-    print(f"  --chunk-size        : {chunk_size}", flush=True)
+    print(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}", flush=True)
     print("", flush=True)
 
     paths = Paths(
@@ -89,8 +104,13 @@ def label(
         str(cbioportal_dir),
         [],
     )
+    # Metadata is ~1 row/sample — load everything in a single large batch.
     config = LabelConfig(
-        min_vaf=min_vaf, min_variants=min_variants, chunk_size=chunk_size
+        min_vaf=min_vaf,
+        min_fragments=min_fragments,
+        min_variants=min_variants,
+        chunk_size=15_000,
+        ch_hotspot_maf=ch_hotspot_maf,
     )
 
     labeler = CtDNALabeler(paths, config)
@@ -116,132 +136,182 @@ def features_list():
 # %% ../nbs/90_cli.ipynb #0206e0c1
 import numpy as np
 import time
-from concurrent.futures import ProcessPoolExecutor
-import concurrent.futures
+
+# _impute is now in selection.py — import it for backward compat
+from .selection import _impute
 
 
-def _impute(df, strategy: str):
-    """Apply imputation strategy to a feature DataFrame.
+def _extract_evaluator(
+    evaluator,
+    paths,
+    all_sample_ids: list[str],
+    chunk_size: int,
+    out_path: Path,
+    labels_df: pd.DataFrame,
+    *,
+    _echo=print,
+) -> pd.DataFrame | None:
+    """Extract features for a single evaluator and write the matrix parquet.
 
-    Args:
-        df: DataFrame with numeric features (may contain NaN).
-        strategy: One of 'zero', 'mean', 'median'.
+    Tries SQL pushdown first (Path A); falls back to chunked Python
+    streaming (Path B) when the evaluator doesn't support SQL or SQL
+    returns empty results.
 
     Returns:
-        DataFrame with NaN values filled according to strategy.
+        Merged DataFrame (labels + features) written to disk, or None
+        if extraction produced no data.
     """
-    if strategy == "mean":
-        return df.fillna(df.mean())
-    elif strategy == "median":
-        return df.fillna(df.median())
-    elif strategy != "zero":
-        import structlog
+    from kreview.core import iter_feature_chunks, run_feature_sql
 
-        structlog.get_logger().warning(
-            "unknown_impute_strategy",
-            strategy=strategy,
-            fallback="zero",
+    _echo(f"  Extracting '{evaluator.name}'...")
+    t1 = time.time()
+
+    # --- Path A: SQL Pushdown (if evaluator supports it) ---
+    sql_query = evaluator.extract_sql()
+    feat_matrix = None
+
+    if sql_query is not None:
+        _echo(f"  Using SQL pushdown for '{evaluator.name}'...")
+        sql_df = run_feature_sql(
+            sql_query,
+            str(evaluator.source_file),
+            paths.krewlyzer_dirs,
+            set(all_sample_ids),
         )
-    return df.fillna(0)  # default: zero
+        if not sql_df.empty:
+            feat_matrix = sql_df
+            extract_sec = time.time() - t1
+            n_samples = (
+                sql_df["sample_id"].nunique()
+                if "sample_id" in sql_df.columns
+                else len(sql_df)
+            )
+            _echo(
+                f"  SQL pushdown complete: {n_samples} samples "
+                f"in {extract_sec:.1f}s"
+            )
+            # Normalize sample_id column name for downstream merge
+            if "sample_id" in sql_df.columns and "SAMPLE_ID" not in sql_df.columns:
+                feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
+        else:
+            _echo(
+                f"  SQL pushdown returned empty result for '{evaluator.name}', "
+                f"falling back to chunked extraction..."
+            )
+            sql_query = None  # Force fallback to Path B
 
+    # --- Path B: Chunked Python streaming (default fallback) ---
+    if sql_query is None:
+        _echo(f"  Streaming cohort from DuckDB (chunk_size={chunk_size})...")
+        partial_results = []
+        failed_samples = []
+        total_samples_processed = 0
+        total_rows_read = 0
 
-def _extract_from_dataframe(e_name, df_chunk, verbose=False):
-    """Extract features from a pre-loaded DataFrame chunk. Runs in child process.
+        for chunk_df, chunk_idx, n_chunks in iter_feature_chunks(
+            str(evaluator.source_file),
+            paths.krewlyzer_dirs,
+            set(all_sample_ids),
+            chunk_size=chunk_size,
+        ):
+            sid_col = "sample_id" if "sample_id" in chunk_df.columns else "SAMPLE_ID"
+            chunk_sample_ids = chunk_df[sid_col].unique()
+            chunk_n_rows = len(chunk_df)
+            total_rows_read += chunk_n_rows
 
-    Key design: The parent process loads the full cohort from DuckDB ONCE,
-    then shards the DataFrame to workers. This avoids N parallel glob scans
-    over network mounts which causes I/O deadlock.
-    """
-    from kreview.registry import get_all_evaluators
-    import sys
+            _echo(
+                f"  Chunk {chunk_idx + 1}/{n_chunks}: "
+                f"{len(chunk_sample_ids)} samples, {chunk_n_rows:,} rows"
+            )
 
-    def _log(msg, **kw):
-        extras = " ".join(f"{k}={v}" for k, v in kw.items())
-        ts = time.strftime("%H:%M:%S")
-        print(f"[{ts}] [worker] {msg}  {extras}", file=sys.stderr, flush=True)
+            # Extract features from each sample within this chunk
+            chunk_extracted = 0
+            for sample_id in chunk_sample_ids:
+                sample_df = chunk_df[chunk_df[sid_col] == sample_id]
+                try:
+                    res = evaluator.extract(sample_df)
+                    if res:
+                        res["SAMPLE_ID"] = sample_id
+                        partial_results.append(pd.DataFrame([res]))
+                        chunk_extracted += 1
+                except Exception as exc:
+                    log.warning(
+                        "sample_extraction_failed",
+                        evaluator=evaluator.name,
+                        sample_id=sample_id,
+                        error=str(exc),
+                    )
+                    failed_samples.append(sample_id)
 
-    evaluators = {ev.name: ev for ev in get_all_evaluators()}
-    if e_name not in evaluators:
-        _log("ERROR: evaluator_not_found", name=e_name)
-        return e_name, False, f"Evaluator '{e_name}' not found in registry"
-    e = evaluators[e_name]
+            total_samples_processed += len(chunk_sample_ids)
+            _echo(
+                f"    Extracted {chunk_extracted}/" f"{len(chunk_sample_ids)} samples"
+            )
 
-    sid_col = "sample_id" if "sample_id" in df_chunk.columns else "SAMPLE_ID"
-    uniq_sids = df_chunk[sid_col].unique()
-    _log("chunk_started", evaluator=e_name, samples=len(uniq_sids), rows=len(df_chunk))
+            # Explicit memory release — reclaim ~5GB before next chunk
+            del chunk_df
 
-    try:
-        t0 = time.time()
-        extracted_rows = []
-        for i, sample_id in enumerate(uniq_sids):
-            samp_data = df_chunk[df_chunk[sid_col] == sample_id]
-            res = e.extract(samp_data)
-            if res is not None:
-                if isinstance(res, pd.DataFrame):
-                    res["SAMPLE_ID"] = sample_id
-                    extracted_rows.append(res)
-                else:
-                    res["SAMPLE_ID"] = sample_id
-                    extracted_rows.append(pd.DataFrame([res]))
+        if total_samples_processed == 0:
+            _echo(f"  WARNING: No data found for {evaluator.name}, skipping")
+            return None
 
-            if verbose and i > 0 and i % 200 == 0:
-                _log("extracting", evaluator=e_name, processed=i, total=len(uniq_sids))
-
-        feat_matrix = (
-            pd.concat(extracted_rows, ignore_index=True)
-            if extracted_rows
-            else pd.DataFrame()
+        extract_sec = time.time() - t1
+        _echo(
+            f"  Extraction complete: {total_samples_processed} samples, "
+            f"{total_rows_read:,} rows read in {extract_sec:.1f}s"
         )
-        total_sec = time.time() - t0
-        _log(
-            "chunk_completed",
-            evaluator=e_name,
-            matrix_rows=len(feat_matrix),
-            cols=len(feat_matrix.columns) if not feat_matrix.empty else 0,
-            seconds=f"{total_sec:.1f}",
-        )
-        return e_name, True, feat_matrix
 
-    except Exception as exc:
-        import traceback
+        if failed_samples:
+            failed_path = out_path / f"{evaluator.name}_failed_samples.csv"
+            pd.DataFrame({"SAMPLE_ID": failed_samples}).to_csv(failed_path, index=False)
+            _echo(
+                f"  WARNING: {len(failed_samples)} samples failed extraction. "
+                f"Saved to {failed_path.name}"
+            )
+            log.warning(
+                "extraction_failures",
+                evaluator=evaluator.name,
+                n_failed=len(failed_samples),
+                output=str(failed_path),
+            )
 
-        _log("CHUNK_CRASHED", evaluator=e_name, error=str(exc))
-        traceback.print_exc(file=sys.stderr)
-        sys.stderr.flush()
-        return e_name, False, str(exc)
+        if not partial_results:
+            _echo(f"  WARNING: No results for {evaluator.name}, skipping")
+            return None
+
+        feat_matrix = pd.concat(partial_results, ignore_index=True)
+
+    # Guard: both Path A and Path B should set feat_matrix before reaching
+    # this point (or return None). This is a safety net.
+    if feat_matrix is None:
+        _echo(f"  WARNING: No feature matrix produced for {evaluator.name}, skipping")
+        return None
+
+    merged = pd.merge(labels_df, feat_matrix, on="SAMPLE_ID", how="inner")
+    out_p = out_path / f"{evaluator.name}_matrix.parquet"
+    merged.to_parquet(out_p, index=False)
+    _echo(f"  Matrix: {merged.shape[0]} samples x {merged.shape[1]} cols -> {out_p}")
+
+    return merged
 
 
 def _find_quarto() -> str:
-    """Discover the quarto binary from PATH or well-known install locations."""
+    """Discover the quarto binary. With quarto-cli pip package, it's on PATH."""
     import shutil
 
-    # 1. Check PATH first
     found = shutil.which("quarto")
     if found:
         return found
+    # Fallback: check quarto-cli's known install location
+    import importlib.util
+    from pathlib import Path
 
-    # 2. Check well-known install locations
-    candidates = [
-        # macOS Positron bundled Quarto
-        "/Applications/Positron.app/Contents/Resources/app/quarto/bin/quarto",
-        # macOS standalone Quarto install
-        "/Applications/quarto/bin/quarto",
-        # Homebrew (Apple Silicon)
-        "/opt/homebrew/bin/quarto",
-        # Homebrew (Intel)
-        "/usr/local/bin/quarto",
-        # Linux system install
-        "/usr/bin/quarto",
-        # User-local install
-        str(Path.home() / ".local" / "bin" / "quarto"),
-        # Conda env
-        str(Path(sys.executable).parent / "quarto"),
-    ]
-    for c in candidates:
-        if Path(c).is_file():
-            return c
-
-    return "quarto"  # Fall back to bare name (will raise FileNotFoundError)
+    spec = importlib.util.find_spec("quarto")
+    if spec and spec.origin:
+        candidate = Path(spec.origin).parent / "bin" / "quarto"
+        if candidate.is_file():
+            return str(candidate)
+    raise FileNotFoundError("Quarto not found. Install with: pip install quarto-cli")
 
 
 def _render_quarto_report(
@@ -252,6 +322,7 @@ def _render_quarto_report(
     cvd_safe: bool = False,
     shap_samples: int = 500,
     shap_features: int = 10,
+    multimodal: bool = False,
 ) -> tuple[bool, str]:
     """Render a Quarto HTML dashboard for a single feature matrix."""
     import subprocess
@@ -259,7 +330,10 @@ def _render_quarto_report(
 
     pkg_dir = Path(__file__).resolve().parent
     template_dir = pkg_dir / "templates"
-    template_file = template_dir / "report_template.qmd"
+    template_name = (
+        "report_multimodal_template.qmd" if multimodal else "report_template.qmd"
+    )
+    template_file = template_dir / template_name
 
     if not template_file.exists():
         return False, f"Template not found at {template_file}"
@@ -269,10 +343,13 @@ def _render_quarto_report(
 
     quarto_bin = _find_quarto()
     out_html = Path(report_dir) / f"{feat_name}_dashboard.html"
+    log_file = Path(report_dir) / f"{feat_name}_render.log"
     cmd = [
         quarto_bin,
         "render",
-        "report_template.qmd",
+        template_name,
+        "--log-level",
+        "DEBUG",
         "-P",
         f"matrix_path:{Path(matrix_path).absolute()}",
         "-P",
@@ -301,7 +378,36 @@ def _render_quarto_report(
         )
         return True, str(out_html)
     except subprocess.CalledProcessError as exc:
-        return False, exc.stderr[-1500:]
+        # Write full output to disk for debugging — truncated console output hides errors
+        with open(log_file, "w") as f:
+            f.write(f"=== QUARTO RENDER DEBUG LOG: {feat_name} ===\n")
+            f.write(f"CMD: {' '.join(cmd)}\n")
+            f.write(f"EXIT CODE: {exc.returncode}\n\n")
+            f.write("=== STDOUT ===\n")
+            f.write(exc.stdout or "(empty)")
+            f.write("\n\n=== STDERR ===\n")
+            f.write(exc.stderr or "(empty)")
+        # Return concise error + pointer to full log
+        err_summary = f"Exit code {exc.returncode}. Full log: {log_file}\n"
+        # Extract actual error lines (skip cell progress noise)
+        for stream in [exc.stdout, exc.stderr]:
+            if not stream:
+                continue
+            for line in stream.splitlines():
+                line_s = line.strip()
+                if any(
+                    kw in line_s.lower()
+                    for kw in [
+                        "error",
+                        "exception",
+                        "traceback",
+                        "failed",
+                        "fatal",
+                        "not found",
+                    ]
+                ):
+                    err_summary += f"  >> {line_s}\n"
+        return False, err_summary
     except subprocess.TimeoutExpired:
         return False, "Timeout (>600s)"
 
@@ -315,16 +421,14 @@ def run(
     krewlyzer_dir: list[str] = typer.Option(..., help="krewlyzer output directory"),
     output: Path = typer.Option("output/", help="Output directory"),
     min_vaf: float = typer.Option(0.01),
-    min_fragments: int = typer.Option(2000),
+    min_fragments: int = typer.Option(
+        2000, help="Min fragments PF for Depth QC (samples below are Insufficient Data)"
+    ),
     min_variants: int = typer.Option(1),
     features: Optional[str] = typer.Option(
         None, help="Comma-separated features to run"
     ),
     tier: Optional[int] = typer.Option(None, help="Run features of this tier only"),
-    workers: int = typer.Option(4, help="Total processes"),
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Enable verbose logging"
-    ),
     cvd_safe: bool = typer.Option(
         False,
         "--cvd-safe",
@@ -344,10 +448,14 @@ def run(
         "--export-duckdb",
         help="Export a persistent duckdb data lake containing all feature matrices",
     ),
-    chunk_size: int = typer.Option(
-        500,
+    chunk_size: str = typer.Option(
+        "auto",
         "--chunk-size",
-        help="Batch size for DuckDB file loading over SFTP network mounts",
+        help=(
+            "Samples per DuckDB read batch. 'auto' (default) probes parquet "
+            "row density at runtime, or pass an integer to override "
+            "(e.g. --chunk-size 200)."
+        ),
     ),
     top_n: int = typer.Option(
         None,
@@ -372,21 +480,48 @@ def run(
     resume: bool = typer.Option(
         False,
         "--resume",
-        help="Skip evaluators whose model results already exist in the output directory.",
+        help="Skip models whose AUC results already exist in the output JSON. "
+        "Enables incremental runs: first CPU, then GPU with --resume.",
     ),
     compute_univariate_auc: bool = typer.Option(
         True,
         "--compute-univariate-auc",
         help="Compute per-feature univariate LR AUC. Required for hybrid selection (default: True).",
     ),
+    ch_hotspot_maf: Path = typer.Option(
+        None,
+        "--ch-hotspot-maf",
+        help="Optional TSV of CH hotspot variants for CH-only demotion. "
+        "Samples with only CH mutations are demoted to Possible ctDNA−.",
+    ),
+    gpu_models_flag: str = typer.Option(
+        "",
+        "--gpu-models",
+        help="Comma-separated GPU models to run after CPU models: tabpfn,tabicl. "
+        "Empty (default) = CPU only. Requires torch + model packages (pip install kreview[gpu]).",
+    ),
+    no_finetune: bool = typer.Option(
+        False,
+        "--no-finetune",
+        help="Use zero-shot inference for GPU models instead of fine-tuning (not recommended).",
+    ),
+    finetune_epochs: int = typer.Option(
+        30,
+        "--finetune-epochs",
+        help="Number of fine-tuning epochs for GPU foundation models.",
+    ),
+    device: str = typer.Option(
+        "cuda",
+        "--device",
+        help="PyTorch device for GPU models: cuda, cpu.",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
-    from kreview.core import Paths, LabelConfig, load_feature_cohort
+    from kreview.core import Paths, LabelConfig
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
 
-    from kreview.eval_engine import evaluate_feature, single_feature_model
-    import time
+    from kreview.eval_engine import evaluate_feature, cpu_models
     import glob
     import json
 
@@ -408,7 +543,7 @@ def run(
             "Use --top-percentile instead. Ignoring --top-n in favor of --top-percentile."
         )
 
-    _echo(f"=== kreview run (verbose={verbose}, workers={workers}) ===")
+    _echo("=== kreview run ===")
     _echo("Configuration:")
     _echo(f"  --cancer-samplesheet : {cancer_samplesheet}")
     _echo(f"  --healthy-xs1       : {healthy_xs1_samplesheet}")
@@ -420,7 +555,6 @@ def run(
     _echo(f"  --min-variants      : {min_variants}")
     _echo(f"  --features          : {features or 'ALL'}")
     _echo(f"  --tier              : {tier or 'ALL'}")
-    _echo(f"  --workers           : {workers}")
     _echo(f"  --cv-folds          : {cv_folds}")
     _echo(f"  --top-percentile    : {top_percentile}")
     _echo(f"  --impute-strategy   : {impute_strategy}")
@@ -432,8 +566,47 @@ def run(
     _echo(f"  --export-duckdb     : {export_duckdb}")
     _echo(f"  --resume            : {resume}")
     _echo(f"  --compute-univariate-auc : {compute_univariate_auc}")
-    _echo(f"  --verbose           : {verbose}")
+    _echo(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}")
+    _echo(f"  --gpu-models        : {gpu_models_flag or 'disabled (CPU only)'}")
+    if gpu_models_flag:
+        _echo(f"  --device            : {device}")
+        _echo(f"  --finetune          : {not no_finetune}")
+        _echo(f"  --finetune-epochs   : {finetune_epochs}")
     _echo("")
+
+    # ── Parse GPU models ──
+    gpu_model_list = (
+        [m.strip() for m in gpu_models_flag.split(",") if m.strip()]
+        if gpu_models_flag
+        else []
+    )
+    # All requested models (CPU + GPU) for resume checking
+    cpu_model_names = {"lr", "rf", "xgb"}
+    all_requested_models = cpu_model_names | set(gpu_model_list)
+    if gpu_model_list:
+        _echo(f"  GPU models requested: {gpu_model_list}")
+        log.info(
+            "gpu_models_requested",
+            models=gpu_model_list,
+            device=device,
+            finetune=not no_finetune,
+        )
+
+    # ── Validate --chunk-size ──
+    # 'auto' passes through to iter_feature_chunks which probes row density.
+    # An integer string is converted; anything else is rejected early.
+    effective_chunk: int | str = chunk_size
+    if chunk_size != "auto":
+        try:
+            effective_chunk = int(chunk_size)
+            if effective_chunk < 1:
+                raise ValueError("chunk_size must be positive")
+        except ValueError:
+            _echo(
+                f"ERROR: --chunk-size must be 'auto' or a positive integer, "
+                f"got '{chunk_size}'"
+            )
+            raise typer.Exit(code=1)
 
     # ── Step 1: Labels ──
     _echo("Step 1: Generating Labels...")
@@ -445,8 +618,13 @@ def run(
         str(cbioportal_dir),
         list(krewlyzer_dir),
     )
+    # LabelConfig uses a fixed chunk_size — metadata is always ~1 row/sample.
     config = LabelConfig(
-        min_vaf=min_vaf, min_variants=min_variants, chunk_size=chunk_size
+        min_vaf=min_vaf,
+        min_fragments=min_fragments,
+        min_variants=min_variants,
+        chunk_size=15_000,
+        ch_hotspot_maf=ch_hotspot_maf,
     )
     labeler = CtDNALabeler(paths, config)
     labels_df = labeler.label_all()
@@ -478,373 +656,358 @@ def run(
         _echo(f"\n{'='*60}")
         _echo(f"Processing evaluator: {e.name}")
 
-        # ── Resume checkpoint: skip if model results already exist ──
-        # GAP-4: Also check that the JSON contains OOF predictions (added in
-        # v0.8.4). JSONs from older runs lack oof_labels and will produce
-        # legacy (leaky) ROC plots. Warn but still skip to avoid re-running
-        # expensive evaluations — user can delete the JSON to force recompute.
+        # ── Resume checkpoint: model-aware skip logic ──
+        # Checks which specific models (auc_lr, auc_rf, auc_tabpfn, etc.) are
+        # already computed. Only skips the evaluator entirely when ALL requested
+        # models have results. Otherwise, tracks which models need to run.
+        existing_results = (
+            {}
+        )  # loaded JSON for merge (populated if resume + file exists)
+        models_to_skip = set()  # model names that already have AUC results
         if resume:
             checkpoint = out_path / f"{e.name}_model_results.json"
             if checkpoint.exists():
                 try:
-                    import json as _json
-
                     with open(checkpoint) as _f:
-                        _chk = _json.load(_f)
-                    if "oof_labels" not in _chk:
+                        existing_results = json.load(_f)
+                    models_to_skip = {
+                        k.replace("auc_", "")
+                        for k in existing_results
+                        if k.startswith("auc_")
+                        and isinstance(existing_results[k], (int, float))
+                    }
+                    remaining = all_requested_models - models_to_skip
+                    if not remaining:
                         _echo(
-                            f"  SKIP (--resume): {checkpoint.name} exists but MISSING oof_labels. "
-                            f"Delete this file and re-run to get OOF-based ROC plots."
+                            f"  SKIP (--resume): {checkpoint.name} — all "
+                            f"{len(models_to_skip)} models computed: {sorted(models_to_skip)}"
                         )
-                    elif "selection_qc" not in _chk:
-                        _echo(
-                            f"  SKIP (--resume): {checkpoint.name} uses legacy Cohen's D selection. "
-                            f"Delete to re-run with hybrid union feature selection."
-                        )
-                    else:
-                        _echo(f"  SKIP (--resume): {checkpoint.name} already exists")
-                except Exception:
+                        continue
                     _echo(
-                        f"  SKIP (--resume): {checkpoint.name} exists (could not verify contents)"
+                        f"  RESUME: {e.name} — existing: {sorted(models_to_skip)}, "
+                        f"remaining: {sorted(remaining)}"
                     )
-                continue
-
-        # ── Step 3: Load + Shard + Extract ──
-        _echo(f"Step 3: Loading & extracting '{e.name}'...")
-        t1 = time.time()
-        _echo(f"  Loading cohort from DuckDB (chunk_size={chunk_size})...")
-        df_full = load_feature_cohort(
-            str(e.source_file),
-            paths.krewlyzer_dirs,
-            set(all_sample_ids),
-            chunk_size=chunk_size,
-        )
-
-        if df_full.empty:
-            _echo(f"  WARNING: No data found for {e.name}, skipping")
-            continue
-
-        sid_col = "sample_id" if "sample_id" in df_full.columns else "SAMPLE_ID"
-        n_samples = df_full[sid_col].nunique()
-        _echo(
-            f"  Loaded: {n_samples} samples, {len(df_full)} rows in {time.time()-t1:.1f}s"
-        )
-
-        # Shard by sample_id
-        unique_ids = df_full[sid_col].unique()
-        n_chunks = min(workers * 2, len(unique_ids))
-        id_chunks = np.array_split(unique_ids, n_chunks)
-        df_chunks = [df_full[df_full[sid_col].isin(set(chunk))] for chunk in id_chunks]
-        _echo(f"  Sharded into {len(df_chunks)} chunks")
-
-        t2 = time.time()
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            future_map = {}
-            for ci, chunk_df in enumerate(df_chunks):
-                fut = pool.submit(_extract_from_dataframe, e.name, chunk_df, verbose)
-                future_map[fut] = ci
-
-            _echo(f"  Submitted {len(future_map)} tasks to {workers} workers")
-
-            partial_results = []
-            failed_samples = []
-            completed = 0
-            for fut in concurrent.futures.as_completed(future_map):
-                chunk_idx = future_map[fut]
-                completed += 1
-                try:
-                    e_name, success, data = fut.result()
-                    if success and not data.empty:
-                        partial_results.append(data)
-                        _echo(
-                            f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: OK ({len(data)} rows)"
-                        )
-                    elif success:
-                        _echo(
-                            f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: OK (empty)"
-                        )
-                    else:
-                        _echo(
-                            f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: FAILED - {data}"
-                        )
-                        failed_chunk = id_chunks[chunk_idx]
-                        failed_samples.extend(list(failed_chunk))
+                    log.info(
+                        "resume_partial",
+                        evaluator=e.name,
+                        existing=sorted(models_to_skip),
+                        remaining=sorted(remaining),
+                    )
                 except Exception as exc:
-                    _echo(
-                        f"  [{completed}/{len(future_map)}] chunk {chunk_idx}: EXCEPTION - {exc}"
+                    log.warning(
+                        "resume_checkpoint_read_failed",
+                        evaluator=e.name,
+                        error=str(exc),
                     )
-                    failed_chunk = id_chunks[chunk_idx]
-                    failed_samples.extend(list(failed_chunk))
+                    _echo(
+                        f"  WARNING: Could not read {checkpoint.name}: {exc}. "
+                        f"Re-running all models."
+                    )
 
-        extract_sec = time.time() - t2
-        if failed_samples:
-            failed_path = out_path / f"{e.name}_failed_samples.csv"
-            pd.DataFrame({"SAMPLE_ID": failed_samples}).to_csv(failed_path, index=False)
-            _echo(
-                f"  WARNING: {len(failed_samples)} samples failed extraction. Saved to {failed_path.name}"
-            )
-        _echo(f"  Extraction complete in {extract_sec:.1f}s")
-
-        if not partial_results:
-            _echo(f"  WARNING: No results for {e.name}, skipping")
-            continue
-
-        feat_matrix = pd.concat(partial_results, ignore_index=True)
-        merged = pd.merge(labels_df, feat_matrix, on="SAMPLE_ID", how="inner")
-        out_p = out_path / f"{e.name}_matrix.parquet"
-        merged.to_parquet(out_p, index=False)
-        _echo(
-            f"  Matrix: {merged.shape[0]} samples x {merged.shape[1]} cols -> {out_p}"
+        # ── Step 3: Extract features ──
+        # Delegates to _extract_evaluator() which handles both SQL pushdown
+        # (Path A) and chunked Python streaming (Path B).
+        merged = _extract_evaluator(
+            e,
+            paths,
+            all_sample_ids,
+            effective_chunk,
+            out_path,
+            labels_df,
+            _echo=_echo,
         )
+        if merged is None:
+            continue
 
         # ── Step 4: Statistical Evaluation ──
         _echo(f"Step 4: Running statistical evaluation for '{e.name}'...")
         t3 = time.time()
 
-        # Identify numeric feature columns (exclude label/metadata cols)
-        meta_cols = set(labels_df.columns) | {"SAMPLE_ID", "sample_id", "filename"}
+        # Identify numeric feature columns (exclude label/metadata cols).
+        # Uses the canonical LABEL_META_COLS set from core — single source of truth.
+        from kreview.core import LABEL_META_COLS
+        from kreview.selection import (
+            score_features,
+            select_features,
+            build_binary_target,
+        )
+
         numeric_cols = [
             c
             for c in merged.select_dtypes(include=np.number).columns
-            if c not in meta_cols
+            if c not in LABEL_META_COLS
         ]
         _echo(f"  Found {len(numeric_cols)} numeric feature columns")
 
-        eval_results = []
-        for col in numeric_cols:
-            res = evaluate_feature(
-                merged[col],
-                merged["label"],
-                total_fragments=merged.get("n_total_somatic_snvs"),
-                max_vaf=merged.get("max_vaf"),
+        # ── Score all features (univariate AUC + MI + KW/Cohen's d) ──
+        try:
+            eval_df = score_features(
+                merged,
+                cv_folds=cv_folds,
+                compute_auc=compute_univariate_auc,
             )
-            res["feature_column"] = col
-            eval_results.append(res)
-
-        eval_df = pd.DataFrame(eval_results)
-
-        # ── Feature Scoring: Univariate AUC + Mutual Information ──
-        # Build binary target once for both scoring methods.
-        # This target matches the downstream model target (positives vs negatives).
-        _model_mask = merged["label"].isin(
-            [
-                "True ctDNA+",
-                "Possible ctDNA+",
-                "Healthy Normal",
-                "Possible ctDNA-",
-                "Possible ctDNA\u2212",
-            ]
-        )
-        _m_df = merged[_model_mask]
-        _y_scoring = (
-            _m_df["label"].isin(["True ctDNA+", "Possible ctDNA+"]).astype(int).values
-        )
-
-        if compute_univariate_auc:
-            from kreview.eval_engine import univariate_auc as _uauc
-
-            _echo(f"  Computing univariate AUC for {len(numeric_cols)} features...")
-            uauc_scores = []
-            for col in numeric_cols:
-                auc_val = _uauc(_m_df[col], _y_scoring, n_folds=cv_folds)
-                uauc_scores.append(auc_val)
-            eval_df["univariate_auc"] = uauc_scores
-        else:
-            _echo(
-                "  WARNING: Univariate AUC disabled (--no-compute-univariate-auc). "
-                "Feature selection will use mutual information only."
-            )
-            log.warning(
-                "univariate_auc_disabled",
-                evaluator=e.name,
-                impact="selection_mi_only",
-            )
-
-        # Always compute mutual information (fast, no CV needed)
-        from kreview.eval_engine import mutual_info_score as _mi_score
-
-        _echo(f"  Computing mutual information for {len(numeric_cols)} features...")
-        mi_scores = []
-        for col in numeric_cols:
-            mi_val = _mi_score(_m_df[col], _y_scoring)
-            mi_scores.append(mi_val)
-        eval_df["mutual_info"] = mi_scores
-
-        log.info(
-            "feature_scoring_complete",
-            evaluator=e.name,
-            n_features=len(numeric_cols),
-            n_auc_above_055=(
-                int((eval_df["univariate_auc"] > 0.55).sum())
-                if "univariate_auc" in eval_df.columns
-                else 0
-            ),
-            n_mi_above_zero=int((eval_df["mutual_info"] > 0.0).sum()),
-        )
+        except ValueError as exc:
+            _echo(f"  SKIP scoring for {e.name}: {exc}")
+            log.warning("score_features_skip", evaluator=e.name, reason=str(exc))
+            continue
 
         eval_out = out_path / f"{e.name}_eval_stats.parquet"
         eval_df.to_parquet(eval_out, index=False)
         _echo(f"  Eval stats: {eval_df.shape[0]} features -> {eval_out}")
 
-        # Reuse the scoring target for modeling (same 4-tier label mask).
-        # .copy() ensures downstream mutations don't affect the scoring DataFrame.
-        model_df = _m_df.copy()
-        y = _y_scoring
-        if len(model_df) >= 20 and len(np.unique(y)) == 2:
-            # ── Hybrid Union Feature Selection ──
-            # Select top X% by Univariate AUC ∪ top X% by Mutual Information.
-            # This captures both linear (AUC) and non-linear (MI) predictors,
-            # ensuring the downstream models receive a diverse, high-quality
-            # feature set regardless of evaluator dimensionality.
-            n_keep = max(1, int(len(numeric_cols) * (top_percentile / 100.0)))
-
-            top_by_auc = set()
-            top_by_mi = set()
-
-            if "univariate_auc" in eval_df.columns:
-                top_by_auc = set(
-                    eval_df.nlargest(n_keep, "univariate_auc")["feature_column"]
-                )
-            if "mutual_info" in eval_df.columns:
-                top_by_mi = set(
-                    eval_df.nlargest(n_keep, "mutual_info")["feature_column"]
-                )
-
-            # Union: keep features that are strong in either metric
-            union_feats = list(top_by_auc | top_by_mi)
-
-            # Fallback: if both metrics are empty, take first n_keep features
-            if not union_feats:
-                log.warning(
-                    "selection_fallback",
-                    evaluator=e.name,
-                    reason="no_scored_features",
-                )
-                union_feats = numeric_cols[:n_keep]
-
-            top_feats = union_feats
-
-            # Build selection QC metadata for JSON output and reports
-            selection_qc = {
-                "method": "hybrid_union",
-                "total_input_features": len(numeric_cols),
-                "target_percentile": top_percentile,
-                "n_keep_per_metric": n_keep,
-                "n_selected_union": len(top_feats),
-                "n_overlap_both": len(top_by_auc & top_by_mi),
-                "n_auc_only": len(top_by_auc - top_by_mi),
-                "n_mi_only": len(top_by_mi - top_by_auc),
-            }
-
-            log.info(
-                "feature_selection_complete",
-                evaluator=e.name,
-                **selection_qc,
+        # ── Feature selection (hybrid union: top N% AUC ∪ top N% MI) ──
+        try:
+            selected_df, selection_qc = select_features(
+                merged,
+                eval_df,
+                top_percentile=top_percentile,
+                impute_strategy=impute_strategy,
             )
-            _echo(
-                f"  Feature Selection (top {top_percentile}%): "
-                f"{len(top_feats)}/{len(numeric_cols)} features "
-                f"(AUC∩MI={selection_qc['n_overlap_both']}, "
-                f"AUC-only={selection_qc['n_auc_only']}, "
-                f"MI-only={selection_qc['n_mi_only']})"
-            )
+        except ValueError as exc:
+            _echo(f"  SKIP selection for {e.name}: {exc}")
+            log.warning("select_features_skip", evaluator=e.name, reason=str(exc))
+            continue
 
-            if top_feats:
-                # Variance guard: drop features that are constant across all model samples.
-                # Constant features produce AUC=0.500 and waste compute.
-                X_imputed = _impute(model_df[top_feats], impute_strategy)
-                nonconst = [c for c in top_feats if X_imputed[c].std() > 0]
-                n_dropped = len(top_feats) - len(nonconst)
-                if n_dropped > 0:
-                    _echo(
-                        f"  WARNING: Dropped {n_dropped} constant features (zero variance)"
-                    )
-                    log.info(
-                        "variance_guard_dropped",
-                        evaluator=e.name,
-                        n_dropped=n_dropped,
-                        n_remaining=len(nonconst),
-                    )
-                    top_feats = nonconst
+        # Save selected matrix — overwrites the full matrix from extract
+        # so downstream report/DuckDB export use the reduced feature set.
+        matrix_out = out_path / f"{e.name}_matrix.parquet"
+        selected_df.to_parquet(matrix_out, index=False)
+        _echo(f"  Selected matrix: {selected_df.shape[1]} cols -> {matrix_out}")
 
-                if not top_feats:
-                    _echo(
-                        f"  WARNING: All features are constant for {e.name}, skipping model"
-                    )
-                    continue
+        # Save selection QC
+        qc_out = out_path / f"{e.name}_selection_qc.json"
+        with open(qc_out, "w") as _f:
+            json.dump(selection_qc, _f, indent=2, default=str)
 
-                import warnings
+        # Determine selected feature columns from the result
+        top_feats = [c for c in selected_df.columns if c not in LABEL_META_COLS]
+        _echo(
+            f"  Feature Selection (top {top_percentile}%): "
+            f"{len(top_feats)}/{len(numeric_cols)} features "
+            f"(AUC\u2229MI={selection_qc.get('n_overlap_both', 0)}, "
+            f"AUC-only={selection_qc.get('n_auc_only', 0)}, "
+            f"MI-only={selection_qc.get('n_mi_only', 0)})"
+        )
 
-                warnings.filterwarnings("ignore", message=".*use_label_encoder.*")
+        # ── Prepare model inputs ──
+        # Build binary target from the selected matrix using the shared function.
+        try:
+            model_df, y = build_binary_target(selected_df)
+        except ValueError as exc:
+            _echo(f"  SKIP model for {e.name}: {exc}")
+            log.warning("build_target_skip", evaluator=e.name, reason=str(exc))
+            continue
 
-                _echo(f"  Imputation: {impute_strategy}")
+        import warnings
 
-                # Reuse cached imputed data (re-slice if variance guard dropped columns)
-                X = X_imputed[top_feats].values
-                c_types = model_df.get("CANCER_TYPE", None)
-                if c_types is not None:
-                    c_types = c_types.values
-                a_types = model_df.get("access_version", None)
-                if a_types is not None:
-                    a_types = a_types.values
+        warnings.filterwarnings("ignore", message=".*use_label_encoder.*")
 
-                model_res, lr_model, rf_model, xgb_model = single_feature_model(
-                    X,
-                    y,
-                    feature_names=top_feats,
-                    cancer_types=c_types,
-                    assays=a_types,
-                    n_folds=cv_folds,
-                )
-                model_out = out_path / f"{e.name}_model_results.json"
+        _echo(f"  Imputation: {impute_strategy}")
 
-                if "error" not in model_res:
-                    model_res["top_features"] = top_feats
-                    model_res["selection_qc"] = selection_qc
+        X = _impute(model_df[top_feats], impute_strategy).values
+        c_types = model_df.get("CANCER_TYPE", None)
+        if c_types is not None:
+            c_types = c_types.values
+        a_types = model_df.get("access_version", None)
+        if a_types is not None:
+            a_types = a_types.values
 
-                import joblib
+        def _fmt(v):
+            return "N/A" if v is None else f"{v:.3f}"
 
-                # Save models for downstream SHAP / Dashboards
-                if lr_model is not None:
-                    joblib_out = out_path / f"{e.name}_lr_model.joblib"
-                    joblib.dump(lr_model, joblib_out)
-                if rf_model is not None:
-                    joblib_out = out_path / f"{e.name}_rf_model.joblib"
-                    joblib.dump(rf_model, joblib_out)
-                if xgb_model is not None:
-                    joblib_out = out_path / f"{e.name}_xgb_model.joblib"
-                    joblib.dump(xgb_model, joblib_out)
+        model_out = out_path / f"{e.name}_model_results.json"
 
-                with open(model_out, "w") as f:
-                    json.dump(model_res, f, indent=2, default=str)
-
-                def _fmt(v):
-                    return "N/A" if v is None else f"{v:.3f}"
-
-                _echo(
-                    f"  Model: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
-                    f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
-                    f"AUC_XGB={_fmt(model_res.get('auc_xgb'))} -> {model_out}"
-                )
-
+        # ── CPU models (lr, rf, xgb) ──
+        skip_cpu = cpu_model_names.issubset(models_to_skip)
+        if skip_cpu:
+            _echo("  CPU models: SKIP (--resume, already computed)")
+            model_res = existing_results  # use cached results
+            lr_model, rf_model, xgb_model = None, None, None
         else:
-            n_classes = len(np.unique(y)) if len(y) > 0 else 0
+            model_res, lr_model, rf_model, xgb_model = cpu_models(
+                X,
+                y,
+                feature_names=top_feats,
+                cancer_types=c_types,
+                assays=a_types,
+                n_folds=cv_folds,
+            )
             _echo(
-                f"  SKIP model: {e.name} — insufficient data "
-                f"(n_samples={len(model_df)}, n_classes={n_classes}, "
-                f"need ≥20 samples and 2 classes)"
+                f"  CPU: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
+                f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
+                f"AUC_XGB={_fmt(model_res.get('auc_xgb'))}"
             )
-            log.warning(
-                "model_skip_insufficient_data",
-                evaluator=e.name,
-                n_samples=len(model_df),
-                n_classes=n_classes,
-            )
+
+        # ── GPU models (tabpfn, tabicl) ──
+        if gpu_model_list:
+            gpu_remaining = [m for m in gpu_model_list if m not in models_to_skip]
+            if not gpu_remaining:
+                _echo("  GPU models: SKIP (--resume, already computed)")
+            else:
+                _echo(
+                    f"  Running GPU models: {gpu_remaining} "
+                    f"(device={device}, finetune={not no_finetune})"
+                )
+                try:
+                    from kreview.eval_engine import gpu_models
+
+                    gpu_res, _ = gpu_models(
+                        X,
+                        y,
+                        feature_names=top_feats,
+                        cancer_types=c_types,
+                        assays=a_types,
+                        n_folds=cv_folds,
+                        models=tuple(gpu_remaining),
+                        device=device,
+                        finetune=not no_finetune,
+                        finetune_epochs=finetune_epochs,
+                        compute_shap=False,
+                    )
+                    model_res.update(gpu_res)
+                    for mn in gpu_remaining:
+                        _echo(f"  GPU/{mn}: AUC={_fmt(model_res.get(f'auc_{mn}'))}")
+                    log.info(
+                        "gpu_models_complete",
+                        evaluator=e.name,
+                        models=gpu_remaining,
+                        aucs={mn: model_res.get(f"auc_{mn}") for mn in gpu_remaining},
+                    )
+                except ImportError as exc:
+                    log.error(
+                        "gpu_import_failed",
+                        evaluator=e.name,
+                        error=str(exc),
+                        hint="pip install kreview[gpu]",
+                    )
+                    _echo(
+                        f"  ERROR: GPU dependencies not available: {exc}. Install with: pip install kreview[gpu]"
+                    )
+                except Exception as exc:
+                    log.error("gpu_models_failed", evaluator=e.name, error=str(exc))
+                    _echo(f"  ERROR: GPU models failed: {exc}")
+
+        # ── Enrich results + save ──
+        if "error" not in model_res:
+            model_res["evaluator"] = e.name
+            model_res["top_features"] = top_feats
+            model_res["selection_qc"] = selection_qc
+            if "sample_id" in model_df.columns:
+                model_res["oof_sample_ids"] = model_df["sample_id"].tolist()
+            elif "SAMPLE_ID" in model_df.columns:
+                model_res["oof_sample_ids"] = model_df["SAMPLE_ID"].tolist()
+            all_aucs = {
+                k: v
+                for k, v in model_res.items()
+                if k.startswith("auc_")
+                and isinstance(v, (int, float))
+                and not k.endswith("_ci_lower")
+                and not k.endswith("_ci_upper")
+            }
+            if all_aucs:
+                model_res["best_model"] = max(all_aucs, key=all_aucs.get)
+                model_res["best_auc"] = all_aucs[model_res["best_model"]]
+
+        if existing_results and existing_results is not model_res:
+            existing_results.update(model_res)
+            model_res = existing_results
+
+        import joblib
+
+        if lr_model is not None:
+            joblib.dump(lr_model, out_path / f"{e.name}_lr_model.joblib")
+        if rf_model is not None:
+            joblib.dump(rf_model, out_path / f"{e.name}_rf_model.joblib")
+        if xgb_model is not None:
+            joblib.dump(xgb_model, out_path / f"{e.name}_xgb_model.joblib")
+
+        with open(model_out, "w") as f:
+            json.dump(model_res, f, indent=2, default=str)
+
+        _echo(f"  Output: {model_out}")
 
         eval_sec = time.time() - t3
         _echo(f"  Evaluation complete in {eval_sec:.1f}s")
 
-    # ── Step 4b: Build Cross-Evaluator Scoreboard ──
+    # ── Step 4a: Fuse per-evaluator matrices into super-matrix ──
+    _echo("\nStep 4a: Fusing per-evaluator matrices...")
+    super_matrix_path = None
+    try:
+        from kreview.core import fuse_matrices
+
+        fused_df = fuse_matrices(out_path)
+        if fused_df.empty:
+            _echo("  SKIP fuse: no matrices found or all samples filtered.")
+            log.warning("fuse_skip_empty", output_dir=str(out_path))
+        else:
+            super_matrix_path = out_path / "super_matrix.parquet"
+            n_features = len([c for c in fused_df.columns if "__" in c])
+            _echo(
+                f"  Fused: {len(fused_df)} samples x {n_features} features "
+                f"-> {super_matrix_path}"
+            )
+            log.info(
+                "fuse_complete",
+                n_samples=len(fused_df),
+                n_features=n_features,
+                output=str(super_matrix_path),
+            )
+    except Exception as exc:
+        _echo(f"  ERROR: Fuse failed: {exc}")
+        log.error("fuse_failed", error=str(exc))
+
+    # ── Step 4b: Cross-evaluator multimodal evaluation ──
+    multimodal_out = out_path / "multimodal_results.json"
+    if super_matrix_path is not None and super_matrix_path.exists():
+        _echo("\nStep 4b: Running multimodal evaluation (stacking + ablation)...")
+        try:
+            from kreview.eval_engine import multimodal_eval
+
+            mm_results = multimodal_eval(
+                results_dir=out_path,
+                super_matrix_path=super_matrix_path,
+                n_folds=cv_folds,
+            )
+            with open(multimodal_out, "w") as f:
+                json.dump(mm_results, f, indent=2, default=str)
+
+            # Display summary
+            best_single = mm_results.get("best_single_evaluator", "?")
+            best_single_auc = mm_results.get("best_single_auc", 0)
+            _echo(f"  Best single evaluator: {best_single} (AUC={best_single_auc:.3f})")
+
+            stacking = mm_results.get("stacking", {})
+            for k, v in sorted(stacking.items()):
+                if k.startswith("auc_stacking_") and not k.endswith(
+                    ("_ci_lower", "_ci_upper")
+                ):
+                    mn = k.replace("auc_stacking_", "")
+                    _echo(f"  Stacking/{mn}: AUC={v:.3f}")
+
+            _echo(f"  Output: {multimodal_out}")
+            log.info(
+                "multimodal_complete",
+                best_single=best_single,
+                best_single_auc=best_single_auc,
+                n_evaluators=mm_results.get("n_evaluators", 0),
+            )
+        except Exception as exc:
+            _echo(f"  ERROR: Multimodal evaluation failed: {exc}")
+            log.error("multimodal_failed", error=str(exc))
+    else:
+        _echo("\nStep 4b: SKIP multimodal — no super-matrix available.")
+        log.info("multimodal_skip", reason="no super-matrix")
+    # ── Step 4c: Build Cross-Evaluator Scoreboard ──
+    # Check if any evaluators produced model results
+    model_jsons = list(out_path.glob("*_model_results.json"))
+    if not model_jsons:
+        _echo(
+            "\n  WARNING: No evaluators produced model results — skipping scoreboard and reports."
+        )
+        log.warning("no_evaluator_results", output_dir=str(out_path))
+    else:
+        _echo(f"\n  {len(model_jsons)} evaluator(s) produced model results.")
+
     from kreview.scoreboard import build_scoreboard
 
     sb = build_scoreboard(out_path)
@@ -906,6 +1069,7 @@ def run(
             con.close()
             _echo(f"  DuckLake saved securely directly to: {db_path}")
         except Exception as e:
+            log.error("ducklake_export_failed", error=str(e), db_path=str(db_path))
             _echo(f"  DuckLake creation failed: {e}")
 
     total_sec = time.time() - t0
@@ -934,6 +1098,11 @@ def report(
         "--shap-features",
         help="Max features to visualize in SHAP plots.",
     ),
+    multimodal: bool = typer.Option(
+        False,
+        "--multimodal",
+        help="Render the multimodal dashboard for stacking model results.",
+    ),
 ):
     """Re-generate HTML Dashboards from existing matrix parquet files.
 
@@ -957,6 +1126,7 @@ def report(
     print(f"  --cvd-safe      : {cvd_safe}", flush=True)
     print(f"  --shap-samples  : {shap_samples}", flush=True)
     print(f"  --shap-features : {shap_features}", flush=True)
+    print(f"  --multimodal    : {multimodal}", flush=True)
     print("", flush=True)
 
     in_path = Path(input_dir).absolute()
@@ -983,13 +1153,14 @@ def report(
         # S-01: Per-evaluator try/except — one failure does not block others
         try:
             ok, msg = _render_quarto_report(
-                p,
+                str(p),
                 feat_name,
                 out_path,
                 sys.executable,
                 cvd_safe=cvd_safe,
                 shap_samples=shap_samples,
                 shap_features=shap_features,
+                multimodal=multimodal,
             )
             elapsed = _time.perf_counter() - t_start
             if ok:
@@ -1041,3 +1212,228 @@ def report(
         total=total,
         failed_evaluators=failed_names,
     )
+
+
+# %% ../nbs/90_cli.ipynb #extract_cmd
+@app.command()
+def extract(
+    cancer_samplesheet: Path = typer.Option(..., help="Cancer samplesheet CSV"),
+    healthy_xs1_samplesheet: Path = typer.Option(
+        ..., help="Healthy XS1 samplesheet CSV"
+    ),
+    healthy_xs2_samplesheet: Path = typer.Option(
+        ..., help="Healthy XS2 samplesheet CSV"
+    ),
+    cbioportal_dir: Path = typer.Option(..., help="Directory with cBioPortal files"),
+    krewlyzer_dir: list[str] = typer.Option(..., help="krewlyzer output directory"),
+    output: Path = typer.Option("output/", help="Output directory for matrices"),
+    min_vaf: float = typer.Option(
+        0.01, help="Min VAF for Possible ctDNA+ (default 1%)"
+    ),
+    min_fragments: int = typer.Option(
+        2000, help="Min fragments PF for Depth QC (samples below are Insufficient Data)"
+    ),
+    min_variants: int = typer.Option(
+        1, help="Min # variants passing VAF for Possible ctDNA+"
+    ),
+    ch_hotspot_maf: Path = typer.Option(
+        None,
+        help="Optional TSV of CH hotspot variants for CH-only demotion.",
+    ),
+    features: Optional[str] = typer.Option(
+        None, help="Comma-separated evaluator names (default: all)"
+    ),
+    tier: Optional[int] = typer.Option(None, help="Run only this tier"),
+    chunk_size: str = typer.Option(
+        "auto",
+        "--chunk-size",
+        help=(
+            "Samples per DuckDB read batch. 'auto' (default) probes parquet "
+            "row density at runtime, or pass an integer to override "
+            "(e.g. --chunk-size 200)."
+        ),
+    ),
+):
+    """Label samples and extract feature matrices (no eval/model/report).
+
+    Runs the labeling pipeline, then extracts features for each matched
+    evaluator into ``*_matrix.parquet`` files. This is the first half of
+    ``kreview run``, designed for parallelized Nextflow execution.
+    """
+    from kreview.core import Paths, LabelConfig
+    from kreview.labels import CtDNALabeler
+    from kreview.registry import get_all_evaluators
+
+    print("=== kreview extract ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --cancer-samplesheet : {cancer_samplesheet}", flush=True)
+    print(f"  --healthy-xs1       : {healthy_xs1_samplesheet}", flush=True)
+    print(f"  --healthy-xs2       : {healthy_xs2_samplesheet}", flush=True)
+    print(f"  --cbioportal-dir    : {cbioportal_dir}", flush=True)
+    print(f"  --krewlyzer-dir     : {krewlyzer_dir}", flush=True)
+    print(f"  --output            : {output}", flush=True)
+    print(f"  --features          : {features or 'all'}", flush=True)
+    print(f"  --tier              : {tier or 'all'}", flush=True)
+    print(f"  --chunk-size        : {chunk_size}", flush=True)
+    print(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}", flush=True)
+    print("", flush=True)
+
+    t0 = time.time()
+
+    # ── Step 1: Label ──
+    print("Step 1: Labeling...", flush=True)
+    paths = Paths(
+        str(cancer_samplesheet),
+        str(healthy_xs1_samplesheet),
+        str(healthy_xs2_samplesheet),
+        str(cbioportal_dir),
+        krewlyzer_dir,
+    )
+    config = LabelConfig(
+        min_vaf=min_vaf,
+        min_fragments=min_fragments,
+        min_variants=min_variants,
+        chunk_size=15_000,
+        ch_hotspot_maf=ch_hotspot_maf,
+    )
+    labeler = CtDNALabeler(paths, config)
+    labels_df = labeler.label_all()
+    print(f"  Labels: {len(labels_df)} samples in {time.time()-t0:.1f}s", flush=True)
+    print(
+        f"  Distribution:\n{labels_df['label'].value_counts().to_string()}", flush=True
+    )
+
+    # ── Step 2: Resolve evaluators ──
+    print("Step 2: Resolving Feature Evaluators...", flush=True)
+    all_evals = get_all_evaluators()
+    target_evals = []
+    feat_filter = features.split(",") if features else []
+    for e in all_evals:
+        if tier is not None and getattr(e, "tier", -1) != tier:
+            continue
+        if feat_filter and getattr(e, "name", "") not in feat_filter:
+            continue
+        target_evals.append(e)
+
+    if not target_evals:
+        print(
+            f"ERROR: No evaluators matched. Available: {[e.name for e in all_evals]}",
+            flush=True,
+        )
+        raise typer.Exit(code=1)
+    print(f"  Matched: {[e.name for e in target_evals]}", flush=True)
+
+    out_path = Path(output)
+    out_path.mkdir(parents=True, exist_ok=True)
+    all_sample_ids = list(labels_df["SAMPLE_ID"].unique())
+
+    # Parse chunk_size: 'auto' passes through to iter_feature_chunks,
+    # integer string is converted, anything else is rejected.
+    effective_chunk: int | str = chunk_size
+    if chunk_size != "auto":
+        try:
+            effective_chunk = int(chunk_size)
+            if effective_chunk < 1:
+                raise ValueError("chunk_size must be positive")
+        except ValueError:
+            print(
+                f"ERROR: --chunk-size must be 'auto' or a positive integer, "
+                f"got '{chunk_size}'",
+                flush=True,
+            )
+            raise typer.Exit(code=1)
+    print(f"  Effective chunk size: {effective_chunk}", flush=True)
+
+    # ── Step 3: Extract each evaluator ──
+    extracted = 0
+    for e in target_evals:
+        print(f"\n{'='*60}", flush=True)
+        print(f"Extracting evaluator: {e.name}", flush=True)
+
+        merged = _extract_evaluator(
+            e,
+            paths,
+            all_sample_ids,
+            effective_chunk,
+            out_path,
+            labels_df,
+        )
+        if merged is not None:
+            extracted += 1
+
+    elapsed = time.time() - t0
+    print(
+        f"\n=== Extract complete: {extracted}/{len(target_evals)} evaluators "
+        f"in {elapsed:.1f}s ===",
+        flush=True,
+    )
+    log.info(
+        "extract_complete",
+        n_extracted=extracted,
+        n_total=len(target_evals),
+        elapsed_sec=round(elapsed, 1),
+    )
+
+
+# %% ../nbs/90_cli.ipynb #fuse_cmd
+@app.command()
+def fuse(
+    output_dir: Path = typer.Option(
+        ..., "--output-dir", help="Directory containing *_matrix.parquet files"
+    ),
+    min_evaluators: int = typer.Option(
+        1,
+        "--min-evaluators",
+        help="Minimum number of evaluators a sample must appear in to be retained",
+    ),
+    output_name: str = typer.Option(
+        "super_matrix.parquet",
+        "--output-name",
+        help="Filename for the fused super-matrix (written to --output-dir)",
+    ),
+):
+    """Fuse per-evaluator matrices into a single super-matrix.
+
+    Discovers all ``*_matrix.parquet`` files in ``--output-dir``, extracts
+    their feature columns (prefixed with evaluator name), outer-joins on
+    SAMPLE_ID, and writes ``super_matrix.parquet`` for downstream multimodal
+    evaluation.
+    """
+    import time as _time
+
+    from kreview.core import fuse_matrices
+
+    print("=== kreview fuse ===", flush=True)
+    print("Configuration:", flush=True)
+    print(f"  --output-dir     : {output_dir}", flush=True)
+    print(f"  --min-evaluators : {min_evaluators}", flush=True)
+    print(f"  --output-name    : {output_name}", flush=True)
+    print("", flush=True)
+
+    if min_evaluators < 1:
+        print("ERROR: --min-evaluators must be >= 1", flush=True)
+        raise typer.Exit(code=1)
+
+    t0 = _time.time()
+    result = fuse_matrices(
+        output_dir,
+        min_evaluators=min_evaluators,
+        output_name=output_name,
+    )
+
+    if result.empty:
+        print(
+            "ERROR: No matrices found or all samples filtered. Nothing to fuse.",
+            flush=True,
+        )
+        raise typer.Exit(code=1)
+
+    n_features = len([c for c in result.columns if "__" in c])
+    elapsed = _time.time() - t0
+    print(
+        f"  Fused: {len(result)} samples x {n_features} features "
+        f"from {result.get('n_evaluators', pd.Series()).max() or '?'} evaluators "
+        f"in {elapsed:.1f}s",
+        flush=True,
+    )
+    print(f"  Output: {output_dir / output_name}", flush=True)

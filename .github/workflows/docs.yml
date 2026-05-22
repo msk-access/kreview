@@ -1,10 +1,7 @@
 name: Docs
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -15,6 +12,9 @@ permissions:
 jobs:
   docs:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,10 +32,17 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-      - name: Build and deploy versioned docs
+      - name: Deploy development docs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
         run: |
-          mike deploy --push --update-aliases dev
-          mike set-default --push dev
+          mike deploy --push --update-aliases dev develop
+
+      - name: Deploy stable docs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          VERSION=$(grep '^version =' settings.ini | cut -d '=' -f 2 | tr -d ' ')
+          mike deploy --push --update-aliases "$VERSION" stable
+          mike set-default --push stable
 
       - name: Checkout newly built gh-pages branch
         uses: actions/checkout@v4
@@ -49,4 +56,5 @@ jobs:
           path: gh-pages-export
           
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

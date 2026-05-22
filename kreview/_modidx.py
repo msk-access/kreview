@@ -10,8 +10,8 @@ d = {
     },
     "syms": {
         "kreview.cli": {
-            "kreview.cli._extract_from_dataframe": (
-                "cli.html#_extract_from_dataframe",
+            "kreview.cli._extract_evaluator": (
+                "cli.html#_extract_evaluator",
                 "kreview/cli.py",
             ),
             "kreview.cli._find_quarto": ("cli.html#_find_quarto", "kreview/cli.py"),
@@ -20,7 +20,9 @@ d = {
                 "cli.html#_render_quarto_report",
                 "kreview/cli.py",
             ),
+            "kreview.cli.extract": ("cli.html#extract", "kreview/cli.py"),
             "kreview.cli.features_list": ("cli.html#features_list", "kreview/cli.py"),
+            "kreview.cli.fuse": ("cli.html#fuse", "kreview/cli.py"),
             "kreview.cli.label": ("cli.html#label", "kreview/cli.py"),
             "kreview.cli.main": ("cli.html#main", "kreview/cli.py"),
             "kreview.cli.report": ("cli.html#report", "kreview/cli.py"),
@@ -29,6 +31,34 @@ d = {
                 "cli.html#version_callback",
                 "kreview/cli.py",
             ),
+        },
+        "kreview.cli_eval": {
+            "kreview.cli_eval._load_matrix_and_labels": (
+                "cli_eval.html#_load_matrix_and_labels",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval._save_results": (
+                "cli_eval.html#_save_results",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_cpu": (
+                "cli_eval.html#eval_cpu",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_gpu": (
+                "cli_eval.html#eval_gpu",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_multimodal": (
+                "cli_eval.html#eval_multimodal",
+                "kreview/cli_eval.py",
+            ),
+        },
+        "kreview.cli_select": {
+            "kreview.cli_select.select": (
+                "cli_select.html#select",
+                "kreview/cli_select.py",
+            )
         },
         "kreview.core": {
             "kreview.core.EvalRun": ("core.html#evalrun", "kreview/core.py"),
@@ -57,6 +87,18 @@ d = {
             "kreview.core.Paths.cna": ("core.html#paths.cna", "kreview/core.py"),
             "kreview.core.Paths.maf": ("core.html#paths.maf", "kreview/core.py"),
             "kreview.core.Paths.sv": ("core.html#paths.sv", "kreview/core.py"),
+            "kreview.core._calculate_dynamic_chunk_size": (
+                "core.html#_calculate_dynamic_chunk_size",
+                "kreview/core.py",
+            ),
+            "kreview.core._discover_feature_paths": (
+                "core.html#_discover_feature_paths",
+                "kreview/core.py",
+            ),
+            "kreview.core._read_parquet_chunk": (
+                "core.html#_read_parquet_chunk",
+                "kreview/core.py",
+            ),
             "kreview.core.clear_cbioportal_caches": (
                 "core.html#clear_cbioportal_caches",
                 "kreview/core.py",
@@ -65,12 +107,20 @@ d = {
                 "core.html#discover_available_samples",
                 "kreview/core.py",
             ),
+            "kreview.core.fuse_matrices": (
+                "core.html#fuse_matrices",
+                "kreview/core.py",
+            ),
             "kreview.core.get_duckdb_conn": (
                 "core.html#get_duckdb_conn",
                 "kreview/core.py",
             ),
             "kreview.core.get_sample_ids": (
                 "core.html#get_sample_ids",
+                "kreview/core.py",
+            ),
+            "kreview.core.iter_feature_chunks": (
+                "core.html#iter_feature_chunks",
                 "kreview/core.py",
             ),
             "kreview.core.load_clinical_patient": (
@@ -108,6 +158,10 @@ d = {
                 "core.html#make_variant_key",
                 "kreview/core.py",
             ),
+            "kreview.core.run_feature_sql": (
+                "core.html#run_feature_sql",
+                "kreview/core.py",
+            ),
         },
         "kreview.eval_engine": {
             "kreview.eval_engine.FeatureEvaluator": (
@@ -118,12 +172,96 @@ d = {
                 "eval_engine.html#featureevaluator.extract",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine.FeatureEvaluator.extract_sql": (
+                "eval_engine.html#featureevaluator.extract_sql",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.FeatureEvaluator.supports_sql": (
+                "eval_engine.html#featureevaluator.supports_sql",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._bootstrap_auc": (
+                "eval_engine.html#_bootstrap_auc",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._build_gpu_model": (
+                "eval_engine.html#_build_gpu_model",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._build_model": (
+                "eval_engine.html#_build_model",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._build_stacking_matrix": (
+                "eval_engine.html#_build_stacking_matrix",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._calibration": (
+                "eval_engine.html#_calibration",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._classification_metrics": (
+                "eval_engine.html#_classification_metrics",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._compute_shap": (
+                "eval_engine.html#_compute_shap",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._extract_importances": (
+                "eval_engine.html#_extract_importances",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._load_per_evaluator_baselines": (
+                "eval_engine.html#_load_per_evaluator_baselines",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._optimal_threshold": (
+                "eval_engine.html#_optimal_threshold",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._per_fold_auc": (
+                "eval_engine.html#_per_fold_auc",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._pr_curve": (
+                "eval_engine.html#_pr_curve",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._select_multimodal_features": (
+                "eval_engine.html#_select_multimodal_features",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._subgroup_metrics": (
+                "eval_engine.html#_subgroup_metrics",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.cpu_models": (
+                "eval_engine.html#cpu_models",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine.decision_curve_analysis": (
                 "eval_engine.html#decision_curve_analysis",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine.evaluate_feature": (
                 "eval_engine.html#evaluate_feature",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.evaluate_model": (
+                "eval_engine.html#evaluate_model",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.gpu_models": (
+                "eval_engine.html#gpu_models",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.multimodal_eval": (
+                "eval_engine.html#multimodal_eval",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.mutual_info_score": (
+                "eval_engine.html#mutual_info_score",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine.parse_array": (
@@ -152,10 +290,6 @@ d = {
             ),
             "kreview.eval_engine.set_theme": (
                 "eval_engine.html#set_theme",
-                "kreview/eval_engine.py",
-            ),
-            "kreview.eval_engine.single_feature_model": (
-                "eval_engine.html#single_feature_model",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine.univariate_auc": (
@@ -477,6 +611,10 @@ d = {
                 "labels.html#compute_sv_summary",
                 "kreview/labels.py",
             ),
+            "kreview.labels.load_ch_hotspots": (
+                "labels.html#load_ch_hotspots",
+                "kreview/labels.py",
+            ),
         },
         "kreview.registry": {
             "kreview.registry.get_all_evaluators": (
@@ -491,5 +629,23 @@ d = {
             )
         },
         "kreview.scoreboard": {},
+        "kreview.selection": {
+            "kreview.selection._impute": (
+                "selection.html#_impute",
+                "kreview/selection.py",
+            ),
+            "kreview.selection.build_binary_target": (
+                "selection.html#build_binary_target",
+                "kreview/selection.py",
+            ),
+            "kreview.selection.score_features": (
+                "selection.html#score_features",
+                "kreview/selection.py",
+            ),
+            "kreview.selection.select_features": (
+                "selection.html#select_features",
+                "kreview/selection.py",
+            ),
+        },
     },
 }
