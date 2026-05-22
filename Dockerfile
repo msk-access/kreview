@@ -40,8 +40,9 @@ RUN pip install --no-cache-dir /app/*.whl && \
     rm /app/*.whl
 
 # Install runtime essentials (procps, bash) for Nextflow compatibility
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    procps bash && \
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    procps bash tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ensure output directories exist
@@ -64,8 +65,9 @@ LABEL org.opencontainers.image.authors="Ronak Shah <shahr2@mskcc.org>"
 
 # Install Python 3.12 + pip on the CUDA Ubuntu base
 # deadsnakes PPA provides Python 3.12 for Ubuntu 22.04
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common && \
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common tzdata && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && apt-get install -y --no-install-recommends \
     python3.12 python3.12-venv python3.12-dev \
