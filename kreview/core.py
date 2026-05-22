@@ -449,6 +449,7 @@ def _read_parquet_chunk(
                     error=err_str,
                 )
                 return pd.DataFrame()
+    return pd.DataFrame()
 
 
 def _calculate_dynamic_chunk_size(
@@ -470,10 +471,11 @@ def _calculate_dynamic_chunk_size(
 
     probe = file_paths[: min(5, len(file_paths))]
     try:
-        n_rows = conn.execute(
+        row = conn.execute(
             "SELECT count(*) FROM read_parquet(?, hive_partitioning=false)",
             [probe],
-        ).fetchone()[0]
+        ).fetchone()
+        n_rows = row[0] if row else 0
         avg_rows = max(1, n_rows // len(probe))
         size = max(50, min(15_000, target_rows // avg_rows))
         log.info(
@@ -534,6 +536,7 @@ def iter_feature_chunks(
     # Resolve dynamic chunk sizing before entering the streaming loop
     if chunk_size == "auto":
         chunk_size = _calculate_dynamic_chunk_size(conn, file_paths)
+    assert isinstance(chunk_size, int)
 
     n_chunks = math.ceil(len(file_paths) / chunk_size)
     log.info(
@@ -701,6 +704,7 @@ def run_feature_sql(
                     error=str(exc),
                 )
                 return pd.DataFrame()
+    return pd.DataFrame()
 
 
 # %% ../nbs/00_core.ipynb #6d814a93
