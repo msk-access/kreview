@@ -647,3 +647,141 @@ class TestEvaluateModel:
 
         assert fitted is None
         assert "rf_training_time_sec" not in result
+
+
+# ── multimodal_eval tests ────────────────────────────────────────────────────
+
+
+class TestMultimodalEval:
+    """Tests for multimodal_eval() — cross-evaluator stacking and ablation.
+
+    Uses tmp_path with synthetic per-evaluator JSON result files to
+    test the full pipeline without real parquet data.
+    """
+
+    @pytest.fixture
+    def results_dir(self, tmp_path):
+        """Create synthetic *_model_results.json files for 3 evaluators."""
+        import json
+
+        np.random.seed(42)
+        n = 100
+        y = np.array([0] * 50 + [1] * 50)
+
+        for eval_name, auc_base in [("Eval_A", 0.8), ("Eval_B", 0.7), ("Eval_C", 0.6)]:
+            # Generate OOF probabilities with controlled AUC
+            probs = np.random.beta(2, 5, size=n).tolist()
+            # Boost positives to achieve approximate AUC
+            for i in range(50, 100):
+                probs[i] = min(1.0, probs[i] + auc_base - 0.5)
+
+            result = {
+                "auc_rf": auc_base,
+                "rf_oof_probs": probs,
+                "auc_lr": auc_base - 0.05,
+                "lr_oof_probs": probs,
+                "oof_labels": y.tolist(),
+                "oof_sample_ids": [f"S{i:03d}" for i in range(n)],
+                "best_model": "rf",
+                "best_auc": auc_base,
+            }
+            path = tmp_path / f"{eval_name}_model_results.json"
+            with open(path, "w") as f:
+                json.dump(result, f)
+
+        return tmp_path
+
+    def test_output_has_strategy_key(self, results_dir):
+        """Output dict should have strategy='multimodal'."""
+        from kreview.eval_engine import multimodal_eval
+
+        result = multimodal_eval(results_dir, models=("rf",), n_folds=3)
+
+        assert result["strategy"] == "multimodal"
+
+    def test_evaluator_discovery(self, results_dir):
+        """Should discover all 3 evaluators."""
+        from kreview.eval_engine import multimodal_eval
+
+        result = multimodal_eval(results_dir, models=("rf",), n_folds=3)
+
+        assert result["n_evaluators"] == 3
+        assert set(result["evaluators"]) == {"Eval_A", "Eval_B", "Eval_C"}
+
+    def test_stacking_produces_auc(self, results_dir):
+        """Stacking should produce an AUC result."""
+        from kreview.eval_engine import multimodal_eval
+
+        result = multimodal_eval(results_dir, models=("rf",), n_folds=3)
+
+        assert "stacking" in result
+        # Stacking RF AUC key
+        assert "auc_stacking_rf" in result["stacking"]
+        auc = result["stacking"]["auc_stacking_rf"]
+        assert 0.0 <= auc <= 1.0
+
+    def test_single_evaluator_aucs(self, results_dir):
+        """Per-evaluator AUCs should be captured."""
+        from kreview.eval_engine import multimodal_eval
+
+        result = multimodal_eval(results_dir, models=("rf",), n_folds=3)
+
+        assert "single_evaluator_aucs" in result
+        assert "Eval_A" in result["single_evaluator_aucs"]
+
+    def test_missing_results_dir_raises(self, tmp_path):
+        """Should raise FileNotFoundError for nonexistent dir."""
+        from kreview.eval_engine import multimodal_eval
+
+        with pytest.raises(FileNotFoundError):
+            multimodal_eval(tmp_path / "nonexistent", models=("rf",))
+
+
+# ── gpu_models validation tests ──────────────────────────────────────────────
+
+
+class TestGpuModelsValidation:
+    """Tests for gpu_models() error handling and validation.
+
+    These tests do NOT require GPU hardware — they test the
+    input validation logic that runs before any model training.
+    """
+
+    def test_single_class_returns_error(self):
+        """Single-class y should return error dict, not crash."""
+        from kreview.eval_engine import gpu_models
+
+        X = np.random.randn(50, 5)
+        y = np.ones(50, dtype=int)  # All class 1
+
+        result, fitted = gpu_models(X, y)
+
+        assert "error" in result
+        assert "one class" in result["error"].lower()
+        assert fitted == {}
+
+    def test_insufficient_samples_returns_error(self):
+        """Too few samples per class for StratifiedKFold → error."""
+        from kreview.eval_engine import gpu_models
+
+        X = np.random.randn(3, 5)
+        y = np.array([0, 1, 1])  # Only 1 sample for class 0
+
+        result, fitted = gpu_models(X, y, n_folds=5)
+
+        assert "error" in result
+        assert fitted == {}
+
+    def test_empty_models_tuple(self):
+        """Empty models tuple should return empty results without error."""
+        from kreview.eval_engine import gpu_models
+
+        X = np.random.randn(50, 5)
+        y = np.zeros(50, dtype=int)
+        y[:20] = 1
+
+        result, fitted = gpu_models(X, y, models=())
+
+        # Should have cv_folds_actual but no model-specific keys
+        assert "cv_folds_actual" in result
+        assert fitted == {}
