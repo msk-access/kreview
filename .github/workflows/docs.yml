@@ -1,7 +1,7 @@
 name: Docs
 on:
   push:
-    branches: [main, develop, "release/*"]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -38,7 +38,7 @@ jobs:
           mike deploy --push --update-aliases dev develop
 
       - name: Deploy stable docs
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           VERSION=$(grep '^version =' settings.ini | cut -d '=' -f 2 | tr -d ' ')
           mike deploy --push --update-aliases "$VERSION" stable
