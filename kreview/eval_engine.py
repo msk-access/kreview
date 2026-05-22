@@ -959,7 +959,6 @@ def cpu_models(
                 learning_rate=0.1,
                 random_state=random_state,
                 eval_metric="logloss",
-                use_label_encoder=False,
                 scale_pos_weight=pos_weight,
             )
             try:
