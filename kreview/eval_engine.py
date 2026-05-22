@@ -1642,11 +1642,12 @@ def _select_multimodal_features(
             examples=high_nan[:5],
         )
 
-    # Step 2: Median-impute remaining NaNs
+    # Step 2: Impute remaining NaNs using shared strategy
     n_nans = int(df.isna().sum().sum())
     if n_nans > 0:
-        df = df.fillna(df.median())
-        log.info("multimodal_feature_imputed", n_nans=n_nans)
+        from kreview.selection import _impute
+        df = _impute(df, "median")
+        log.info("multimodal_feature_imputed", n_nans=n_nans, strategy="median")
 
     # Step 3: Drop zero-variance
     variances = df.var()
@@ -1813,14 +1814,10 @@ def multimodal_eval(
             if "label" not in super_df.columns:
                 raise ValueError("super_matrix must contain 'label' column")
 
-            label_mask = super_df["label"].isin(
-                ["True ctDNA+", "Possible ctDNA+", "Healthy Normal",
-                 "Possible ctDNA-", "Possible ctDNA\u2212"]
-            )
-            super_df = super_df[label_mask].copy()
-            y_raw = super_df["label"].isin(
-                ["True ctDNA+", "Possible ctDNA+"]
-            ).astype(int).values
+            # Use shared build_binary_target to filter and encode labels
+            # — single source of truth for label → binary mapping.
+            from kreview.selection import build_binary_target
+            super_df, y_raw = build_binary_target(super_df, "label")
 
             # Select numeric feature columns (exclude metadata)
             feature_cols = [

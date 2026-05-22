@@ -96,10 +96,10 @@ def generate_report(matrix_parquet: str | Path, output_dir: str | Path) -> Path:
                     if stats:
                         html_parts.append("<ul>")
                         html_parts.append(
-                            f"<li>Kruskal-Wallis p-value: {stats.get('kw_p', 'N/A')}</li>"
+                            f"<li>Kruskal-Wallis p-value: {stats.get('kw_pvalue', 'N/A')}</li>"
                         )
                         html_parts.append(
-                            f"<li>Cohen's d (effect size): {stats.get('cohens_d', 'N/A')}</li>"
+                            f"<li>Cohen's d (effect size): {stats.get('cohens_d_true_vs_healthy', 'N/A')}</li>"
                         )
                         html_parts.append("</ul>")
             except Exception as e:
