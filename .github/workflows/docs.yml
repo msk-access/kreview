@@ -1,7 +1,7 @@
 name: Docs
 on:
   push:
-    branches: [main]
+    branches: [main, develop, "release/*"]
   workflow_dispatch:
 
 permissions:
@@ -32,10 +32,17 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-      - name: Build and deploy versioned docs
+      - name: Deploy development docs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
         run: |
-          mike deploy --push --update-aliases dev
-          mike set-default --push dev
+          mike deploy --push --update-aliases dev develop
+
+      - name: Deploy stable docs
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        run: |
+          VERSION=$(grep '^version =' settings.ini | cut -d '=' -f 2 | tr -d ' ')
+          mike deploy --push --update-aliases "$VERSION" stable
+          mike set-default --push stable
 
       - name: Checkout newly built gh-pages branch
         uses: actions/checkout@v4
