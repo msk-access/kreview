@@ -1,12 +1,12 @@
 <!DOCTYPE html><html class="no-js" lang="en"><head>
 <meta charset="utf-8">
 <meta content="width=device-width,initial-scale=1" name="viewport">
-<link href="https://msk-access.github.io/kreview/dev/developer/release-guide/" rel="canonical">
-<link href="../contributing/" rel="prev">
-<link href="../../operations/ci-cd/" rel="next">
+<link href="https://msk-access.github.io/kreview/dev/developer/pipeline-architecture/" rel="canonical">
+<link href="../../machine-learning/decision-curve-analysis/" rel="prev">
+<link href="../nbdev-workflow/" rel="next">
 <link href="../../assets/images/favicon.png" rel="icon">
 <meta content="mkdocs-1.6.1, mkdocs-material-9.7.6" name="generator">
-<title>Release Guide - Kreview</title>
+<title>Pipeline Architecture - Kreview</title>
 <link href="../../assets/stylesheets/main.484c7ddc.min.css" rel="stylesheet">
 <link href="../../assets/stylesheets/palette.ab4e12ef.min.css" rel="stylesheet">
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
@@ -34,7 +34,7 @@
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
 <label class="md-overlay" for="__drawer"></label>
 <div data-md-component="skip">
-<a class="md-skip" href="#release-guide">
+<a class="md-skip" href="#pipeline-architecture">
           Skip to content
         </a>
 </div>
@@ -60,7 +60,7 @@
 <div class="md-header__topic" data-md-component="header-topic">
 <span class="md-ellipsis">
             
-              Release Guide
+              Pipeline Architecture
             
           </span>
 </div>
@@ -365,8 +365,20 @@
 
           </label>
 <ul class="md-nav__list" data-md-scrollfix="">
-<li class="md-nav__item">
-<a class="md-nav__link" href="../pipeline-architecture/">
+<li class="md-nav__item md-nav__item--active">
+<input class="md-nav__toggle md-toggle" id="__toc" type="checkbox">
+<label class="md-nav__link md-nav__link--active" for="__toc">
+<span class="md-ellipsis">
+    
+  
+    Pipeline Architecture
+  
+
+    
+  </span>
+<span class="md-nav__icon md-icon"></span>
+</label>
+<a class="md-nav__link md-nav__link--active" href="./">
 <span class="md-ellipsis">
     
   
@@ -376,6 +388,81 @@
     
   </span>
 </a>
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#pipeline-overview">
+<span class="md-ellipsis">
+      
+        Pipeline Overview
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#command-module-notebook-mapping">
+<span class="md-ellipsis">
+      
+        Command → Module → Notebook Mapping
+      
+    </span>
+</a>
+<nav aria-label="Command → Module → Notebook Mapping" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#shared-libraries">
+<span class="md-ellipsis">
+      
+        Shared Libraries
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#shared-code-principle">
+<span class="md-ellipsis">
+      
+        Shared Code Principle
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#data-flow">
+<span class="md-ellipsis">
+      
+        Data Flow
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#nextflow-parallelism">
+<span class="md-ellipsis">
+      
+        Nextflow Parallelism
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#adding-a-new-pipeline-stage">
+<span class="md-ellipsis">
+      
+        Adding a New Pipeline Stage
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
 </li>
 <li class="md-nav__item">
 <a class="md-nav__link" href="../nbdev-workflow/">
@@ -437,20 +524,8 @@
   </span>
 </a>
 </li>
-<li class="md-nav__item md-nav__item--active">
-<input class="md-nav__toggle md-toggle" id="__toc" type="checkbox">
-<label class="md-nav__link md-nav__link--active" for="__toc">
-<span class="md-ellipsis">
-    
-  
-    Release Guide
-  
-
-    
-  </span>
-<span class="md-nav__icon md-icon"></span>
-</label>
-<a class="md-nav__link md-nav__link--active" href="./">
+<li class="md-nav__item">
+<a class="md-nav__link" href="../release-guide/">
 <span class="md-ellipsis">
     
   
@@ -460,90 +535,6 @@
     
   </span>
 </a>
-<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
-<label class="md-nav__title" for="__toc">
-<span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
-<li class="md-nav__item">
-<a class="md-nav__link" href="#release-pipeline-overview">
-<span class="md-ellipsis">
-      
-        Release Pipeline Overview
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#step-by-step-release-checklist">
-<span class="md-ellipsis">
-      
-        Step-by-Step Release Checklist
-      
-    </span>
-</a>
-<nav aria-label="Step-by-Step Release Checklist" class="md-nav">
-<ul class="md-nav__list">
-<li class="md-nav__item">
-<a class="md-nav__link" href="#1-ensure-notebooks-are-clean">
-<span class="md-ellipsis">
-      
-        1. Ensure Notebooks Are Clean
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#2-run-full-qa-suite">
-<span class="md-ellipsis">
-      
-        2. Run Full QA Suite
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#3-bump-version">
-<span class="md-ellipsis">
-      
-        3. Bump Version
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#4-commit-and-merge">
-<span class="md-ellipsis">
-      
-        4. Commit and Merge
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#5-tag-and-push">
-<span class="md-ellipsis">
-      
-        5. Tag and Push
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#6-post-release">
-<span class="md-ellipsis">
-      
-        6. Post-Release
-      
-    </span>
-</a>
-</li>
-</ul>
-</nav>
-</li>
-</ul>
-</nav>
 </li>
 </ul>
 </nav>
@@ -747,80 +738,71 @@
     </label>
 <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
 <li class="md-nav__item">
-<a class="md-nav__link" href="#release-pipeline-overview">
+<a class="md-nav__link" href="#pipeline-overview">
 <span class="md-ellipsis">
       
-        Release Pipeline Overview
+        Pipeline Overview
       
     </span>
 </a>
 </li>
 <li class="md-nav__item">
-<a class="md-nav__link" href="#step-by-step-release-checklist">
+<a class="md-nav__link" href="#command-module-notebook-mapping">
 <span class="md-ellipsis">
       
-        Step-by-Step Release Checklist
+        Command → Module → Notebook Mapping
       
     </span>
 </a>
-<nav aria-label="Step-by-Step Release Checklist" class="md-nav">
+<nav aria-label="Command → Module → Notebook Mapping" class="md-nav">
 <ul class="md-nav__list">
 <li class="md-nav__item">
-<a class="md-nav__link" href="#1-ensure-notebooks-are-clean">
+<a class="md-nav__link" href="#shared-libraries">
 <span class="md-ellipsis">
       
-        1. Ensure Notebooks Are Clean
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#2-run-full-qa-suite">
-<span class="md-ellipsis">
-      
-        2. Run Full QA Suite
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#3-bump-version">
-<span class="md-ellipsis">
-      
-        3. Bump Version
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#4-commit-and-merge">
-<span class="md-ellipsis">
-      
-        4. Commit and Merge
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#5-tag-and-push">
-<span class="md-ellipsis">
-      
-        5. Tag and Push
-      
-    </span>
-</a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#6-post-release">
-<span class="md-ellipsis">
-      
-        6. Post-Release
+        Shared Libraries
       
     </span>
 </a>
 </li>
 </ul>
 </nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#shared-code-principle">
+<span class="md-ellipsis">
+      
+        Shared Code Principle
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#data-flow">
+<span class="md-ellipsis">
+      
+        Data Flow
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#nextflow-parallelism">
+<span class="md-ellipsis">
+      
+        Nextflow Parallelism
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#adding-a-new-pipeline-stage">
+<span class="md-ellipsis">
+      
+        Adding a New Pipeline Stage
+      
+    </span>
+</a>
 </li>
 </ul>
 </nav>
@@ -838,7 +820,7 @@
 </a>
 </li>
 <li class="md-path__item">
-<a class="md-path__link" href="../pipeline-architecture/">
+<a class="md-path__link" href="./">
 <span class="md-ellipsis">
     Developer Guide
   </span>
@@ -847,10 +829,11 @@
 </ol>
 </nav>
 <article class="md-content__inner md-typeset">
-<h1 id="release-guide">Release Guide</h1>
-<p>This document walks through the complete release process from code freeze to published artifacts.</p>
+<h1 id="pipeline-architecture">Pipeline Architecture</h1>
+<p>This document describes the decomposed pipeline architecture of <code>kreview</code>, how commands share code through the nbdev notebook-first workflow, and how to add a new pipeline stage.</p>
 <hr>
-<h2 id="release-pipeline-overview">Release Pipeline Overview</h2>
+<h2 id="pipeline-overview">Pipeline Overview</h2>
+<p>The <code>kreview</code> pipeline is decomposed into independent stages that can run either sequentially (<code>kreview run</code>) or in parallel (Nextflow / <abbr title="High-Performance Computing">HPC</abbr>):</p>
 <div class="panzoom-box" data-key="none" id="panzoom0" oncontextmenu="return false;">
 <nav class="panzoom-nav">
 <button class="panzoom-info panzoom-button">
@@ -871,101 +854,252 @@
 </svg>
 </button>
 </nav>
-<pre class="mermaid"><code>flowchart LR
-    classDef step fill:#f59e0b,stroke:#b45309,color:#fff;
-    A["Code Freeze\non develop"]:::step --&gt; B["Version Bump"]:::step
-    B --&gt; C["QA Checks"]:::step
-    C --&gt; D["Merge to main"]:::step
-    D --&gt; E["Tag: v*.*.*"]:::step
-    E --&gt; F["CI Auto-Deploys"]:::step
-    F --&gt; G["PyPI + GHCR\n+ Docs"]:::step
+<pre class="mermaid"><code>graph LR
+    A[Label] --&gt; B["Extract ×N"]
+    B --&gt; C[Select]
+    C --&gt; D["Eval CPU"]
+    C --&gt; E["Eval GPU"]
+    C --&gt; F[Fuse]
+    D --&gt; G["Eval Multimodal"]
+    E --&gt; G
+    F --&gt; G
+    G --&gt; H[Report]
 </code></pre>
 <div class="panzoom-info-box panzoom-info-box-bottom panzoom-hidden">
 Use mouse to pan and zoom
 </div>
 </div>
-<p>When a <code>v*.*.*</code> tag is pushed, <abbr title="Continuous Integration">CI</abbr> automatically publishes:</p>
-<ol>
-<li><strong>GitHub Release</strong> with <code>.whl</code> artifacts</li>
-<li><strong>PyPI</strong> via <abbr title="OpenID Connect">OIDC</abbr> Trusted Publishing (zero tokens)</li>
-<li><strong><abbr title="GitHub Container Registry">GHCR</abbr> Docker Image</strong> tagged as <code>latest</code> and versioned</li>
-<li><strong>MkDocs</strong> versioned documentation via <code>mike</code></li>
-</ol>
+<div class="admonition note">
+<p class="admonition-title">Steps 4a/4b/4c are independent</p>
+<p>After feature selection, <code>eval cpu</code>, <code>eval gpu</code>, and <code>fuse</code> can run in <strong>parallel</strong>. They all converge at <code>eval multimodal</code>, which needs the OOF predictions from eval + the super-matrix from fuse.</p>
+</div>
 <hr>
-<h2 id="step-by-step-release-checklist">Step-by-Step Release Checklist</h2>
-<h3 id="1-ensure-notebooks-are-clean">1. Ensure Notebooks Are Clean</h3>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> All code changes are in <code>nbs/*.ipynb</code></li>
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Run <code>nbdev-export</code> to sync <code>.py</code> files</li>
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Run <code>nbdev-clean</code> to strip metadata</li>
-</ul>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-0-1" id="__codelineno-0-1" name="__codelineno-0-1"></a>nbdev-export
-<a href="#__codelineno-0-2" id="__codelineno-0-2" name="__codelineno-0-2"></a>nbdev-clean
+<h2 id="command-module-notebook-mapping">Command → Module → Notebook Mapping</h2>
+<p>Every module in <code>kreview</code> is auto-generated from an nbdev notebook in <code>nbs/</code>. <strong>Never manually edit the <code>.py</code> files</strong> (see <a href="../nbdev-workflow/">nbdev Workflow</a>).</p>
+<table>
+<thead>
+<tr>
+<th>CLI Command</th>
+<th>Module</th>
+<th>Source Notebook</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kreview label</code></td>
+<td><code>cli.py:label()</code></td>
+<td><code>nbs/90_cli.ipynb</code></td>
+<td>Generate <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels</td>
+</tr>
+<tr>
+<td><code>kreview extract</code></td>
+<td><code>cli.py:extract()</code></td>
+<td><code>nbs/90_cli.ipynb</code></td>
+<td>Label + extract feature matrices</td>
+</tr>
+<tr>
+<td><code>kreview select</code></td>
+<td><code>cli_select.py:select()</code></td>
+<td><code>nbs/92_cli_select.ipynb</code></td>
+<td>Score features + hybrid-union selection</td>
+</tr>
+<tr>
+<td><code>kreview eval cpu</code></td>
+<td><code>cli_eval.py:eval_cpu()</code></td>
+<td><code>nbs/91_cli_eval.ipynb</code></td>
+<td>CPU model evaluation (<abbr title="Logistic Regression">LR</abbr>, <abbr title="Random Forest">RF</abbr>, <abbr title="XGBoost">XGB</abbr>)</td>
+</tr>
+<tr>
+<td><code>kreview eval gpu</code></td>
+<td><code>cli_eval.py:eval_gpu()</code></td>
+<td><code>nbs/91_cli_eval.ipynb</code></td>
+<td>GPU model evaluation (TabPFN, TabICL)</td>
+</tr>
+<tr>
+<td><code>kreview fuse</code></td>
+<td><code>cli.py:fuse()</code></td>
+<td><code>nbs/90_cli.ipynb</code></td>
+<td>Fuse per-evaluator matrices → super-matrix</td>
+</tr>
+<tr>
+<td><code>kreview eval multimodal</code></td>
+<td><code>cli_eval.py:eval_multimodal()</code></td>
+<td><code>nbs/91_cli_eval.ipynb</code></td>
+<td>Cross-evaluator stacking + ablation</td>
+</tr>
+<tr>
+<td><code>kreview report</code></td>
+<td><code>cli.py:report()</code></td>
+<td><code>nbs/90_cli.ipynb</code></td>
+<td>Re-generate HTML dashboards</td>
+</tr>
+<tr>
+<td><code>kreview run</code></td>
+<td><code>cli.py:run()</code></td>
+<td><code>nbs/90_cli.ipynb</code></td>
+<td>Full pipeline orchestrator</td>
+</tr>
+<tr>
+<td><code>kreview features-list</code></td>
+<td><code>cli.py:features_list()</code></td>
+<td><code>nbs/90_cli.ipynb</code></td>
+<td>List registered evaluators</td>
+</tr>
+</tbody>
+</table>
+<h3 id="shared-libraries">Shared Libraries</h3>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Source Notebook</th>
+<th>Functions</th>
+<th>Used By</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>selection.py</code></td>
+<td><code>nbs/04_selection.ipynb</code></td>
+<td><code>score_features()</code>, <code>select_features()</code>, <code>build_binary_target()</code></td>
+<td><code>kreview run</code>, <code>kreview select</code></td>
+</tr>
+<tr>
+<td><code>eval_engine.py</code></td>
+<td><code>nbs/02_eval_engine.ipynb</code></td>
+<td><code>cpu_models()</code>, <code>gpu_models()</code>, <code>univariate_auc()</code>, <code>mutual_info_score()</code></td>
+<td><code>kreview run</code>, <code>kreview eval cpu/gpu</code>, <code>selection.py</code></td>
+</tr>
+<tr>
+<td><code>core.py</code></td>
+<td><code>nbs/00_core.ipynb</code></td>
+<td><code>LABEL_META_COLS</code>, <code>Paths</code>, <code>LabelConfig</code></td>
+<td>All commands</td>
+</tr>
+<tr>
+<td><code>registry.py</code></td>
+<td><code>nbs/03_registry.ipynb</code></td>
+<td><code>get_all_evaluators()</code></td>
+<td><code>kreview run</code>, <code>kreview extract</code>, <code>kreview features-list</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="shared-code-principle">Shared Code Principle</h2>
+<p><code>kreview run</code> is an <strong>orchestrator</strong> — it calls the same shared functions as the standalone commands. This guarantees that local runs and <abbr title="High-Performance Computing">HPC</abbr> runs produce <strong>identical results</strong> given the same inputs.</p>
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-0-1" id="__codelineno-0-1" name="__codelineno-0-1"></a><span class="c1"># selection.py — used by BOTH kreview run AND kreview select</span>
+<a href="#__codelineno-0-2" id="__codelineno-0-2" name="__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">kreview.selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">score_features</span><span class="p">,</span> <span class="n">select_features</span>
+<a href="#__codelineno-0-3" id="__codelineno-0-3" name="__codelineno-0-3"></a>
+<a href="#__codelineno-0-4" id="__codelineno-0-4" name="__codelineno-0-4"></a><span class="c1"># eval_engine.py — used by BOTH kreview run AND kreview eval cpu/gpu</span>
+<a href="#__codelineno-0-5" id="__codelineno-0-5" name="__codelineno-0-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">kreview.eval_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">cpu_models</span><span class="p">,</span> <span class="n">gpu_models</span>
 </code></pre></div>
-<h3 id="2-run-full-qa-suite">2. Run Full QA Suite</h3>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Linting passes</li>
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Tests pass</li>
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Docs build cleanly</li>
-</ul>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-1-1" id="__codelineno-1-1" name="__codelineno-1-1"></a>ruff<span class="w"> </span>check<span class="w"> </span>kreview/
-<a href="#__codelineno-1-2" id="__codelineno-1-2" name="__codelineno-1-2"></a>black<span class="w"> </span>--check<span class="w"> </span>kreview/
-<a href="#__codelineno-1-3" id="__codelineno-1-3" name="__codelineno-1-3"></a>pytest<span class="w"> </span>--cov<span class="o">=</span>kreview
-<a href="#__codelineno-1-4" id="__codelineno-1-4" name="__codelineno-1-4"></a>mkdocs<span class="w"> </span>build<span class="w"> </span>--strict
+<p>When editing these shared functions, always edit the <strong>source notebook</strong> (<code>nbs/*.ipynb</code>) and run <code>nbdev_export</code> to regenerate the <code>.py</code> modules.</p>
+<hr>
+<h2 id="data-flow">Data Flow</h2>
+<p>Each stage communicates through <strong>parquet files</strong> on disk:</p>
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-1-1" id="__codelineno-1-1" name="__codelineno-1-1"></a>Extract:  → {evaluator}_matrix.parquet  (full features)
+<a href="#__codelineno-1-2" id="__codelineno-1-2" name="__codelineno-1-2"></a>Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
+<a href="#__codelineno-1-3" id="__codelineno-1-3" name="__codelineno-1-3"></a>          → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
+<a href="#__codelineno-1-4" id="__codelineno-1-4" name="__codelineno-1-4"></a>          → {evaluator}_selection_qc.json  (selection audit trail)
+<a href="#__codelineno-1-5" id="__codelineno-1-5" name="__codelineno-1-5"></a>Eval:     → {evaluator}_model_results.json  (AUCs, OOF probs)
+<a href="#__codelineno-1-6" id="__codelineno-1-6" name="__codelineno-1-6"></a>          → {evaluator}_{model}_model.joblib  (trained models)
+<a href="#__codelineno-1-7" id="__codelineno-1-7" name="__codelineno-1-7"></a>Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
+<a href="#__codelineno-1-8" id="__codelineno-1-8" name="__codelineno-1-8"></a>Report:   → reports/{evaluator}.html  (interactive dashboards)
 </code></pre></div>
-<h3 id="3-bump-version">3. Bump Version</h3>
-<p>Update the version in two places:</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="" id="__tabbed_1_1" name="__tabbed_1" type="radio"><input id="__tabbed_1_2" name="__tabbed_1" type="radio"><div class="tabbed-labels"><label for="__tabbed_1_1">settings.ini</label><label for="__tabbed_1_2">kreview/<strong>init</strong>.py</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-2-1" id="__codelineno-2-1" name="__codelineno-2-1"></a><span class="na">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.1.0</span>
+<hr>
+<h2 id="nextflow-parallelism">Nextflow Parallelism</h2>
+<p>See <a href="../../operations/nextflow/">Nextflow Integration</a> for full <abbr title="High-Performance Computing">HPC</abbr> execution docs.</p>
+<p>In Nextflow multistage mode (<code>params.pipeline_mode = 'multistage'</code>), the DAG executes as:</p>
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-2-1" id="__codelineno-2-1" name="__codelineno-2-1"></a>EXTRACT ×N → [collect] → SELECT ──┬── EVAL_CPU ──┐
+<a href="#__codelineno-2-2" id="__codelineno-2-2" name="__codelineno-2-2"></a>                                   ├── EVAL_GPU ──┤→ EVAL_MULTIMODAL → REPORT
+<a href="#__codelineno-2-3" id="__codelineno-2-3" name="__codelineno-2-3"></a>                                   └── FUSE ──────┘
 </code></pre></div>
-</div>
-<div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-3-1" id="__codelineno-3-1" name="__codelineno-3-1"></a><span class="n">__version__</span> <span class="o">=</span> <span class="s2">"0.1.0"</span>
-</code></pre></div>
-</div>
-</div>
-</div>
-<h3 id="4-commit-and-merge">4. Commit and Merge</h3>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-4-1" id="__codelineno-4-1" name="__codelineno-4-1"></a>git<span class="w"> </span>add<span class="w"> </span>-A
-<a href="#__codelineno-4-2" id="__codelineno-4-2" name="__codelineno-4-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"chore(release): bump version to 0.1.0"</span>
-<a href="#__codelineno-4-3" id="__codelineno-4-3" name="__codelineno-4-3"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>develop
-</code></pre></div>
-<p>Then create a PR from <code>develop</code> → <code>main</code> and merge after review.</p>
-<h3 id="5-tag-and-push">5. Tag and Push</h3>
+<p>Each stage is a separate Nextflow process in <code>nextflow/modules/local/kreview/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Process</th>
+<th>Module</th>
+<th>Input</th>
+<th>Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>KREVIEW_EXTRACT</code></td>
+<td><code>extract.nf</code></td>
+<td>Samplesheets + parquets</td>
+<td><code>*_matrix.parquet</code></td>
+</tr>
+<tr>
+<td><code>KREVIEW_SELECT</code></td>
+<td><code>select.nf</code></td>
+<td>All raw matrices</td>
+<td>Selected matrices + stats + <abbr title="Quality Control">QC</abbr></td>
+</tr>
+<tr>
+<td><code>KREVIEW_EVAL_CPU</code></td>
+<td><code>eval_cpu.nf</code></td>
+<td>Selected matrices</td>
+<td><code>*_model_results.json</code></td>
+</tr>
+<tr>
+<td><code>KREVIEW_EVAL_GPU</code></td>
+<td><code>eval_gpu.nf</code></td>
+<td>Selected matrices</td>
+<td><code>*_model_results.json</code></td>
+</tr>
+<tr>
+<td><code>KREVIEW_FUSE</code></td>
+<td><code>fuse.nf</code></td>
+<td>Selected matrices</td>
+<td><code>super_matrix.parquet</code></td>
+</tr>
+<tr>
+<td><code>KREVIEW_EVAL_MULTIMODAL</code></td>
+<td><code>eval_multimodal.nf</code></td>
+<td>Fuse + eval results</td>
+<td>Multimodal results</td>
+</tr>
+<tr>
+<td><code>KREVIEW_REPORT</code></td>
+<td><code>report.nf</code></td>
+<td>Selected matrices</td>
+<td>HTML dashboards</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="adding-a-new-pipeline-stage">Adding a New Pipeline Stage</h2>
+<ol>
+<li><strong>Create the source notebook</strong> (e.g., <code>nbs/04_new_stage.ipynb</code>) with the shared logic functions</li>
+<li>Run <code>nbdev_export</code> to generate <code>kreview/new_stage.py</code></li>
+<li><strong>Create a CLI notebook</strong> (e.g., <code>nbs/93_cli_new_stage.ipynb</code>) with the thin CLI wrapper</li>
+<li>Run <code>nbdev_export</code> to generate <code>kreview/cli_new_stage.py</code></li>
+<li>Register in <code>nbs/90_cli.ipynb</code> via <code>app.command()</code> or <code>app.add_typer()</code></li>
+<li>Update <code>kreview run</code> in the same notebook to call the shared functions</li>
+<li>Create a Nextflow process in <code>nextflow/modules/local/kreview/new_stage.nf</code></li>
+<li>Wire into <code>nextflow/workflows/kreview_eval.nf</code></li>
+<li>Add tests in <code>tests/test_new_stage.py</code></li>
+<li>Update this document and <a href="../../getting-started/pipeline-cli/">Pipeline CLI</a></li>
+</ol>
 <div class="admonition warning">
-<p class="admonition-title">This triggers <abbr title="Continuous Integration">CI</abbr> deployment</p>
-<p>Pushing a tag will automatically publish to PyPI, <abbr title="GitHub Container Registry">GHCR</abbr>, and deploy versioned docs. Make sure the <code>main</code> branch is clean!</p>
+<p class="admonition-title">Remember the Golden Rule</p>
+<p>Always edit the <strong>notebook</strong> first, then <code>nbdev_export</code>. See <a href="../nbdev-workflow/">nbdev Workflow</a> for details.</p>
 </div>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-5-1" id="__codelineno-5-1" name="__codelineno-5-1"></a>git<span class="w"> </span>checkout<span class="w"> </span>main
-<a href="#__codelineno-5-2" id="__codelineno-5-2" name="__codelineno-5-2"></a>git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
-<a href="#__codelineno-5-3" id="__codelineno-5-3" name="__codelineno-5-3"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.1.0
-<a href="#__codelineno-5-4" id="__codelineno-5-4" name="__codelineno-5-4"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0
-</code></pre></div>
-<h3 id="6-post-release">6. Post-Release</h3>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Verify the <a href="https://pypi.org/project/kreview/">PyPI page</a> shows the new version</li>
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Verify the <a href="https://github.com/msk-access/kreview/pkgs/container/kreview"><abbr title="GitHub Container Registry">GHCR</abbr> package</a> has the new tag</li>
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Verify the <a href="https://msk-access.github.io/kreview/">docs site</a> shows the versioned release</li>
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Back-merge <code>main</code> into <code>develop</code>:</li>
-</ul>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-6-1" id="__codelineno-6-1" name="__codelineno-6-1"></a>git<span class="w"> </span>checkout<span class="w"> </span>develop
-<a href="#__codelineno-6-2" id="__codelineno-6-2" name="__codelineno-6-2"></a>git<span class="w"> </span>merge<span class="w"> </span>main
-<a href="#__codelineno-6-3" id="__codelineno-6-3" name="__codelineno-6-3"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>develop
-</code></pre></div>
 <aside class="md-source-file">
 <span class="md-source-file__fact">
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 02:58:05 UTC"><span class="timeago" datetime="2026-04-09T02:58:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 02:58:05 UTC">2026-04-09</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 21, 2026 20:01:33 UTC"><span class="timeago" datetime="2026-05-21T20:01:33+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 21, 2026 20:01:33 UTC">2026-05-21</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 02:58:05 UTC"><span class="timeago" datetime="2026-04-09T02:58:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 02:58:05 UTC">2026-04-09</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 21, 2026 20:01:33 UTC"><span class="timeago" datetime="2026-05-21T20:01:33+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 21, 2026 20:01:33 UTC">2026-05-21</span>
 </span>
 </aside>
 </article>

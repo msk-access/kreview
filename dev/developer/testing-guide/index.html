@@ -5,13 +5,13 @@
       
       
       
-        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/developer/duckdb-architecture/">
+        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/developer/testing-guide/">
       
       
-        <link rel="prev" href="../adding-a-feature/">
+        <link rel="prev" href="../duckdb-architecture/">
       
       
-        <link rel="next" href="../testing-guide/">
+        <link rel="next" href="../contributing/">
       
       
         
@@ -22,7 +22,7 @@
     
     
       
-        <title>DuckDB Architecture - Kreview</title>
+        <title>Testing Guide - Kreview</title>
       
     
     
@@ -92,7 +92,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#duckdb-network-architecture" class="md-skip">
+        <a href="#testing-guide" class="md-skip">
           Skip to content
         </a>
       
@@ -132,7 +132,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              DuckDB Architecture
+              Testing Guide
             
           </span>
         </div>
@@ -917,6 +917,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../duckdb-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DuckDB Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -936,7 +964,7 @@
   <span class="md-ellipsis">
     
   
-    DuckDB Architecture
+    Testing Guide
   
 
     
@@ -954,7 +982,7 @@
   <span class="md-ellipsis">
     
   
-    DuckDB Architecture
+    Testing Guide
   
 
     
@@ -980,10 +1008,66 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
       
         <li class="md-nav__item">
-  <a href="#the-unix-maxfiles-limit" class="md-nav__link">
+  <a href="#running-tests-locally" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Unix maxfiles Limit
+        🏃 Running Tests Locally
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🏃 Running Tests Locally">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#profiling-and-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🏎️ Profiling and Performance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🏎️ Profiling and Performance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-module-scope-fixture-pattern-critical" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The "Module Scope" Fixture Pattern (CRITICAL)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-auto-generated-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧪 Testing Auto-Generated Code
       
     </span>
   </a>
@@ -991,32 +1075,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#io-thread-throttling" class="md-nav__link">
+  <a href="#mocking-duckdb" class="md-nav__link">
     <span class="md-ellipsis">
       
-        I/O Thread Throttling
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#feature-batching-chunk_size" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Feature Batching (chunk_size)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#exponential-backoff-retry" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Exponential Backoff Retry
+        🗃️ Mocking DuckDB
       
     </span>
   </a>
@@ -1027,34 +1089,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../testing-guide/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Testing Guide
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -1603,10 +1637,66 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
       
         <li class="md-nav__item">
-  <a href="#the-unix-maxfiles-limit" class="md-nav__link">
+  <a href="#running-tests-locally" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Unix maxfiles Limit
+        🏃 Running Tests Locally
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🏃 Running Tests Locally">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#profiling-and-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🏎️ Profiling and Performance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🏎️ Profiling and Performance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-module-scope-fixture-pattern-critical" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The "Module Scope" Fixture Pattern (CRITICAL)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-auto-generated-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧪 Testing Auto-Generated Code
       
     </span>
   </a>
@@ -1614,32 +1704,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#io-thread-throttling" class="md-nav__link">
+  <a href="#mocking-duckdb" class="md-nav__link">
     <span class="md-ellipsis">
       
-        I/O Thread Throttling
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#feature-batching-chunk_size" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Feature Batching (chunk_size)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#exponential-backoff-retry" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Exponential Backoff Retry
+        🗃️ Mocking DuckDB
       
     </span>
   </a>
@@ -1714,65 +1782,56 @@
   
 
 
-<h1 id="duckdb-network-architecture">DuckDB Network Architecture</h1>
-<p><code>kreview</code> aggregates tens of millions of rows of heavily nested fragmentomics data on a consumer MacBook, utilizing <strong>DuckDB</strong> as the high-velocity backing query engine.</p>
-<p>Processing large-scale cohorts located on remote network-mounted directories requires significant logic tuning to prevent systemic failures from concurrent file handle exhaustion.</p>
+<h1 id="testing-guide">Testing Guide</h1>
+<p><code>kreview</code> is built to process large Fragmentomics datasets and evaluate complex Machine Learning features. Because the codebase runs cross-validation, hyperparameter sweeping, and ML model training (<abbr title="Logistic Regression">LR</abbr>, <abbr title="Random Forest">RF</abbr>, XGBoost) natively in Python, the test suite can quickly become a massive bottleneck if not managed carefully.</p>
+<p>This guide outlines our testing philosophy, how to run tests, and critical performance optimization strategies.</p>
 <hr>
-<h2 id="the-unix-maxfiles-limit">The Unix <code>maxfiles</code> Limit</h2>
-<p>When loading a massive cohort (e.g., 4,600 samples), a naive query using glob-scanning:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">read_parquet</span><span class="p">(</span><span class="s1">'/data/krewlyzer/v0.8.2/*/*_matrix.parquet'</span><span class="p">)</span>
+<h2 id="running-tests-locally">🏃 Running Tests Locally</h2>
+<p>To run the entire test suite:
+</p><div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pytest
+</code></pre></div><p></p>
+<p>To run a specific test file or module:
+</p><div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pytest<span class="w"> </span>tests/test_eval_engine.py
+</code></pre></div><p></p>
+<h3 id="coverage">Coverage</h3>
+<p>We track test coverage to ensure new evaluators and core functionalities are adequately tested. To run tests with coverage reporting:
+</p><div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pytest<span class="w"> </span>--cov<span class="o">=</span>kreview
 </code></pre></div>
-<p>will cause DuckDB to aggressively initiate parallel filesystem thread expansion, attempting to open all 4,600 file handles simultaneously. This trips the macOS POSIX <code>ulimit</code> for concurrent open files (usually hardcapped at 256 or 1024):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>PermissionError: [Errno 1] Operation not permitted
-</code></pre></div>
-<h2 id="io-thread-throttling">I/O Thread Throttling</h2>
-<p>To fix this natively inside Python, we override DuckDB's default configuration:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"SET threads = 4"</span><span class="p">)</span>       <span class="c1"># (1)!</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"SET memory_limit = '4GB'"</span><span class="p">)</span>  <span class="c1"># (2)!</span>
-</code></pre></div>
-<ol>
-<li>Limits DuckDB to 4 concurrent I/O threads instead of <code>os.cpu_count()</code></li>
-<li>Prevents DuckDB from consuming all available memory during large joins</li>
-</ol>
-<h2 id="feature-batching-chunk_size">Feature Batching (<code>chunk_size</code>)</h2>
-<p>Inside <code>load_feature_cohort</code>, we completely abandoned <code>read_parquet(*/*)</code> glob functionality.</p>
-<p>Instead, we generate an explicit Python <code>list</code> of file paths by discovering files manually using <code>Path.iterdir()</code>, then chunk that list:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">chunk_size</span> <span class="o">=</span> <span class="mi">500</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">file_paths</span><span class="p">),</span> <span class="n">chunk_size</span><span class="p">):</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">chunk</span> <span class="o">=</span> <span class="n">file_paths</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span> <span class="o">+</span> <span class="n">chunk_size</span><span class="p">]</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">df_chunk</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="s2">"SELECT * FROM read_parquet(?, union_by_name=true)"</span><span class="p">,</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="p">[</span><span class="n">chunk</span><span class="p">]</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="p">)</span><span class="o">.</span><span class="n">df</span><span class="p">()</span>
-</code></pre></div>
-<p>By default, <code>chunk_size</code> is tuned to <code>500</code> to sit comfortably underneath the default 1024 macOS limits. You can tune this further downward using the CLI <code>--chunk-size</code> flag.</p>
-<h2 id="exponential-backoff-retry">Exponential Backoff Retry</h2>
-<p>Even with chunking, transient I/O failures can occur when reading parquet files from network-mounted directories. To handle this gracefully, <code>kreview</code> implements automatic retry logic with exponential backoff:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">max_retries</span> <span class="o">=</span> <span class="mi">3</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_retries</span><span class="p">):</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="n">df_chunk</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="p">[</span><span class="n">chunk</span><span class="p">])</span><span class="o">.</span><span class="n">df</span><span class="p">()</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">df_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df_chunk</span><span class="p">)</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>        <span class="k">break</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="k">if</span> <span class="n">attempt</span> <span class="o">&lt;</span> <span class="n">max_retries</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>            <span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"duckdb_retry"</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="n">attempt</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">attempt</span><span class="p">)</span>  <span class="c1"># 1s, 2s, 4s backoff</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>        <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>            <span class="n">log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"chunk_load_failed"</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>            <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>  <span class="c1"># Permanent failure</span>
-</code></pre></div>
-<div class="admonition tip">
-<p class="admonition-title">When to Use <code>--chunk-size</code></p>
-<p>If you see <code>PermissionError</code> or <code>IO Error</code> during large cohort loading:</p>
-<ul>
-<li>First retry: the backoff mechanism will handle transient failures automatically</li>
-<li>Persistent failures: reduce <code>--chunk-size</code> to <code>100</code> or <code>50</code></li>
-<li>Very congested networks: also try <code>--workers 1</code> to serialize I/O completely</li>
-</ul>
-</div>
+A summary will be printed to your terminal. Our <abbr title="Continuous Integration">CI</abbr>/<abbr title="Continuous Deployment">CD</abbr> pipeline enforces passing tests on every PR to <code>develop</code>.<p></p>
+<hr>
+<h2 id="profiling-and-performance">🏎️ Profiling and Performance</h2>
+<p>If <code>pytest</code> takes more than <strong>2 minutes</strong> to execute, something is likely misconfigured or a test is repeatedly spinning up expensive resources. </p>
+<p>You can identify the slowest tests by using the <code>--durations</code> flag:
+</p><div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Show the 10 slowest tests</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>pytest<span class="w"> </span>--durations<span class="o">=</span><span class="m">10</span>
+</code></pre></div><p></p>
+<h3 id="the-module-scope-fixture-pattern-critical">The "Module Scope" Fixture Pattern (CRITICAL)</h3>
+<p>The most common reason for a slow test suite in <code>kreview</code> is repeatedly fitting models inside the test setup. </p>
+<p>For instance, <code>test_eval_engine.py</code> contains over 20 test cases that validate the outputs of <code>single_feature_model()</code>. If each test calls <code>single_feature_model(X, y)</code> independently, it runs 5-fold cross validation for 3 different algorithms <em>20 times</em>, adding minutes to the test run.</p>
+<p><strong>The Solution:</strong>
+We heavily leverage <code>@pytest.fixture(scope="module")</code> to cache expensive computations <em>once per test session</em>.</p>
+<p><strong>Example:</strong>
+Instead of computing the model inside the test:
+</p><div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># ❌ BAD: Runs a 5-fold CV Random Forest every single time</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_auc_std_present</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">binary_Xy</span><span class="p">):</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">binary_Xy</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">results</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">single_feature_model</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="k">assert</span> <span class="s2">"rf_auc_std"</span> <span class="ow">in</span> <span class="n">results</span>
+</code></pre></div><p></p>
+<p>Use the cached module fixture:
+</p><div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># ✅ GOOD: Reuses the result from the module cache (Instant!)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_auc_std_present</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cached_cpu_model_results</span><span class="p">):</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">results</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">cached_cpu_model_results</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="k">assert</span> <span class="s2">"rf_auc_std"</span> <span class="ow">in</span> <span class="n">results</span>
+</code></pre></div><p></p>
+<p>When writing new tests that require model fitting or complex DuckDB table generation, <strong>always construct a module-scoped fixture</strong> so that subsequent tests can run instantly.</p>
+<hr>
+<h2 id="testing-auto-generated-code">🧪 Testing Auto-Generated Code</h2>
+<p>Remember that <code>kreview</code> uses <a href="../nbdev-workflow/">nbdev</a>. The application source code (<code>kreview/*.py</code>) is generated from Jupyter notebooks in <code>nbs/</code>. </p>
+<p>However, <strong>the test suite in <code>tests/</code> is NOT auto-generated.</strong>
+You should edit the files in <code>tests/*.py</code> directly using your standard IDE (VS Code, PyCharm, vim). You do not need to write tests inside the Jupyter notebooks.</p>
+<h2 id="mocking-duckdb">🗃️ Mocking DuckDB</h2>
+<p>When testing extraction pipelines, prefer writing small synthentic Parquet files using <code>pandas.DataFrame.to_parquet()</code> into a Pytest <code>tmp_path</code> fixture rather than querying real patient data. This ensures tests remain deterministic, fast, and secure.</p>
 
 
 
@@ -1795,7 +1854,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 9, 2026 02:58:05 UTC"><span class="timeago" datetime="2026-04-09T02:58:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 9, 2026 02:58:05 UTC">2026-04-09</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 22, 2026 19:05:46 UTC"><span class="timeago" datetime="2026-05-22T19:05:46+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 22, 2026 19:05:46 UTC">2026-05-22</span>
   </span>
 
     
@@ -1805,7 +1864,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 8, 2026 16:27:54 UTC"><span class="timeago" datetime="2026-04-08T16:27:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 8, 2026 16:27:54 UTC">2026-04-08</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 22, 2026 19:05:46 UTC"><span class="timeago" datetime="2026-05-22T19:05:46+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 22, 2026 19:05:46 UTC">2026-05-22</span>
   </span>
 
     

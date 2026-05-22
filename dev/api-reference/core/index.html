@@ -778,6 +778,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -824,6 +828,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/pipeline-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -896,6 +928,34 @@
     
   
     DuckDB Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/testing-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing Guide
   
 
     
@@ -1490,10 +1550,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.core.iter_feature_chunks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        iter_feature_chunks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.core.load_feature_cohort" class="md-nav__link">
     <span class="md-ellipsis">
       
         load_feature_cohort
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.core.load_metadata_cohort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_metadata_cohort
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.core.run_feature_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_feature_sql
       
     </span>
   </a>
@@ -1527,6 +1620,17 @@
     <span class="md-ellipsis">
       
         make_variant_key
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.core.fuse_matrices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fuse_matrices
       
     </span>
   </a>
@@ -1892,10 +1996,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.core.iter_feature_chunks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        iter_feature_chunks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.core.load_feature_cohort" class="md-nav__link">
     <span class="md-ellipsis">
       
         load_feature_cohort
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.core.load_metadata_cohort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_metadata_cohort
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.core.run_feature_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_feature_sql
       
     </span>
   </a>
@@ -1929,6 +2066,17 @@
     <span class="md-ellipsis">
       
         make_variant_key
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.core.fuse_matrices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fuse_matrices
       
     </span>
   </a>
@@ -2422,18 +2570,387 @@ Configured natively for 4 threads and 4GB memory to prevent <abbr title="High-Pe
 <div class="doc doc-object doc-function">
 
 
-<h3 id="kreview.core.load_feature_cohort" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">load_feature_cohort</span><span class="p">(</span><span class="n">feature_suffix</span><span class="p">,</span> <span class="n">results_dirs</span><span class="p">,</span> <span class="n">sample_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span></code>
+<h3 id="kreview.core.iter_feature_chunks" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">iter_feature_chunks</span><span class="p">(</span><span class="n">feature_suffix</span><span class="p">,</span> <span class="n">results_dirs</span><span class="p">,</span> <span class="n">sample_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="s1">'auto'</span><span class="p">)</span></code>
 
 </h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Load one feature type across available samples using explicit file list.</p>
-<p>ARCHITECTURE NOTE: We build an explicit file list from discovered samples
+        <p>Stream feature data as chunks without accumulating in memory.</p>
+<p>This is the memory-safe alternative to <code>load_feature_cohort</code>. Each chunk
+contains complete samples (one parquet file = one sample), so chunk
+boundaries never split a sample's data.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>feature_suffix</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Parquet file suffix (e.g. '.<abbr title="Fragment Size Coverage">FSC</abbr>.ontarget.parquet').</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>results_dirs</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="pathlib.Path">Path</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Krewlyzer output directories to scan.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_ids</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>] | <span title="set">set</span>[<span title="str">str</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional subset of samples to include.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>conn</code>
+            </td>
+            <td>
+                  <code><span title="duckdb.DuckDBPyConnection">DuckDBPyConnection</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional DuckDB connection (created if not provided).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>chunk_size</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | <span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of files per batch. 'auto' (default) probes the
+first 5 files to estimate rows-per-sample and self-tunes the
+batch size to target ~15M rows per chunk.</p>
+              </div>
+            </td>
+            <td>
+                  <code>'auto'</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Yields:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code>(<span title="chunk_df">chunk_df</span>, <span title="chunk_idx">chunk_idx</span>, <span title="n_chunks">n_chunks</span>)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A tuple of the DataFrame chunk,</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>the zero-based chunk index, and total number of chunks.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If results_dirs is empty.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.core.load_feature_cohort" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_feature_cohort</span><span class="p">(</span><span class="n">feature_suffix</span><span class="p">,</span> <span class="n">results_dirs</span><span class="p">,</span> <span class="n">sample_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="s1">'auto'</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load one feature type across available samples into a single DataFrame.</p>
+<p>This is the backward-compatible batch loader. For memory-constrained
+environments (e.g., <abbr title="High-Performance Computing">HPC</abbr> with 64GB RAM), use <code>iter_feature_chunks</code> instead
+to process data in a streaming fashion.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>chunk_size</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | <span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>'auto' (default) probes parquet row density at runtime.
+Pass an integer to override (e.g. 500 for large features).</p>
+              </div>
+            </td>
+            <td>
+                  <code>'auto'</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>ARCHITECTURE NOTE: We build an explicit file list from discovered samples
 instead of using a glob pattern. This avoids DuckDB scanning thousands of
 directories over network mounts (SFTP/NFS), which causes multi-minute stalls.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.core.load_metadata_cohort" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_metadata_cohort</span><span class="p">(</span><span class="n">results_dirs</span><span class="p">,</span> <span class="n">sample_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="s1">'auto'</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load metadata for all samples. Thin wrapper around load_feature_cohort.</p>
+<p>Metadata files are ~1 row per sample, so 'auto' will resolve to
+chunk_size=15_000 (single-sweep load) on first probe.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.core.run_feature_sql" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">run_feature_sql</span><span class="p">(</span><span class="n">sql_query</span><span class="p">,</span> <span class="n">feature_suffix</span><span class="p">,</span> <span class="n">results_dirs</span><span class="p">,</span> <span class="n">sample_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Execute a full-cohort SQL extraction in a single DuckDB pass.</p>
+<p>This is the SQL pushdown alternative to <code>iter_feature_chunks</code> +
+per-sample <code>extract()</code>. It runs the evaluator's SQL query against
+all discovered parquet files at once, returning one row per sample.</p>
+<p>The query must contain a <code>read_parquet(?, ...)</code> placeholder that
+accepts the file path list.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>sql_query</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>DuckDB SQL with <code>?</code> placeholder for file paths.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>feature_suffix</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Parquet suffix (e.g. '.<abbr title="Motif Divergence Score">MDS</abbr>.ontarget.parquet').</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>results_dirs</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="pathlib.Path">Path</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Krewlyzer output directories to scan.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_ids</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>] | <span title="set">set</span>[<span title="str">str</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional subset to filter to.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>conn</code>
+            </td>
+            <td>
+                  <code><span title="duckdb.DuckDBPyConnection">DuckDBPyConnection</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional DuckDB connection.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>DataFrame with one row per sample, or empty DataFrame on failure.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>
@@ -2488,6 +3005,158 @@ directories over network mounts (SFTP/NFS), which causes multi-minute stalls.</p
     <div class="doc doc-contents ">
 
         <p>Create a hashable variant key from genomic coordinates.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.core.fuse_matrices" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">fuse_matrices</span><span class="p">(</span><span class="n">output_dir</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">min_evaluators</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">drop_low_variance</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">variance_threshold</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">output_name</span><span class="o">=</span><span class="s1">'super_matrix.parquet'</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Discover per-evaluator matrices and fuse into a single super-matrix.</p>
+<p>Each <code>*_matrix.parquet</code> file in <code>output_dir</code> contains label/metadata
+columns plus evaluator-specific feature columns. This function:</p>
+<ol>
+<li>Discovers all <code>*_matrix.parquet</code> files (skips <code>super_matrix.parquet</code>
+   and <code>scoreboard_*</code> files).</li>
+<li>Extracts metadata columns once from the first matrix.</li>
+<li>Prefixes each evaluator's feature columns with the evaluator name
+   to prevent collisions (e.g., <code>FSCOnTarget__ratio_short</code>).</li>
+<li>Outer-joins all feature DataFrames on <code>SAMPLE_ID</code>.</li>
+<li>Filters to samples appearing in at least <code>min_evaluators</code> matrices.</li>
+<li>Drops low-variance features (cross-evaluator <abbr title="Quality Control">QC</abbr>) when enabled.</li>
+<li>Writes the result to <code>output_dir / output_name</code>.</li>
+</ol>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>output_dir</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Directory containing <code>*_matrix.parquet</code> files.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_evaluators</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Minimum number of evaluators a sample must appear in.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>drop_low_variance</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, drop features with variance at or below
+<code>variance_threshold</code> after fusion. Eliminates constant columns
+that carry no discriminative signal (step 3A.3 of the plan).</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>variance_threshold</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Features with variance &lt;= this value are dropped.
+Default 0.0 drops only exactly-constant features.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>output_name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Filename for the output parquet.</p>
+              </div>
+            </td>
+            <td>
+                  <code>'super_matrix.parquet'</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The fused DataFrame.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>

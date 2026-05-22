@@ -778,6 +778,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -824,6 +828,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/pipeline-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -896,6 +928,34 @@
     
   
     DuckDB Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/testing-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing Guide
   
 
     
@@ -1369,6 +1429,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.labels.load_ch_hotspots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_ch_hotspots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.labels.compute_impact_match" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1594,6 +1665,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.labels.load_ch_hotspots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_ch_hotspots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.labels.compute_impact_match" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1770,6 +1852,16 @@
   <p>Healthy Normal, Insufficient Data.</p>
 </details>
 
+<details class="features" open="">
+  <summary>Features</summary>
+  <ul>
+<li>IMPACT tissue rescue for True <abbr title="Circulating Tumor DNA">ctDNA</abbr>+ confirmation</li>
+<li>Continuous <abbr title="Variant Allele Frequency">VAF</abbr> regression targets (mean_vaf, std_vaf)</li>
+<li>Optional CH hotspot filtering with automatic demotion
+  of samples whose only evidence is clonal hematopoiesis</li>
+</ul>
+</details>
+
 
 
 
@@ -1802,6 +1894,28 @@
 <div class="doc doc-object doc-function">
 
 
+<h3 id="kreview.labels.load_ch_hotspots" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_ch_hotspots</span><span class="p">(</span><span class="n">ch_maf_path</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load a CH hotspot MAF file and return a set of variant keys.</p>
+<p>The MAF file must have columns: Hugo_Symbol, Chromosome,
+Start_Position, Reference_Allele, Tumor_Seq_Allele2.</p>
+<p>Each row is converted to a (chrom, pos, ref, alt) tuple for fast
+lookup during <abbr title="Single Nucleotide Variant">SNV</abbr> summary computation.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="kreview.labels.compute_impact_match" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">compute_impact_match</span><span class="p">(</span><span class="n">eligible_ids</span><span class="p">,</span> <span class="n">maf</span><span class="p">,</span> <span class="n">clinical</span><span class="p">)</span></code>
 
@@ -1822,7 +1936,7 @@ also appears in the same patient's IMPACT tissue sample.</p>
 
 
 <h3 id="kreview.labels.compute_snv_summary" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">compute_snv_summary</span><span class="p">(</span><span class="n">eligible_ids</span><span class="p">,</span> <span class="n">maf</span><span class="p">,</span> <span class="n">min_vaf</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">min_variants</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">compute_snv_summary</span><span class="p">(</span><span class="n">eligible_ids</span><span class="p">,</span> <span class="n">maf</span><span class="p">,</span> <span class="n">min_vaf</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">min_variants</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ch_variants</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h3>
 
@@ -1830,6 +1944,18 @@ also appears in the same patient's IMPACT tissue sample.</p>
     <div class="doc doc-contents ">
 
         <p>Summarize somatic <abbr title="Single Nucleotide Variant">SNV</abbr> status per eligible sample.</p>
+
+
+<details class="returns-one-row-per-eligible-sample-with-columns" open="">
+  <summary>Returns one row per eligible sample with columns</summary>
+  <p>has_snv, n_somatic_snvs, n_total_somatic_snvs,
+max_vaf, mean_vaf, std_vaf, n_ch_variants, n_non_ch_variants.</p>
+</details>        <p>mean_vaf and std_vaf are computed only from <abbr title="Variant Allele Frequency">VAF</abbr>-passing variants
+(those above <code>min_vaf</code>), providing continuous regression targets
+for the Stage 2 Quantifier.</p>
+<p>If <code>ch_variants</code> is provided, variants matching CH hotspots are
+tagged and counted separately. n_non_ch_variants counts only
+<abbr title="Variant Allele Frequency">VAF</abbr>-passing, non-CH variants — the key input for CH-only demotion.</p>
 
 
     </div>

@@ -778,6 +778,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -824,6 +828,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix="">
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/pipeline-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -896,6 +928,34 @@
     
   
     DuckDB Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/testing-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing Guide
   
 
     
@@ -1398,10 +1458,32 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.FeatureEvaluator.supports_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        supports_sql
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.FeatureEvaluator.extract" class="md-nav__link">
     <span class="md-ellipsis">
       
         extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.FeatureEvaluator.extract_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_sql
       
     </span>
   </a>
@@ -1535,10 +1617,43 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#kreview.eval_engine.single_feature_model" class="md-nav__link">
+  <a href="#kreview.eval_engine.evaluate_model" class="md-nav__link">
     <span class="md-ellipsis">
       
-        single_feature_model
+        evaluate_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.cpu_models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cpu_models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.gpu_models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gpu_models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.multimodal_eval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        multimodal_eval
       
     </span>
   </a>
@@ -1700,10 +1815,32 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.FeatureEvaluator.supports_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        supports_sql
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.FeatureEvaluator.extract" class="md-nav__link">
     <span class="md-ellipsis">
       
         extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.FeatureEvaluator.extract_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_sql
       
     </span>
   </a>
@@ -1837,10 +1974,43 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#kreview.eval_engine.single_feature_model" class="md-nav__link">
+  <a href="#kreview.eval_engine.evaluate_model" class="md-nav__link">
     <span class="md-ellipsis">
       
-        single_feature_model
+        evaluate_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.cpu_models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cpu_models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.gpu_models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        gpu_models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.multimodal_eval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        multimodal_eval
       
     </span>
   </a>
@@ -1981,6 +2151,9 @@
 
         <p>Base class for all feature evaluators.
 Defines the extraction contract that transforms raw DuckDB queries into 1D arrays.</p>
+<p>Subclasses must implement <code>extract()</code> for per-sample Python extraction.
+Optionally, override <code>extract_sql()</code> to return a DuckDB SQL query that
+performs full-cohort extraction in a single pass (no Python loop).</p>
 
 
 
@@ -2000,6 +2173,28 @@ Defines the extraction contract that transforms raw DuckDB queries into 1D array
 
 
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="kreview.eval_engine.FeatureEvaluator.supports_sql" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">supports_sql</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>True if this evaluator provides a SQL pushdown query.</p>
+
+    </div>
+
+</div>
+
 
 
 
@@ -2016,6 +2211,30 @@ Defines the extraction contract that transforms raw DuckDB queries into 1D array
 
         <p>Transform the loaded raw dataframe into meaningful scalar metrics.
 Called per sample-group or per sample.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="kreview.eval_engine.FeatureEvaluator.extract_sql" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">extract_sql</span><span class="p">()</span></code>
+
+</h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return a DuckDB SQL query for full-cohort extraction, or None.</p>
+<p>If implemented, the query should:
+- Accept a <code>read_parquet(?, ...)</code> placeholder for file paths
+- GROUP BY sample_id to produce one row per sample
+- SELECT all extracted feature columns with their final names</p>
+<p>Returning <code>None</code> (the default) means this evaluator does not
+support SQL pushdown and will use the chunked Python path.</p>
 
 
     </div>
@@ -2542,8 +2761,219 @@ Defaults to <code>np.linspace(0.01, 0.99, 99)</code>.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="kreview.eval_engine.single_feature_model" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">single_feature_model</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cancer_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span></code>
+<h3 id="kreview.eval_engine.evaluate_model" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">evaluate_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">cv</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">refit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Evaluate any sklearn-compatible model via stratified cross-validation.</p>
+<p>Shared primitive used by cpu_models(), gpu_models(), and multimodal_eval().
+The model must implement fit() and predict_proba().</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>model</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>sklearn-compatible estimator (Pipeline, <abbr title="Random Forest">RF</abbr>, <abbr title="XGBoost">XGB</abbr>, TabPFN, etc.).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>X</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature matrix, shape (n_samples, n_features).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Binary labels (0/1), shape (n_samples,).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cv</code>
+            </td>
+            <td>
+                  <code><span title="sklearn.model_selection.StratifiedKFold">StratifiedKFold</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Pre-configured StratifiedKFold splitter.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Prefix for all result keys (e.g. "lr", "rf", "tabpfn").</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>feature_names</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional feature names for importance extraction.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>refit</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, refit model on full data after <abbr title="Cross-Validation">CV</abbr>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>compute_shap</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, compute <abbr title="SHapley Additive exPlanations">SHAP</abbr> values (requires refit=True).</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>shap_samples</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Max samples for <abbr title="SHapley Additive exPlanations">SHAP</abbr> computation.</p>
+              </div>
+            </td>
+            <td>
+                  <code>500</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>(result_dict, fitted_model_or_None). result_dict keys are prefixed</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="object">object</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>with <code>name</code> (e.g. <code>auc_rf</code>, <code>rf_oof_probs</code>, <code>rf_fold_aucs</code>).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.cpu_models" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">cpu_models</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cancer_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span></code>
 
 </h3>
 
@@ -2551,13 +2981,482 @@ Defaults to <code>np.linspace(0.01, 0.99, 99)</code>.</p>
     <div class="doc doc-contents ">
 
         <p>Train <abbr title="Logistic Regression">LR</abbr>, <abbr title="Random Forest">RF</abbr>, and <abbr title="XGBoost">XGB</abbr> on a feature matrix with stratified <abbr title="Cross-Validation">CV</abbr>.</p>
+<p>Delegates per-model evaluation to <code>evaluate_model()</code>, then adds
+cross-model diagnostics (<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> deltas, top features, threshold sweep,
+DCA, feature stability, subgroup analysis).</p>
 <p>Returns (results_dict, lr_pipeline, rf_model, xgb_model).</p>
-<p>Fixes applied (audit v3):
-  - C-01: <abbr title="Logistic Regression">LR</abbr> uses Pipeline(scaler+lr) to prevent data leakage
-  - C-02: Subgroup metrics use out-of-fold predictions (unbiased)
-  - H-01: <abbr title="Logistic Regression">LR</abbr> has class_weight="balanced", <abbr title="XGBoost">XGB</abbr> has scale_pos_weight
-  - H-07: Bare except replaced with Exception
-  - M-02: Bootstrap 95% <abbr title="Continuous Integration">CI</abbr> on <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> values</p>
+
+
+<details class="audit-fixes-preserved" open="">
+  <summary>Audit fixes preserved</summary>
+  <ul>
+<li>C-01: <abbr title="Logistic Regression">LR</abbr> uses Pipeline(scaler+lr) to prevent data leakage</li>
+<li>C-02: Subgroup metrics use out-of-fold predictions (unbiased)</li>
+<li>H-01: <abbr title="Logistic Regression">LR</abbr> has class_weight="balanced", <abbr title="XGBoost">XGB</abbr> has scale_pos_weight</li>
+<li>M-02: Bootstrap 95% <abbr title="Continuous Integration">CI</abbr> on <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> values</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.gpu_models" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">gpu_models</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cancer_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'tabpfn'</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="s1">'cuda'</span><span class="p">,</span> <span class="n">finetune</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">finetune_epochs</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">finetune_lr</span><span class="o">=</span><span class="mf">1e-05</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Train GPU foundation models (TabPFN, TabICL) on a feature matrix.</p>
+<p>Same output schema as cpu_models() for each model, using the shared
+<code>evaluate_model()</code> primitive. Fine-tuning is ON by default.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>X</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature matrix, shape (n_samples, n_features).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Binary labels (0/1).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>feature_names</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional feature names.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cancer_types</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional cancer type array for subgroup analysis.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>assays</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional assay array for subgroup analysis.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>n_folds</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of <abbr title="Cross-Validation">CV</abbr> folds.</p>
+              </div>
+            </td>
+            <td>
+                  <code>5</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>random_state</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Random seed.</p>
+              </div>
+            </td>
+            <td>
+                  <code>42</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>models</code>
+            </td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Tuple of GPU model names ("tabpfn", "tabicl").</p>
+              </div>
+            </td>
+            <td>
+                  <code>('tabpfn',)</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>PyTorch device ("cuda", "cpu").</p>
+              </div>
+            </td>
+            <td>
+                  <code>'cuda'</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>finetune</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True (default), use fine-tuned variants.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>finetune_epochs</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Epochs for fine-tuning.</p>
+              </div>
+            </td>
+            <td>
+                  <code>30</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>finetune_lr</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Learning rate for fine-tuning.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1e-05</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>compute_shap</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, compute <abbr title="SHapley Additive exPlanations">SHAP</abbr> values.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>shap_samples</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Max samples for <abbr title="SHapley Additive exPlanations">SHAP</abbr> computation.</p>
+              </div>
+            </td>
+            <td>
+                  <code>500</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>(results_dict, fitted_models_dict). fitted_models_dict maps</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="object">object</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>model name to fitted model object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.multimodal_eval" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">multimodal_eval</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'rf'</span><span class="p">,</span> <span class="s1">'xgb'</span><span class="p">),</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Cross-evaluator multimodal evaluation.</p>
+<p>Implements three complementary strategies:</p>
+<ol>
+<li>
+<p><strong>Stacking</strong>: Meta-learner trained on OOF predictions from all
+   per-evaluator models.  Each column is one evaluator's OOF
+   probability.  This measures how much combining multiple
+   fragmentomics signals improves classification.</p>
+</li>
+<li>
+<p><strong>Raw features</strong> (optional): If <code>super_matrix_path</code> is provided,
+   trains directly on the fused feature matrix with MI-based
+   feature selection.</p>
+</li>
+<li>
+<p><strong>Ablation</strong>: Leave-one-evaluator-out analysis on the stacking
+   matrix, showing each evaluator's marginal contribution.</p>
+</li>
+</ol>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>results_dir</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Directory with <code>*_model_results.json</code> files.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>super_matrix_path</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional path to <code>super_matrix.parquet</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>models</code>
+            </td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Model names to use (<code>rf</code>, <code>xgb</code>, <code>lr</code>).</p>
+              </div>
+            </td>
+            <td>
+                  <code>('rf', 'xgb')</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>n_folds</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Cross-validation folds.</p>
+              </div>
+            </td>
+            <td>
+                  <code>5</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>top_k</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Top-K features for raw-feature strategy.</p>
+              </div>
+            </td>
+            <td>
+                  <code>50</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>random_state</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Reproducibility seed.</p>
+              </div>
+            </td>
+            <td>
+                  <code>42</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A comprehensive results dict with keys for each strategy.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>
