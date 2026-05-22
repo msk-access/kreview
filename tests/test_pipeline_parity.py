@@ -19,7 +19,6 @@ import pytest
 
 from kreview.selection import build_binary_target, score_features, select_features
 
-
 # ── Fixtures ────────────────────────────────────────────────────────────────────
 
 
@@ -98,15 +97,16 @@ class TestPipelineParity:
         selected, qc = select_features(synthetic_matrix, stats, top_percentile=50)
 
         selected_features = [
-            c for c in selected.columns
+            c
+            for c in selected.columns
             if c not in {"SAMPLE_ID", "label"} and "__" not in c
         ]
 
         # At least 3 of the 5 signal features should survive selection
         signal_selected = [f for f in selected_features if f.startswith("signal_")]
-        assert len(signal_selected) >= 3, (
-            f"Expected ≥3 signal features selected, got {signal_selected}"
-        )
+        assert (
+            len(signal_selected) >= 3
+        ), f"Expected ≥3 signal features selected, got {signal_selected}"
 
     def test_constant_features_always_dropped(self, synthetic_matrix):
         """Constant features should never appear in selected output."""
@@ -170,6 +170,6 @@ class TestPipelineParity:
         _, y = build_binary_target(synthetic_matrix)
         expected_n = len(y)
 
-        assert len(selected) == expected_n, (
-            f"Expected {expected_n} samples, got {len(selected)}"
-        )
+        assert (
+            len(selected) == expected_n
+        ), f"Expected {expected_n} samples, got {len(selected)}"

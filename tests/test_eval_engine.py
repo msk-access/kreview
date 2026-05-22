@@ -28,6 +28,7 @@ from kreview.eval_engine import (
 # XGBoost may be installed but fail at import due to missing libomp on macOS.
 try:
     from xgboost import XGBClassifier  # noqa: F401
+
     HAS_XGB = True
 except Exception:
     HAS_XGB = False

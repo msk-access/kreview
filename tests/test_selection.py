@@ -11,7 +11,6 @@ from kreview.selection import (
     select_features,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -71,9 +70,7 @@ def small_matrix():
     data = {
         "SAMPLE_ID": [f"S_{i}" for i in range(n)],
         "label": ["True ctDNA+"] * 15 + ["Healthy Normal"] * 15,
-        "feat_a": np.concatenate(
-            [rng.normal(1, 0.3, 15), rng.normal(0, 0.3, 15)]
-        ),
+        "feat_a": np.concatenate([rng.normal(1, 0.3, 15), rng.normal(0, 0.3, 15)]),
         "feat_b": rng.normal(0, 1, n),
     }
     return pd.DataFrame(data)
@@ -94,7 +91,9 @@ class TestBuildBinaryTarget:
     def test_filters_unknown_labels(self):
         df = pd.DataFrame(
             {
-                "label": ["True ctDNA+"] * 15 + ["Healthy Normal"] * 15 + ["Unknown"] * 5,
+                "label": ["True ctDNA+"] * 15
+                + ["Healthy Normal"] * 15
+                + ["Unknown"] * 5,
                 "feat": np.ones(35),
             }
         )
@@ -107,9 +106,7 @@ class TestBuildBinaryTarget:
             build_binary_target(df)
 
     def test_single_class(self):
-        df = pd.DataFrame(
-            {"label": ["True ctDNA+"] * 25, "feat": np.ones(25)}
-        )
+        df = pd.DataFrame({"label": ["True ctDNA+"] * 25, "feat": np.ones(25)})
         with pytest.raises(ValueError, match="Only one class"):
             build_binary_target(df)
 
@@ -159,16 +156,12 @@ class TestScoreFeatures:
         than noise features on average."""
         eval_df = score_features(synthetic_matrix, cv_folds=3, compute_auc=True)
         signal = eval_df[eval_df["feature_column"].str.startswith("feat_0")]
-        noise = eval_df[
-            eval_df["feature_column"].str.match(r"feat_(?:0[5-9]|1\d)")
-        ]
+        noise = eval_df[eval_df["feature_column"].str.match(r"feat_(?:0[5-9]|1\d)")]
 
         assert signal["univariate_auc"].mean() > noise["univariate_auc"].mean()
 
     def test_no_auc_when_disabled(self, synthetic_matrix):
-        eval_df = score_features(
-            synthetic_matrix, cv_folds=3, compute_auc=False
-        )
+        eval_df = score_features(synthetic_matrix, cv_folds=3, compute_auc=False)
         assert "univariate_auc" not in eval_df.columns
         assert "mutual_info" in eval_df.columns
 
@@ -204,9 +197,7 @@ class TestScoreFeatures:
 class TestSelectFeatures:
     def test_reduces_feature_count(self, synthetic_matrix):
         eval_df = score_features(synthetic_matrix, cv_folds=3, compute_auc=True)
-        selected, qc = select_features(
-            synthetic_matrix, eval_df, top_percentile=30
-        )
+        selected, qc = select_features(synthetic_matrix, eval_df, top_percentile=30)
 
         # Selected matrix should have fewer feature columns
         from kreview.core import LABEL_META_COLS
@@ -232,7 +223,9 @@ class TestSelectFeatures:
     def test_drops_constant_feature(self, synthetic_matrix):
         eval_df = score_features(synthetic_matrix, cv_folds=3, compute_auc=True)
         selected, qc = select_features(
-            synthetic_matrix, eval_df, top_percentile=100  # keep all — variance guard still applies
+            synthetic_matrix,
+            eval_df,
+            top_percentile=100,  # keep all — variance guard still applies
         )
         # feat_constant should be dropped by variance guard
         from kreview.core import LABEL_META_COLS
@@ -267,9 +260,7 @@ class TestSelectFeatures:
 
     def test_mi_only_selection(self, synthetic_matrix):
         """When AUC is not computed, selection falls back to MI-only."""
-        eval_df = score_features(
-            synthetic_matrix, cv_folds=3, compute_auc=False
-        )
+        eval_df = score_features(synthetic_matrix, cv_folds=3, compute_auc=False)
         selected, qc = select_features(synthetic_matrix, eval_df)
         # Should still produce a valid result
         assert qc["n_auc_only"] == 0  # no AUC-based selection

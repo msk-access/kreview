@@ -326,7 +326,9 @@ class TestComputeImpactMatch:
         """ACCESS sample sharing variant with IMPACT → has_impact_match=True."""
         from kreview.labels import compute_impact_match
 
-        result = compute_impact_match({"ACCESS_S1", "ACCESS_S2"}, maf_with_match, clinical)
+        result = compute_impact_match(
+            {"ACCESS_S1", "ACCESS_S2"}, maf_with_match, clinical
+        )
         s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
 
         assert s1["has_impact_match"] == True
@@ -348,7 +350,9 @@ class TestComputeImpactMatch:
         """
         from kreview.labels import compute_impact_match
 
-        result = compute_impact_match({"ACCESS_S1", "ACCESS_S2"}, maf_with_match, clinical)
+        result = compute_impact_match(
+            {"ACCESS_S1", "ACCESS_S2"}, maf_with_match, clinical
+        )
         s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
         s2 = result.set_index("SAMPLE_ID").loc["ACCESS_S2"]
 
@@ -360,7 +364,12 @@ class TestComputeImpactMatch:
         from kreview.labels import compute_impact_match
 
         result = compute_impact_match({"ACCESS_S1"}, maf_with_match, clinical)
-        expected_cols = {"SAMPLE_ID", "has_impact_match", "n_impact_confirmed", "has_paired_impact"}
+        expected_cols = {
+            "SAMPLE_ID",
+            "has_impact_match",
+            "n_impact_confirmed",
+            "has_paired_impact",
+        }
 
         assert expected_cols.issubset(set(result.columns))
 
@@ -370,10 +379,15 @@ class TestComputeImpactMatch:
 
         empty_maf = pd.DataFrame(
             columns=[
-                "Tumor_Sample_Barcode", "Mutation_Status",
-                "Chromosome", "Start_Position", "End_Position",
-                "Reference_Allele", "Tumor_Seq_Allele2",
-                "t_ref_count", "t_alt_count",
+                "Tumor_Sample_Barcode",
+                "Mutation_Status",
+                "Chromosome",
+                "Start_Position",
+                "End_Position",
+                "Reference_Allele",
+                "Tumor_Seq_Allele2",
+                "t_ref_count",
+                "t_alt_count",
             ]
         )
         result = compute_impact_match({"ACCESS_S1"}, empty_maf, clinical)

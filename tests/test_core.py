@@ -89,37 +89,43 @@ class TestMakeVariantKey:
 
     def test_produces_tuple_key(self):
         """Each row should produce a (chrom, start, end, ref, alt) tuple."""
-        df = pd.DataFrame({
-            "Chromosome": ["7"],
-            "Start_Position": [55249071],
-            "End_Position": [55249071],
-            "Reference_Allele": ["C"],
-            "Tumor_Seq_Allele2": ["T"],
-        })
+        df = pd.DataFrame(
+            {
+                "Chromosome": ["7"],
+                "Start_Position": [55249071],
+                "End_Position": [55249071],
+                "Reference_Allele": ["C"],
+                "Tumor_Seq_Allele2": ["T"],
+            }
+        )
         keys = make_variant_key(df)
         assert len(keys) == 1
         assert keys.iloc[0] == ("7", 55249071, 55249071, "C", "T")
 
     def test_multiple_rows(self):
         """Should produce one key per row."""
-        df = pd.DataFrame({
-            "Chromosome": ["7", "12"],
-            "Start_Position": [100, 200],
-            "End_Position": [100, 200],
-            "Reference_Allele": ["C", "G"],
-            "Tumor_Seq_Allele2": ["T", "A"],
-        })
+        df = pd.DataFrame(
+            {
+                "Chromosome": ["7", "12"],
+                "Start_Position": [100, 200],
+                "End_Position": [100, 200],
+                "Reference_Allele": ["C", "G"],
+                "Tumor_Seq_Allele2": ["T", "A"],
+            }
+        )
         keys = make_variant_key(df)
         assert len(keys) == 2
         assert keys.iloc[0] != keys.iloc[1]
 
     def test_missing_column_raises(self):
         """Missing required column should raise KeyError."""
-        df = pd.DataFrame({
-            "Chromosome": ["7"],
-            "Start_Position": [100],
-            # Missing End_Position, Reference_Allele, Tumor_Seq_Allele2
-        })
+        df = pd.DataFrame(
+            {
+                "Chromosome": ["7"],
+                "Start_Position": [100],
+                # Missing End_Position, Reference_Allele, Tumor_Seq_Allele2
+            }
+        )
         with pytest.raises(KeyError, match="Missing required col"):
             make_variant_key(df)
 
@@ -131,13 +137,15 @@ class TestMakeVariantKey:
 
     def test_position_cast_to_int(self):
         """Start_Position and End_Position should be cast to int in key."""
-        df = pd.DataFrame({
-            "Chromosome": ["7"],
-            "Start_Position": [100.0],  # float input
-            "End_Position": [100.0],
-            "Reference_Allele": ["C"],
-            "Tumor_Seq_Allele2": ["T"],
-        })
+        df = pd.DataFrame(
+            {
+                "Chromosome": ["7"],
+                "Start_Position": [100.0],  # float input
+                "End_Position": [100.0],
+                "Reference_Allele": ["C"],
+                "Tumor_Seq_Allele2": ["T"],
+            }
+        )
         keys = make_variant_key(df)
         chrom, start, end, ref, alt = keys.iloc[0]
         assert isinstance(start, int)
@@ -153,8 +161,14 @@ class TestLabelMetaCols:
     def test_contains_essential_columns(self):
         """LABEL_META_COLS should contain key label and metadata columns."""
         essential = {
-            "label", "SAMPLE_ID", "PATIENT_ID", "CANCER_TYPE",
-            "max_vaf", "has_snv", "has_sv", "has_cna",
+            "label",
+            "SAMPLE_ID",
+            "PATIENT_ID",
+            "CANCER_TYPE",
+            "max_vaf",
+            "has_snv",
+            "has_sv",
+            "has_cna",
         }
         missing = essential - LABEL_META_COLS
         assert not missing, f"LABEL_META_COLS missing essential columns: {missing}"
@@ -163,7 +177,9 @@ class TestLabelMetaCols:
         """LABEL_META_COLS should NOT contain feature-like column names."""
         # Feature columns follow patterns like *_median, *_score, etc.
         for col in LABEL_META_COLS:
-            assert not col.endswith("_score"), f"Feature-like column in LABEL_META_COLS: {col}"
+            assert not col.endswith(
+                "_score"
+            ), f"Feature-like column in LABEL_META_COLS: {col}"
 
 
 # ── Data loader error handling tests ─────────────────────────────────────────
@@ -175,23 +191,27 @@ class TestDataLoaders:
     def test_load_maf_missing_file_raises(self):
         """load_maf should raise on nonexistent file."""
         from kreview.core import load_maf
+
         with pytest.raises((FileNotFoundError, Exception)):
             load_maf("/nonexistent/path/maf.txt")
 
     def test_load_sv_missing_file_raises(self):
         """load_sv should raise on nonexistent file."""
         from kreview.core import load_sv
+
         with pytest.raises((FileNotFoundError, Exception)):
             load_sv("/nonexistent/path/sv.txt")
 
     def test_load_cna_missing_file_raises(self):
         """load_cna should raise on nonexistent file."""
         from kreview.core import load_cna
+
         with pytest.raises((FileNotFoundError, Exception)):
             load_cna("/nonexistent/path/cna.txt")
 
     def test_load_clinical_sample_missing_file_raises(self):
         """load_clinical_sample should raise on nonexistent file."""
         from kreview.core import load_clinical_sample
+
         with pytest.raises((FileNotFoundError, Exception)):
             load_clinical_sample("/nonexistent/path/clinical.txt")

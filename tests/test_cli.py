@@ -31,13 +31,17 @@ class TestTopLevel:
         """All registered commands appear in the help output."""
         result = runner.invoke(app, ["--help"])
         expected_commands = [
-            "run", "label", "extract", "fuse", "select",
-            "report", "features-list", "eval",
+            "run",
+            "label",
+            "extract",
+            "fuse",
+            "select",
+            "report",
+            "features-list",
+            "eval",
         ]
         for cmd in expected_commands:
-            assert cmd in result.output, (
-                f"Command '{cmd}' not found in --help output"
-            )
+            assert cmd in result.output, f"Command '{cmd}' not found in --help output"
 
 
 # ── Standalone commands ──
@@ -46,15 +50,18 @@ class TestTopLevel:
 class TestStandaloneCommands:
     """Smoke test each standalone command's --help."""
 
-    @pytest.mark.parametrize("cmd", [
-        "run",
-        "label",
-        "extract",
-        "fuse",
-        "select",
-        "report",
-        "features-list",
-    ])
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "run",
+            "label",
+            "extract",
+            "fuse",
+            "select",
+            "report",
+            "features-list",
+        ],
+    )
     def test_help(self, cmd):
         """``kreview <cmd> --help`` returns exit code 0."""
         result = runner.invoke(app, [cmd, "--help"])
@@ -97,13 +104,22 @@ class TestParameterValidation:
 
     def test_extract_bad_chunk_size(self):
         """``kreview extract --chunk-size garbage`` fails with non-zero exit."""
-        result = runner.invoke(app, [
-            "extract",
-            "--cancer-samplesheet", "/nonexistent.csv",
-            "--healthy-xs1-samplesheet", "/nonexistent.csv",
-            "--healthy-xs2-samplesheet", "/nonexistent.csv",
-            "--cbioportal-dir", "/nonexistent",
-            "--krewlyzer-dir", "/nonexistent",
-            "--chunk-size", "garbage",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "extract",
+                "--cancer-samplesheet",
+                "/nonexistent.csv",
+                "--healthy-xs1-samplesheet",
+                "/nonexistent.csv",
+                "--healthy-xs2-samplesheet",
+                "/nonexistent.csv",
+                "--cbioportal-dir",
+                "/nonexistent",
+                "--krewlyzer-dir",
+                "/nonexistent",
+                "--chunk-size",
+                "garbage",
+            ],
+        )
         assert result.exit_code != 0

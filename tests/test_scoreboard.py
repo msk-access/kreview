@@ -86,10 +86,21 @@ class TestBuildScoreboard:
         """Output has expected column set."""
         df = build_scoreboard(mock_results)
         expected = {
-            "evaluator", "auc_rf", "auc_lr", "auc_xgb", "best_auc",
-            "n_features", "cv_folds", "sensitivity_rf", "specificity_rf",
-            "optimal_threshold_rf", "n_samples", "n_positive",
-            "selection_method", "n_selected_features", "selection_overlap_pct",
+            "evaluator",
+            "auc_rf",
+            "auc_lr",
+            "auc_xgb",
+            "best_auc",
+            "best_model",
+            "n_features",
+            "cv_folds",
+            "sensitivity",
+            "specificity",
+            "n_samples",
+            "n_positive",
+            "selection_method",
+            "n_selected_features",
+            "selection_overlap_pct",
         }
         assert set(df.columns) == expected
 
@@ -97,8 +108,8 @@ class TestBuildScoreboard:
         """Sensitivity and specificity are correctly extracted from RF report."""
         df = build_scoreboard(mock_results)
         eval_a = df[df["evaluator"] == "EvalA"].iloc[0]
-        assert eval_a["sensitivity_rf"] == 0.80
-        assert eval_a["specificity_rf"] == 0.90
+        assert eval_a["sensitivity"] == 0.80
+        assert eval_a["specificity"] == 0.90
 
     def test_selection_qc_metadata(self, mock_results):
         """Selection QC metadata is extracted when present."""
