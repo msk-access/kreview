@@ -73,6 +73,19 @@ def binary_Xy():
     return X, y
 
 
+@pytest.fixture(scope="module")
+def cached_cpu_model_results():
+    """Run single_feature_model ONCE per test session for heavy tests."""
+    np.random.seed(42)
+    n = 100
+    X = np.random.randn(n, 5)
+    y = np.zeros(n, dtype=int)
+    y[:40] = 1
+    X[:40, 0] += 2.0
+    names = [f"feat_{i}" for i in range(X.shape[1])]
+    return single_feature_model(X, y, n_folds=3, feature_names=names)
+
+
 # ── evaluate_feature tests ──────────────────────────────────────────────────────
 
 
@@ -159,10 +172,9 @@ class TestEvaluateFeature:
 
 class TestSingleFeatureModel:
 
-    def test_returns_valid_auc(self, binary_Xy):
+    def test_returns_valid_auc(self, cached_cpu_model_results):
         """AUC should be between 0.5 and 1 for a model with signal."""
-        X, y = binary_Xy
-        results, lr, rf, xgb = single_feature_model(X, y)
+        results, lr, rf, xgb = cached_cpu_model_results
         assert "error" not in results
         assert 0.5 <= results["auc_lr"] <= 1.0
         assert 0.5 <= results["auc_rf"] <= 1.0
@@ -175,20 +187,18 @@ class TestSingleFeatureModel:
         assert "error" in results
         assert lr is None and rf is None and xgb is None
 
-    def test_pipeline_lr_model(self, binary_Xy):
+    def test_pipeline_lr_model(self, cached_cpu_model_results):
         """LR model should be a Pipeline with scaler + lr steps."""
-        X, y = binary_Xy
-        results, lr_pipe, rf, xgb = single_feature_model(X, y)
+        results, lr_pipe, rf, xgb = cached_cpu_model_results
         from sklearn.pipeline import Pipeline
 
         assert isinstance(lr_pipe, Pipeline), "LR model should be a Pipeline"
         assert "scaler" in lr_pipe.named_steps
         assert "lr" in lr_pipe.named_steps
 
-    def test_bootstrap_ci_present(self, binary_Xy):
+    def test_bootstrap_ci_present(self, cached_cpu_model_results):
         """Bootstrap CI bounds should be in the results."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         assert "auc_rf_ci_lower" in results
         assert "auc_rf_ci_upper" in results
         # CI should bracket the point estimate
@@ -196,27 +206,24 @@ class TestSingleFeatureModel:
             assert results["auc_rf_ci_lower"] <= results["auc_rf"]
             assert results["auc_rf_ci_upper"] >= results["auc_rf"]
 
-    def test_optimal_threshold_in_range(self, binary_Xy):
+    def test_optimal_threshold_in_range(self, cached_cpu_model_results):
         """Optimal thresholds should be between 0 and 1."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         assert 0 <= results["lr_optimal_threshold"] <= 1
         assert 0 <= results["rf_optimal_threshold"] <= 1
 
-    def test_feature_names_in_importances(self, binary_Xy):
+    def test_feature_names_in_importances(self, cached_cpu_model_results):
         """When feature_names are provided, importances should be a dict."""
-        X, y = binary_Xy
-        names = [f"feat_{i}" for i in range(X.shape[1])]
-        results, *_ = single_feature_model(X, y, feature_names=names)
+        results, *_ = cached_cpu_model_results
+        names = [f"feat_{i}" for i in range(5)]
         imp = results["rf_feature_importances"]
         assert isinstance(imp, dict)
         assert set(imp.keys()) == set(names)
 
-    def test_top_features_post_cv(self, binary_Xy):
+    def test_top_features_post_cv(self, cached_cpu_model_results):
         """Top features should be derived from RF importances (post-CV)."""
-        X, y = binary_Xy
-        names = [f"feat_{i}" for i in range(X.shape[1])]
-        results, *_ = single_feature_model(X, y, feature_names=names)
+        results, *_ = cached_cpu_model_results
+        names = [f"feat_{i}" for i in range(5)]
         assert "top_features" in results
         assert len(results["top_features"]) <= 10
         assert all(f in names for f in results["top_features"])
@@ -236,10 +243,9 @@ class TestSingleFeatureModel:
         # Should have entries for both cancer types
         assert len(results["cancer_type_stats"]) >= 1
 
-    def test_class_weight_balanced(self, binary_Xy):
+    def test_class_weight_balanced(self, cached_cpu_model_results):
         """LR and RF should use balanced class weights."""
-        X, y = binary_Xy
-        _, lr_pipe, rf, _ = single_feature_model(X, y)
+        _, lr_pipe, rf, _ = cached_cpu_model_results
         assert lr_pipe.named_steps["lr"].class_weight == "balanced"
         assert rf.class_weight == "balanced"
 
@@ -250,20 +256,18 @@ class TestSingleFeatureModel:
 class TestPRCurves:
     """Precision-Recall curves and average precision (v0.0.8)."""
 
-    def test_pr_curve_present(self, binary_Xy):
+    def test_pr_curve_present(self, cached_cpu_model_results):
         """PR curve data should be present for all models."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         for prefix in _MODELS:
             key = f"{prefix}_pr_curve"
             assert key in results, f"Missing {key}"
             assert "precision" in results[key]
             assert "recall" in results[key]
 
-    def test_avg_precision_range(self, binary_Xy):
+    def test_avg_precision_range(self, cached_cpu_model_results):
         """Average precision should be between 0 and 1."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         for prefix in _MODELS:
             key = f"{prefix}_avg_precision"
             assert key in results, f"Missing {key}"
@@ -287,10 +291,9 @@ class TestDCA:
         assert "net_benefit_treat_all" in result
         assert len(result["thresholds"]) == len(result["net_benefit_model"])
 
-    def test_dca_in_model_results(self, binary_Xy):
+    def test_dca_in_model_results(self, cached_cpu_model_results):
         """DCA should be present in model results for RF and XGB."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         assert "rf_dca" in results
         assert "thresholds" in results["rf_dca"]
         if HAS_XGB:
@@ -300,20 +303,18 @@ class TestDCA:
 class TestFoldAUC:
     """Fold-level AUC tracking for all 3 models (v0.0.8)."""
 
-    def test_fold_aucs_all_models(self, binary_Xy):
+    def test_fold_aucs_all_models(self, cached_cpu_model_results):
         """Fold AUCs should be tracked for LR, RF, and XGBoost."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         for prefix in _MODELS:
             key = f"{prefix}_fold_aucs"
             assert key in results, f"Missing {key}"
             assert isinstance(results[key], list)
             assert len(results[key]) >= 3  # at least 3 folds
 
-    def test_auc_std_present(self, binary_Xy):
+    def test_auc_std_present(self, cached_cpu_model_results):
         """AUC standard deviation should be computed."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         for prefix in _MODELS:
             key = f"{prefix}_auc_std"
             assert key in results, f"Missing {key}"
@@ -323,16 +324,14 @@ class TestFoldAUC:
 class TestThresholdSweep:
     """Threshold sensitivity sweep (v0.0.8)."""
 
-    def test_sweep_present(self, binary_Xy):
+    def test_sweep_present(self, cached_cpu_model_results):
         """Threshold sweep should be in RF results."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         assert "rf_threshold_sweep" in results
 
-    def test_sweep_structure(self, binary_Xy):
+    def test_sweep_structure(self, cached_cpu_model_results):
         """Sweep should have thresholds, sensitivity, specificity, ppv."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         sweep = results["rf_threshold_sweep"]
         assert isinstance(sweep, list)
         assert len(sweep) > 0
@@ -347,18 +346,14 @@ class TestThresholdSweep:
 class TestFeatureStability:
     """Feature stability across CV folds (v0.0.8)."""
 
-    def test_stability_present(self, binary_Xy):
+    def test_stability_present(self, cached_cpu_model_results):
         """Feature stability dict should be computed."""
-        X, y = binary_Xy
-        names = [f"feat_{i}" for i in range(X.shape[1])]
-        results, *_ = single_feature_model(X, y, feature_names=names)
+        results, *_ = cached_cpu_model_results
         assert "feature_stability" in results
 
-    def test_stability_values(self, binary_Xy):
+    def test_stability_values(self, cached_cpu_model_results):
         """Stability scores should be between 0 and 1."""
-        X, y = binary_Xy
-        names = [f"feat_{i}" for i in range(X.shape[1])]
-        results, *_ = single_feature_model(X, y, feature_names=names)
+        results, *_ = cached_cpu_model_results
         stability = results["feature_stability"]
         assert isinstance(stability, dict)
         for feat, score in stability.items():
@@ -400,10 +395,9 @@ class TestQCMetrics:
 class TestTrainingTime:
     """Training time tracking (v0.0.8)."""
 
-    def test_training_times_present(self, binary_Xy):
+    def test_training_times_present(self, cached_cpu_model_results):
         """Training time should be recorded for all models."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         for prefix in _MODELS:
             key = f"{prefix}_training_time_sec"
             assert key in results, f"Missing {key}"
@@ -413,18 +407,16 @@ class TestTrainingTime:
 class TestAUCDeltas:
     """AUC delta comparisons between models (v0.0.8)."""
 
-    def test_deltas_present(self, binary_Xy):
+    def test_deltas_present(self, cached_cpu_model_results):
         """AUC deltas should be computed between model pairs."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         assert "auc_delta_rf_lr" in results
         if HAS_XGB:
             assert "auc_delta_xgb_rf" in results
 
-    def test_deltas_consistency(self, binary_Xy):
+    def test_deltas_consistency(self, cached_cpu_model_results):
         """RF-LR delta should equal auc_rf - auc_lr."""
-        X, y = binary_Xy
-        results, *_ = single_feature_model(X, y)
+        results, *_ = cached_cpu_model_results
         expected = results["auc_rf"] - results["auc_lr"]
         assert abs(results["auc_delta_rf_lr"] - expected) < 1e-10
 
@@ -654,25 +646,19 @@ class TestEvaluateModel:
 
 
 class TestMultimodalEval:
-    """Tests for multimodal_eval() — cross-evaluator stacking and ablation.
+    """Tests for multimodal_eval() — cross-evaluator stacking and ablation."""
 
-    Uses tmp_path with synthetic per-evaluator JSON result files to
-    test the full pipeline without real parquet data.
-    """
-
-    @pytest.fixture
-    def results_dir(self, tmp_path):
-        """Create synthetic *_model_results.json files for 3 evaluators."""
+    @pytest.fixture(scope="module")
+    def cached_multimodal_results(self, tmp_path_factory):
         import json
 
+        tmp_path = tmp_path_factory.mktemp("multimodal")
         np.random.seed(42)
         n = 100
         y = np.array([0] * 50 + [1] * 50)
 
         for eval_name, auc_base in [("Eval_A", 0.8), ("Eval_B", 0.7), ("Eval_C", 0.6)]:
-            # Generate OOF probabilities with controlled AUC
             probs = np.random.beta(2, 5, size=n).tolist()
-            # Boost positives to achieve approximate AUC
             for i in range(50, 100):
                 probs[i] = min(1.0, probs[i] + auc_base - 0.5)
 
@@ -690,43 +676,32 @@ class TestMultimodalEval:
             with open(path, "w") as f:
                 json.dump(result, f)
 
-        return tmp_path
-
-    def test_output_has_strategy_key(self, results_dir):
-        """Output dict should have strategy='multimodal'."""
         from kreview.eval_engine import multimodal_eval
 
-        result = multimodal_eval(results_dir, models=("rf",), n_folds=3)
+        return multimodal_eval(tmp_path, models=("rf",), n_folds=3)
 
+    def test_output_has_strategy_key(self, cached_multimodal_results):
+        """Output dict should have strategy='multimodal'."""
+        result = cached_multimodal_results
         assert result["strategy"] == "multimodal"
 
-    def test_evaluator_discovery(self, results_dir):
+    def test_evaluator_discovery(self, cached_multimodal_results):
         """Should discover all 3 evaluators."""
-        from kreview.eval_engine import multimodal_eval
-
-        result = multimodal_eval(results_dir, models=("rf",), n_folds=3)
-
+        result = cached_multimodal_results
         assert result["n_evaluators"] == 3
         assert set(result["evaluators"]) == {"Eval_A", "Eval_B", "Eval_C"}
 
-    def test_stacking_produces_auc(self, results_dir):
+    def test_stacking_produces_auc(self, cached_multimodal_results):
         """Stacking should produce an AUC result."""
-        from kreview.eval_engine import multimodal_eval
-
-        result = multimodal_eval(results_dir, models=("rf",), n_folds=3)
-
+        result = cached_multimodal_results
         assert "stacking" in result
-        # Stacking RF AUC key
         assert "auc_stacking_rf" in result["stacking"]
         auc = result["stacking"]["auc_stacking_rf"]
         assert 0.0 <= auc <= 1.0
 
-    def test_single_evaluator_aucs(self, results_dir):
+    def test_single_evaluator_aucs(self, cached_multimodal_results):
         """Per-evaluator AUCs should be captured."""
-        from kreview.eval_engine import multimodal_eval
-
-        result = multimodal_eval(results_dir, models=("rf",), n_folds=3)
-
+        result = cached_multimodal_results
         assert "single_evaluator_aucs" in result
         assert "Eval_A" in result["single_evaluator_aucs"]
 

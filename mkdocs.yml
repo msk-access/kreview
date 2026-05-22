@@ -81,6 +81,7 @@ nav:
       - nbdev Workflow: developer/nbdev-workflow.md
       - Adding a Feature: developer/adding-a-feature.md
       - DuckDB Architecture: developer/duckdb-architecture.md
+      - Testing Guide: developer/testing-guide.md
       - Contributing: developer/contributing.md
       - Release Guide: developer/release-guide.md
   - Operations:
