@@ -68,7 +68,8 @@ def helpMessage() {
      --run_gpu_eval             Enable GPU evaluation step (default: false)
      --gpu_models               Comma-separated GPU models: tabpfn,tabicl (default: tabpfn,tabicl)
      --min_evaluators           Min evaluators per sample for fuse (default: 1)
-     --gpu_partition            SLURM partition for GPU jobs (default: null)
+     --gpu_partition            SLURM partition for GPU jobs (default: gpu; iris: gpushort)
+     --run_multimodal_eval      Enable cross-evaluator multimodal stacking (default: false)
 
      Targeted Execution:
      --features                 Comma-separated list of evaluators (e.g. "AtacOnTarget,FSCOnTarget")
@@ -77,6 +78,7 @@ def helpMessage() {
      Profiles:
      -profile docker            Run locally leveraging GHCR Docker
      -profile slurm             Run on HPC clusters leveraging Singularity
+     -profile iris              IRIS HPC: cmobic_cpu + gpushort GPU partition
     ================================================================
     """.stripIndent()
 }
