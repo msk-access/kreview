@@ -25,10 +25,31 @@ from sklearn.pipeline import Pipeline
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'LABEL_ORDER', 'NEON_COLORS', 'CVD_SAFE_COLORS', 'LABEL_COLORS', 'single_feature_model', 'FeatureEvaluator',
-           'parse_array', 'univariate_auc', 'mutual_info_score', 'set_theme', 'evaluate_feature', 'plot_violin',
-           'plot_density', 'plot_feature_vs_vaf', 'plot_roc_curves', 'plot_feature_importance',
-           'decision_curve_analysis', 'evaluate_model', 'cpu_models', 'gpu_models', 'multimodal_eval']
+__all__ = [
+    "log",
+    "LABEL_ORDER",
+    "NEON_COLORS",
+    "CVD_SAFE_COLORS",
+    "LABEL_COLORS",
+    "single_feature_model",
+    "FeatureEvaluator",
+    "parse_array",
+    "univariate_auc",
+    "mutual_info_score",
+    "set_theme",
+    "evaluate_feature",
+    "plot_violin",
+    "plot_density",
+    "plot_feature_vs_vaf",
+    "plot_roc_curves",
+    "plot_feature_importance",
+    "decision_curve_analysis",
+    "evaluate_model",
+    "cpu_models",
+    "gpu_models",
+    "multimodal_eval",
+]
+
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3
 class FeatureEvaluator:
@@ -1541,7 +1562,8 @@ def _build_stacking_matrix(
 
         evaluators_with_ids += 1
         models_to_use = (
-            [model_filter] if model_filter and model_filter in info["oof_probs"]
+            [model_filter]
+            if model_filter and model_filter in info["oof_probs"]
             else info["models"]
         )
 
@@ -1562,7 +1584,9 @@ def _build_stacking_matrix(
         # Also carry the labels for this evaluator
         eval_data["_oof_labels"] = info["oof_labels"]
 
-        if len(eval_data) > 2:  # Has at least one model column beyond _sample_id and _oof_labels
+        if (
+            len(eval_data) > 2
+        ):  # Has at least one model column beyond _sample_id and _oof_labels
             frames.append(pd.DataFrame(eval_data))
 
     if not frames:
@@ -1574,7 +1598,9 @@ def _build_stacking_matrix(
     # Outer-join on sample ID to handle evaluators with different sample sets
     stacking = frames[0]
     for df in frames[1:]:
-        stacking = pd.merge(stacking, df, on="_sample_id", how="outer", suffixes=("", "_dup"))
+        stacking = pd.merge(
+            stacking, df, on="_sample_id", how="outer", suffixes=("", "_dup")
+        )
         # Resolve duplicate _oof_labels columns (keep first)
         dup_cols = [c for c in stacking.columns if c.endswith("_dup")]
         if dup_cols:
@@ -1585,7 +1611,9 @@ def _build_stacking_matrix(
     sample_ids = stacking["_sample_id"].tolist()
 
     # Drop internal columns
-    feature_cols = [c for c in stacking.columns if c not in ("_sample_id", "_oof_labels")]
+    feature_cols = [
+        c for c in stacking.columns if c not in ("_sample_id", "_oof_labels")
+    ]
     stacking_features = stacking[feature_cols].copy()
 
     n_nans = stacking_features.isna().sum().sum()
@@ -1646,6 +1674,7 @@ def _select_multimodal_features(
     n_nans = int(df.isna().sum().sum())
     if n_nans > 0:
         from kreview.selection import _impute
+
         df = _impute(df, "median")
         log.info("multimodal_feature_imputed", n_nans=n_nans, strategy="median")
 
@@ -1663,9 +1692,7 @@ def _select_multimodal_features(
     # Step 4: Mutual information ranking → top-K
     if len(df.columns) > top_k:
         mi_scores = mutual_info_classif(df.values, y, random_state=42)
-        mi_ranked = sorted(
-            zip(df.columns, mi_scores), key=lambda x: x[1], reverse=True
-        )
+        mi_ranked = sorted(zip(df.columns, mi_scores), key=lambda x: x[1], reverse=True)
         selected = [name for name, _ in mi_ranked[:top_k]]
         df = df[selected]
         log.info(
@@ -1742,7 +1769,9 @@ def multimodal_eval(
     results["single_evaluator_aucs"] = single_aucs
 
     best_single_name = max(single_aucs, key=single_aucs.get) if single_aucs else None
-    best_single_auc = single_aucs.get(best_single_name, 0.0) if best_single_name else 0.0
+    best_single_auc = (
+        single_aucs.get(best_single_name, 0.0) if best_single_name else 0.0
+    )
     results["best_single_evaluator"] = best_single_name
     results["best_single_auc"] = best_single_auc
 
@@ -1817,11 +1846,13 @@ def multimodal_eval(
             # Use shared build_binary_target to filter and encode labels
             # — single source of truth for label → binary mapping.
             from kreview.selection import build_binary_target
+
             super_df, y_raw = build_binary_target(super_df, "label")
 
             # Select numeric feature columns (exclude metadata)
             feature_cols = [
-                c for c in super_df.select_dtypes(include=np.number).columns
+                c
+                for c in super_df.select_dtypes(include=np.number).columns
                 if c not in LABEL_META_COLS
             ]
 
@@ -1858,7 +1889,9 @@ def multimodal_eval(
 
                     raw_auc = res.get(f"auc_raw_{model_name}")
                     if raw_auc is not None and best_single_auc > 0:
-                        raw_results[f"raw_{model_name}_vs_best_single"] = raw_auc - best_single_auc
+                        raw_results[f"raw_{model_name}_vs_best_single"] = (
+                            raw_auc - best_single_auc
+                        )
                 except Exception as e:
                     log.error("raw_model_failed", model=model_name, error=str(e))
                     raw_results[f"raw_{model_name}_error"] = str(e)
@@ -1901,7 +1934,10 @@ def multimodal_eval(
                     try:
                         model = _build_model(best_stack_model, random_state)
                         res, _ = evaluate_model(
-                            model, X_ablated.values, y_stack, cv,
+                            model,
+                            X_ablated.values,
+                            y_stack,
+                            cv,
                             f"ablation_{eval_name}",
                             feature_names=list(X_ablated.columns),
                         )
@@ -1971,10 +2007,12 @@ def _build_model(model_name: str, random_state: int):
         ValueError: If ``model_name`` is not recognised.
     """
     if model_name == "lr":
-        return Pipeline([
-            ("scaler", StandardScaler()),
-            ("lr", LogisticRegression(max_iter=1000, random_state=random_state)),
-        ])
+        return Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("lr", LogisticRegression(max_iter=1000, random_state=random_state)),
+            ]
+        )
     elif model_name == "rf":
         return RandomForestClassifier(
             n_estimators=200, max_depth=6, random_state=random_state, n_jobs=-1
@@ -1982,10 +2020,16 @@ def _build_model(model_name: str, random_state: int):
     elif model_name == "xgb":
         try:
             from xgboost import XGBClassifier
+
             return XGBClassifier(
-                n_estimators=200, max_depth=4, learning_rate=0.1,
-                random_state=random_state, use_label_encoder=False,
-                eval_metric="logloss", verbosity=0, n_jobs=-1,
+                n_estimators=200,
+                max_depth=4,
+                learning_rate=0.1,
+                random_state=random_state,
+                use_label_encoder=False,
+                eval_metric="logloss",
+                verbosity=0,
+                n_jobs=-1,
             )
         except ImportError:
             log.error("xgb_import_failed", hint="pip install xgboost")

@@ -10,7 +10,8 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'EndMotifOnTargetEvaluator']
+__all__ = ["log", "EndMotifOnTargetEvaluator"]
+
 
 # %% ../../nbs/features/21_endmotif.ipynb #b9f55c5c
 class EndMotifOnTargetEvaluator(FeatureEvaluator):

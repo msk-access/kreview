@@ -39,12 +39,9 @@ COPY --from=builder /src/dist/*.whl /app/
 RUN pip install --no-cache-dir /app/*.whl && \
     rm /app/*.whl
 
-# Install runtime essentials (procps, bash) for Nextflow compatibility & Quarto natively
+# Install runtime essentials (procps, bash) for Nextflow compatibility
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget procps bash && \
-    wget https://github.com/quarto-dev/quarto-cli/releases/download/v1.4.551/quarto-1.4.551-linux-amd64.deb && \
-    dpkg -i quarto-1.4.551-linux-amd64.deb && \
-    rm quarto-1.4.551-linux-amd64.deb && \
+    procps bash && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ensure output directories exist
@@ -86,10 +83,7 @@ RUN pip3 install --no-cache-dir /app/*.whl && \
     pip3 install --no-cache-dir "kreview[gpu]" && \
     rm /app/*.whl
 
-# Install Quarto for report generation
-RUN wget -q https://github.com/quarto-dev/quarto-cli/releases/download/v1.4.551/quarto-1.4.551-linux-amd64.deb && \
-    dpkg -i quarto-1.4.551-linux-amd64.deb && \
-    rm quarto-1.4.551-linux-amd64.deb
+
 
 # Ensure output directories exist
 RUN mkdir -p /app/data /app/results

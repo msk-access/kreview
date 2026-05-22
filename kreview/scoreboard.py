@@ -46,31 +46,62 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
             log.warning("scoreboard_read_failed", file=str(json_path), error=str(e))
             continue
 
-        auc_rf = data.get("auc_rf", np.nan)
-        auc_lr = data.get("auc_lr", np.nan)
-        auc_xgb = data.get("auc_xgb", np.nan)
+        # Extract all AUCs dynamically and find the best model
+        # Support both flat keys and nested 'stacking' multimodal keys
+        all_aucs = {}
 
-        # Compute best AUC across all model types (ignoring NaN and None)
-        valid_aucs = [
-            x
-            for x in [auc_rf, auc_lr, auc_xgb]
-            if x is not None and not (isinstance(x, float) and np.isnan(x))
-        ]
-        best_auc = max(valid_aucs) if valid_aucs else np.nan
+        # Pull flat models
+        for k, v in data.items():
+            if (
+                k.startswith("auc_")
+                and not k.endswith(("_ci_lower", "_ci_upper"))
+                and not k.startswith("auc_delta_")
+            ):
+                m_id = k.replace("auc_", "")
+                if v is not None and not (isinstance(v, float) and np.isnan(v)):
+                    all_aucs[m_id] = v
 
-        # Extract sensitivity/specificity from classification report
-        # sensitivity = recall of positive class (1)
-        # specificity = recall of negative class (0)
-        cr = data.get("rf_classification_report", {})
-        sensitivity_rf = np.nan
-        specificity_rf = np.nan
+        # Pull multimodal stacking models if present
+        if "stacking" in data:
+            for k, v in data["stacking"].items():
+                if (
+                    k.startswith("auc_")
+                    and not k.endswith(("_ci_lower", "_ci_upper"))
+                    and not k.startswith("auc_delta_")
+                ):
+                    m_id = k.replace("auc_", "")
+                    if v is not None and not (isinstance(v, float) and np.isnan(v)):
+                        all_aucs[m_id] = v
+
+        best_auc = np.nan
+        best_model = None
+        if all_aucs:
+            best_model = max(all_aucs, key=all_aucs.get)
+            best_auc = all_aucs[best_model]
+
+        # Extract sensitivity/specificity for the BEST model
+        cr = {}
+        if best_model:
+            # Check flat dict
+            if f"{best_model}_classification_report" in data:
+                cr = data[f"{best_model}_classification_report"]
+            # Check stacking dict
+            elif (
+                "stacking" in data
+                and f"{best_model}_classification_report" in data["stacking"]
+            ):
+                cr = data["stacking"][f"{best_model}_classification_report"]
+
+        sensitivity = np.nan
+        specificity = np.nan
         n_samples = np.nan
         n_positive = np.nan
-        if isinstance(cr, dict):
+
+        if isinstance(cr, dict) and cr:
             pos_class = cr.get("1", cr.get("1.0", {}))
             neg_class = cr.get("0", cr.get("0.0", {}))
-            sensitivity_rf = pos_class.get("recall", np.nan) if pos_class else np.nan
-            specificity_rf = neg_class.get("recall", np.nan) if neg_class else np.nan
+            sensitivity = pos_class.get("recall", np.nan) if pos_class else np.nan
+            specificity = neg_class.get("recall", np.nan) if neg_class else np.nan
             weighted = cr.get("weighted avg", {})
             n_samples = weighted.get("support", np.nan) if weighted else np.nan
             n_positive = pos_class.get("support", np.nan) if pos_class else np.nan
@@ -80,25 +111,26 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
         n_sel = sel_qc.get("n_selected_union", len(data.get("top_features", [])))
         n_overlap = sel_qc.get("n_overlap_both", 0)
 
-        records.append(
-            {
-                "evaluator": evaluator_name,
-                "auc_rf": auc_rf,
-                "auc_lr": auc_lr,
-                "auc_xgb": auc_xgb,
-                "best_auc": best_auc,
-                "n_features": len(data.get("top_features", [])),
-                "cv_folds": data.get("cv_folds_actual", np.nan),
-                "sensitivity_rf": sensitivity_rf,
-                "specificity_rf": specificity_rf,
-                "optimal_threshold_rf": data.get("rf_optimal_threshold", np.nan),
-                "n_samples": n_samples,
-                "n_positive": n_positive,
-                "selection_method": sel_qc.get("method", "legacy_cohens_d"),
-                "n_selected_features": n_sel,
-                "selection_overlap_pct": round(n_overlap / max(1, n_sel) * 100, 1),
-            }
-        )
+        rec = {
+            "evaluator": evaluator_name,
+            "best_auc": best_auc,
+            "best_model": best_model,
+            "n_features": len(data.get("top_features", [])),
+            "cv_folds": data.get("cv_folds_actual", np.nan),
+            "sensitivity": sensitivity,
+            "specificity": specificity,
+            "n_samples": n_samples,
+            "n_positive": n_positive,
+            "selection_method": sel_qc.get("method", "legacy_cohens_d"),
+            "n_selected_features": n_sel,
+            "selection_overlap_pct": round(n_overlap / max(1, n_sel) * 100, 1),
+        }
+
+        # Add all individual AUCs
+        for m_id, auc_val in all_aucs.items():
+            rec[f"auc_{m_id}"] = auc_val
+
+        records.append(rec)
 
     if not records:
         log.warning("scoreboard_empty_after_parsing", dir=str(output_dir))

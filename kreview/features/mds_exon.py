@@ -9,7 +9,8 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'MDSExonEvaluator']
+__all__ = ["log", "MDSExonEvaluator"]
+
 
 # %% ../../nbs/features/20b_mds_exon.ipynb #d368744f
 class MDSExonEvaluator(FeatureEvaluator):

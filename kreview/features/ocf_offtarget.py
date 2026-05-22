@@ -10,7 +10,8 @@ from ..eval_engine import FeatureEvaluator
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ['log', 'OCFOfftargetEvaluator']
+__all__ = ["log", "OCFOfftargetEvaluator"]
+
 
 # %% ../../nbs/features/16_ocf_offtarget.ipynb #50f09cce
 class OCFOfftargetEvaluator(FeatureEvaluator):
