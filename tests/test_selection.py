@@ -197,7 +197,9 @@ class TestScoreFeatures:
 class TestSelectFeatures:
     def test_reduces_feature_count(self, synthetic_matrix):
         eval_df = score_features(synthetic_matrix, cv_folds=3, compute_auc=True)
-        selected, qc = select_features(synthetic_matrix, eval_df, strategy="hybrid_union", top_percentile=30)
+        selected, qc = select_features(
+            synthetic_matrix, eval_df, strategy="hybrid_union", top_percentile=30
+        )
 
         # Selected matrix should have fewer feature columns
         from kreview.core import LABEL_META_COLS
@@ -216,7 +218,9 @@ class TestSelectFeatures:
 
     def test_preserves_metadata_columns(self, synthetic_matrix):
         eval_df = score_features(synthetic_matrix, cv_folds=3, compute_auc=True)
-        selected, _ = select_features(synthetic_matrix, eval_df, strategy="hybrid_union")
+        selected, _ = select_features(
+            synthetic_matrix, eval_df, strategy="hybrid_union"
+        )
         assert "SAMPLE_ID" in selected.columns
         assert "label" in selected.columns
 
@@ -262,7 +266,9 @@ class TestSelectFeatures:
     def test_mi_only_selection(self, synthetic_matrix):
         """When AUC is not computed, selection falls back to MI-only."""
         eval_df = score_features(synthetic_matrix, cv_folds=3, compute_auc=False)
-        selected, qc = select_features(synthetic_matrix, eval_df, strategy="hybrid_union")
+        selected, qc = select_features(
+            synthetic_matrix, eval_df, strategy="hybrid_union"
+        )
         # Should still produce a valid result
         assert qc["n_auc_only"] == 0  # no AUC-based selection
 
@@ -275,6 +281,7 @@ class TestSelectFeatures:
         assert qc["method"] == "mrmr"
         assert qc["n_after_variance_guard"] > 0
         from kreview.core import LABEL_META_COLS
+
         sel_feats = [
             c
             for c in selected.select_dtypes(include=np.number).columns
@@ -301,16 +308,24 @@ class TestSelectFeatures:
             "n_variance_dropped",
             "impute_strategy",
         }
-        assert required_keys.issubset(set(qc.keys())), (
-            f"Missing keys: {required_keys - set(qc.keys())}"
-        )
+        assert required_keys.issubset(
+            set(qc.keys())
+        ), f"Missing keys: {required_keys - set(qc.keys())}"
         assert qc["method"] == "mrmr"
 
         # Hybrid-union-only keys must NOT be present
-        assert "n_overlap_both" not in qc, "mRMR QC should not contain hybrid-union key 'n_overlap_both'"
-        assert "n_auc_only" not in qc, "mRMR QC should not contain hybrid-union key 'n_auc_only'"
-        assert "n_mi_only" not in qc, "mRMR QC should not contain hybrid-union key 'n_mi_only'"
-        assert "n_keep_per_metric" not in qc, "mRMR QC should not contain hybrid-union key 'n_keep_per_metric'"
+        assert (
+            "n_overlap_both" not in qc
+        ), "mRMR QC should not contain hybrid-union key 'n_overlap_both'"
+        assert (
+            "n_auc_only" not in qc
+        ), "mRMR QC should not contain hybrid-union key 'n_auc_only'"
+        assert (
+            "n_mi_only" not in qc
+        ), "mRMR QC should not contain hybrid-union key 'n_mi_only'"
+        assert (
+            "n_keep_per_metric" not in qc
+        ), "mRMR QC should not contain hybrid-union key 'n_keep_per_metric'"
 
     def test_small_matrix(self, small_matrix):
         eval_df = score_features(small_matrix, cv_folds=3, compute_auc=True)

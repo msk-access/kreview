@@ -1699,8 +1699,12 @@ def _select_multimodal_features(
 
         selector = BorutaShap(
             model=XGBClassifier(
-                n_estimators=100, max_depth=5, use_label_encoder=False,
-                eval_metric="logloss", random_state=42, verbosity=0,
+                n_estimators=100,
+                max_depth=5,
+                use_label_encoder=False,
+                eval_metric="logloss",
+                random_state=42,
+                verbosity=0,
             ),
             importance_measure="shap",
             classification=True,
@@ -1712,8 +1716,9 @@ def _select_multimodal_features(
         if not subset.empty:
             selected = list(subset.columns)
             df = df[selected]
-            log.info("boruta_shap_complete", n_selected=len(selected),
-                     top_5=selected[:5])
+            log.info(
+                "boruta_shap_complete", n_selected=len(selected), top_5=selected[:5]
+            )
             return df, selected
         else:
             log.warning("boruta_shap_no_features", fallback="mi_top_k")

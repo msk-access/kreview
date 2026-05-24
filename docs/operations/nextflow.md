@@ -68,7 +68,7 @@ When operating locally, `nextflow.config` strictly maps `docker.runOptions = '-v
 ### 2. High-Performance Computing (SLURM)
 `nextflow run ... -profile slurm`
 
-If analyzing clinical trials against HPC hardware (like MSK's `cmobic_cpu` queues on `IRIS`), the pipeline invokes `Singularity` (via `autoMounts = true`) and overrides the fallback logic. 
+If analyzing clinical trials against HPC hardware (like MSK's `cmobic_short` queues on `IRIS`), the pipeline invokes `Singularity` (via `autoMounts = true`) and overrides the fallback logic. 
 The configuration aggressively sets `--chunk-size 500` to maximize network ingestion speeds on hardware that naturally supports `102400` open network sockets.
 
 ---

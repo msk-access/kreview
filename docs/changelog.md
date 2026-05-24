@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.11] - Unreleased
+## [0.0.11] - 2026-05-24
 ### Changed
 - **Feature Selection (Default)**: Default single-evaluator strategy changed from `hybrid_union` to `mrmr` (Minimum Redundancy Maximum Relevance). mRMR selects features maximizing target correlation while minimizing inter-feature redundancy, preventing multi-collinearity.
 - **Multimodal Selection**: `--multimodal-selection` now supports `boruta_shap` (interaction-aware, SHAP-based) in addition to `mi` (mutual information, default).

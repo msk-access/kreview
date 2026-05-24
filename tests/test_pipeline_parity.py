@@ -122,14 +122,21 @@ class TestPipelineParity:
         stats = score_features(synthetic_matrix, cv_folds=3, compute_auc=True)
         _, qc = select_features(synthetic_matrix, stats, top_percentile=50)
 
-        # QC should have standard keys
+        # QC should have standard keys (common to all strategies)
         assert "total_input_features" in qc
-        assert "n_selected_union" in qc
         assert "method" in qc
 
+        # Method-specific count key
+        if qc["method"] == "mrmr":
+            count_key = "n_mrmr_selected"
+        else:
+            count_key = "n_selected_union"
+
+        assert count_key in qc, f"Missing key '{count_key}' for method '{qc['method']}'"
+
         # Selected count should be <= original (minus constants)
-        assert qc["n_selected_union"] <= qc["total_input_features"]
-        assert qc["n_selected_union"] > 0
+        assert qc[count_key] <= qc["total_input_features"]
+        assert qc[count_key] > 0
 
     def test_different_percentiles_give_different_sizes(self, synthetic_matrix):
         """Higher percentile should select more features (all else equal)."""

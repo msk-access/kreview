@@ -113,7 +113,7 @@ where $X$ is controlled by `--top-percentile` (default: 10%). The **union** ensu
 !!! warning "Deprecated: `--top-n`"
     The `--top-n` flag (fixed count, Cohen's D ranking) is deprecated since v0.0.9. Use `--top-percentile` instead.
 
-## Multimodal Selection (v0.0.10+)
+## Multimodal Selection (v0.0.11+)
 
 When aggregating multiple feature sets in `kreview eval multimodal`, the pipeline offers two higher-order selection strategies via `--multimodal-selection`:
 
