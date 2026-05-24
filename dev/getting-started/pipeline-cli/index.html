@@ -1806,7 +1806,7 @@
 </tr>
 <tr>
 <td><code>kreview select</code></td>
-<td>Score features (<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>/MI) + hybrid union selection</td>
+<td>Score features (<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>/MI) + mRMR or hybrid union selection</td>
 <td>3</td>
 </tr>
 <tr>
@@ -1939,7 +1939,7 @@
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--krewlyzer-dir<span class="w"> </span>...<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--top-percentile<span class="w"> </span><span class="m">20</span>
 </code></pre></div>
-<p>Feature selection uses a <strong>Hybrid Union</strong> strategy: the top X% of features by Univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> ∪ top X% by Mutual Information. This captures both linear (<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>) and non-linear (MI) predictors.</p>
+<p>Feature selection uses <strong>mRMR (Minimum Redundancy Maximum Relevance)</strong> by default. It selects features that are highly correlated with the target but mutually dissimilar, preventing multi-collinearity. A legacy <strong>Hybrid Union</strong> strategy (top X% by <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> ∪ top X% by MI) is also available.</p>
 <table>
 <thead>
 <tr>
@@ -1950,9 +1950,14 @@
 </thead>
 <tbody>
 <tr>
+<td><code>--strategy</code></td>
+<td>mrmr</td>
+<td>Feature selection strategy: <code>mrmr</code> or <code>hybrid_union</code></td>
+</tr>
+<tr>
 <td><code>--top-percentile</code></td>
 <td>10.0</td>
-<td>Percentile cutoff per metric. Union of both sets feeds models.</td>
+<td>Percentile cutoff. For mRMR, this controls <code>K</code> features to select.</td>
 </tr>
 <tr>
 <td><code>--compute-univariate-auc</code></td>
@@ -2028,8 +2033,8 @@
 <a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span>--krewlyzer-dir<span class="w"> </span>/path/to/features/<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span>--output<span class="w"> </span>output/
 <a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="c1"># Step 2: Feature selection</span>
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>kreview<span class="w"> </span><span class="k">select</span><span class="w"> </span>--matrices-dir<span class="w"> </span>output/<span class="w"> </span>--top-percentile<span class="w"> </span><span class="m">50</span><span class="w"> </span>--output<span class="w"> </span>selected/
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="c1"># Step 2: Feature selection (mRMR is default)</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>kreview<span class="w"> </span><span class="k">select</span><span class="w"> </span>--matrices-dir<span class="w"> </span>output/<span class="w"> </span>--top-percentile<span class="w"> </span><span class="m">50</span><span class="w"> </span>--strategy<span class="w"> </span>mrmr<span class="w"> </span>--output<span class="w"> </span>selected/
 <a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="c1"># Or overwrite in-place:</span>
 <a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="c1"># kreview select --matrices-dir output/ --top-percentile 50 --overwrite</span>
 <a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>
@@ -2045,10 +2050,11 @@
 <a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>multimodal<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a><span class="w">    </span>--results-dir<span class="w"> </span>results/<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-11-25" name="__codelineno-11-25" href="#__codelineno-11-25"></a><span class="w">    </span>--super-matrix<span class="w"> </span>selected/super_matrix.parquet<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a><span class="w">    </span>--output<span class="w"> </span>results/
-<a id="__codelineno-11-27" name="__codelineno-11-27" href="#__codelineno-11-27"></a>
-<a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a><span class="c1"># Step 5: Report</span>
-<a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a>kreview<span class="w"> </span>report<span class="w"> </span>--results-dir<span class="w"> </span>results/
+<a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a><span class="w">    </span>--multimodal-selection<span class="w"> </span>boruta_shap<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-27" name="__codelineno-11-27" href="#__codelineno-11-27"></a><span class="w">    </span>--output<span class="w"> </span>results/
+<a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a>
+<a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a><span class="c1"># Step 5: Report</span>
+<a id="__codelineno-11-30" name="__codelineno-11-30" href="#__codelineno-11-30"></a>kreview<span class="w"> </span>report<span class="w"> </span>--results-dir<span class="w"> </span>results/
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">kreview select options</p>
@@ -2069,7 +2075,12 @@
 <tr>
 <td><code>--top-percentile</code></td>
 <td>50</td>
-<td>Top N% per metric for hybrid union</td>
+<td>Top N% per metric for selection</td>
+</tr>
+<tr>
+<td><code>--strategy</code></td>
+<td>mrmr</td>
+<td>Feature selection strategy: <code>mrmr</code> or <code>hybrid_union</code></td>
 </tr>
 <tr>
 <td><code>--cv-folds</code></td>
@@ -2079,7 +2090,7 @@
 <tr>
 <td><code>--impute-strategy</code></td>
 <td>median</td>
-<td>Imputation for variance check</td>
+<td>Imputation for missing values</td>
 </tr>
 <tr>
 <td><code>--output</code></td>
@@ -2143,7 +2154,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 21, 2026 20:01:33 UTC"><span class="timeago" datetime="2026-05-21T20:01:33+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 21, 2026 20:01:33 UTC">2026-05-21</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 24, 2026 03:49:12 UTC"><span class="timeago" datetime="2026-05-24T03:49:12+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 24, 2026 03:49:12 UTC">2026-05-24</span>
   </span>
 
     

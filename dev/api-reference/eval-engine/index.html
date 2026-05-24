@@ -3297,7 +3297,7 @@ DCA, feature stability, subgroup analysis).</p>
 
 
 <h3 id="kreview.eval_engine.multimodal_eval" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">multimodal_eval</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'rf'</span><span class="p">,</span> <span class="s1">'xgb'</span><span class="p">),</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">multimodal_eval</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'rf'</span><span class="p">,</span> <span class="s1">'xgb'</span><span class="p">),</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">multimodal_selection</span><span class="o">=</span><span class="s1">'mi'</span><span class="p">)</span></code>
 
 </h3>
 
@@ -3315,8 +3315,8 @@ DCA, feature stability, subgroup analysis).</p>
 </li>
 <li>
 <p><strong>Raw features</strong> (optional): If <code>super_matrix_path</code> is provided,
-   trains directly on the fused feature matrix with MI-based
-   feature selection.</p>
+   trains directly on the fused feature matrix with
+   <code>multimodal_selection</code>-based feature selection (MI or Boruta-<abbr title="SHapley Additive exPlanations">SHAP</abbr>).</p>
 </li>
 <li>
 <p><strong>Ablation</strong>: Leave-one-evaluator-out analysis on the stacking

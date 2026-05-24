@@ -1645,22 +1645,25 @@ Iterates over all *_matrix.parquet files and writes results JSONs.</p>
 and combines them into a stacking matrix.  Three strategies are run:</p>
 <ol>
 <li><strong>Stacking</strong>: Meta-learner on OOF probabilities across evaluators</li>
-<li><strong>Raw features</strong> (if --super-matrix provided): MI-selected features</li>
+<li><strong>Raw features</strong> (if --super-matrix provided): MI or Boruta-<abbr title="SHapley Additive exPlanations">SHAP</abbr> selected features</li>
 <li><strong>Ablation</strong>: Leave-one-evaluator-out importance analysis</li>
 </ol>
 <p>Usage:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview eval multimodal [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>  --results-dir PATH   Directory with *_model_results.json files from eval
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>                       cpu/gpu  [required]
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>  --super-matrix PATH  Optional path to super_matrix.parquet for raw-feature
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>                       strategy
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>  --output PATH        Output directory  [default: output/]
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>  --models TEXT        Comma-separated models for multimodal evaluation
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>                       (lr,rf,xgb)  [default: rf,xgb]
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>  --top-k INTEGER      Top-K features for MI selection  [default: 50]
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>  --cv-folds INTEGER   Cross-validation folds  [default: 5]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>  --results-dir PATH           Directory with *_model_results.json files from
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>                               eval cpu/gpu  [required]
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>  --super-matrix PATH          Optional path to super_matrix.parquet for raw-
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>                               feature strategy
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>  --output PATH                Output directory  [default: output/]
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>  --models TEXT                Comma-separated models for multimodal
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>                               evaluation (lr,rf,xgb)  [default: rf,xgb]
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>  --top-k INTEGER              Top-K features for MI selection  [default: 50]
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>  --multimodal-selection TEXT  Multimodal feature selection: mi (default,
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>                               fast) or boruta_shap (interaction-aware)
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>                               [default: mi]
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>  --cv-folds INTEGER           Cross-validation folds  [default: 5]
 </code></pre></div>
 <h2 id="extract">extract</h2>
 <p>Label samples and extract feature matrices (no eval/model/report).</p>
@@ -1800,37 +1803,41 @@ block the remaining dashboards.</p>
 <a id="__codelineno-19-32" name="__codelineno-19-32" href="#__codelineno-19-32"></a>  --top-percentile FLOAT          Top X%% of features to select per metric
 <a id="__codelineno-19-33" name="__codelineno-19-33" href="#__codelineno-19-33"></a>                                  (AUC, MI). The union of both sets feeds into
 <a id="__codelineno-19-34" name="__codelineno-19-34" href="#__codelineno-19-34"></a>                                  models.  [default: 10.0]
-<a id="__codelineno-19-35" name="__codelineno-19-35" href="#__codelineno-19-35"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
-<a id="__codelineno-19-36" name="__codelineno-19-36" href="#__codelineno-19-36"></a>                                  computation in dashboards. Lower values
-<a id="__codelineno-19-37" name="__codelineno-19-37" href="#__codelineno-19-37"></a>                                  reduce memory usage.  [default: 500]
-<a id="__codelineno-19-38" name="__codelineno-19-38" href="#__codelineno-19-38"></a>  --shap-features INTEGER         Max features to visualize in SHAP
-<a id="__codelineno-19-39" name="__codelineno-19-39" href="#__codelineno-19-39"></a>                                  beeswarm/waterfall plots.  [default: 10]
-<a id="__codelineno-19-40" name="__codelineno-19-40" href="#__codelineno-19-40"></a>  --resume                        Skip models whose AUC results already exist
-<a id="__codelineno-19-41" name="__codelineno-19-41" href="#__codelineno-19-41"></a>                                  in the output JSON. Enables incremental
-<a id="__codelineno-19-42" name="__codelineno-19-42" href="#__codelineno-19-42"></a>                                  runs: first CPU, then GPU with --resume.
-<a id="__codelineno-19-43" name="__codelineno-19-43" href="#__codelineno-19-43"></a>  --compute-univariate-auc        Compute per-feature univariate LR AUC.
-<a id="__codelineno-19-44" name="__codelineno-19-44" href="#__codelineno-19-44"></a>                                  Required for hybrid selection (default:
-<a id="__codelineno-19-45" name="__codelineno-19-45" href="#__codelineno-19-45"></a>                                  True).  [default: True]
-<a id="__codelineno-19-46" name="__codelineno-19-46" href="#__codelineno-19-46"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
-<a id="__codelineno-19-47" name="__codelineno-19-47" href="#__codelineno-19-47"></a>                                  only demotion. Samples with only CH
-<a id="__codelineno-19-48" name="__codelineno-19-48" href="#__codelineno-19-48"></a>                                  mutations are demoted to Possible ctDNA−.
-<a id="__codelineno-19-49" name="__codelineno-19-49" href="#__codelineno-19-49"></a>  --gpu-models TEXT               Comma-separated GPU models to run after CPU
-<a id="__codelineno-19-50" name="__codelineno-19-50" href="#__codelineno-19-50"></a>                                  models: tabpfn,tabicl. Empty (default) = CPU
-<a id="__codelineno-19-51" name="__codelineno-19-51" href="#__codelineno-19-51"></a>                                  only. Requires torch + model packages (pip
-<a id="__codelineno-19-52" name="__codelineno-19-52" href="#__codelineno-19-52"></a>                                  install kreview[gpu]).
-<a id="__codelineno-19-53" name="__codelineno-19-53" href="#__codelineno-19-53"></a>  --no-finetune                   Use zero-shot inference for GPU models
-<a id="__codelineno-19-54" name="__codelineno-19-54" href="#__codelineno-19-54"></a>                                  instead of fine-tuning (not recommended).
-<a id="__codelineno-19-55" name="__codelineno-19-55" href="#__codelineno-19-55"></a>  --finetune-epochs INTEGER       Number of fine-tuning epochs for GPU
-<a id="__codelineno-19-56" name="__codelineno-19-56" href="#__codelineno-19-56"></a>                                  foundation models.  [default: 30]
-<a id="__codelineno-19-57" name="__codelineno-19-57" href="#__codelineno-19-57"></a>  --device TEXT                   PyTorch device for GPU models: cuda, cpu.
-<a id="__codelineno-19-58" name="__codelineno-19-58" href="#__codelineno-19-58"></a>                                  [default: cuda]
+<a id="__codelineno-19-35" name="__codelineno-19-35" href="#__codelineno-19-35"></a>  --strategy TEXT                 Feature selection strategy: mrmr (default)
+<a id="__codelineno-19-36" name="__codelineno-19-36" href="#__codelineno-19-36"></a>                                  or hybrid_union  [default: mrmr]
+<a id="__codelineno-19-37" name="__codelineno-19-37" href="#__codelineno-19-37"></a>  --multimodal-selection TEXT     Multimodal selection: mi (default) or
+<a id="__codelineno-19-38" name="__codelineno-19-38" href="#__codelineno-19-38"></a>                                  boruta_shap  [default: mi]
+<a id="__codelineno-19-39" name="__codelineno-19-39" href="#__codelineno-19-39"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
+<a id="__codelineno-19-40" name="__codelineno-19-40" href="#__codelineno-19-40"></a>                                  computation in dashboards. Lower values
+<a id="__codelineno-19-41" name="__codelineno-19-41" href="#__codelineno-19-41"></a>                                  reduce memory usage.  [default: 500]
+<a id="__codelineno-19-42" name="__codelineno-19-42" href="#__codelineno-19-42"></a>  --shap-features INTEGER         Max features to visualize in SHAP
+<a id="__codelineno-19-43" name="__codelineno-19-43" href="#__codelineno-19-43"></a>                                  beeswarm/waterfall plots.  [default: 10]
+<a id="__codelineno-19-44" name="__codelineno-19-44" href="#__codelineno-19-44"></a>  --resume                        Skip models whose AUC results already exist
+<a id="__codelineno-19-45" name="__codelineno-19-45" href="#__codelineno-19-45"></a>                                  in the output JSON. Enables incremental
+<a id="__codelineno-19-46" name="__codelineno-19-46" href="#__codelineno-19-46"></a>                                  runs: first CPU, then GPU with --resume.
+<a id="__codelineno-19-47" name="__codelineno-19-47" href="#__codelineno-19-47"></a>  --compute-univariate-auc        Compute per-feature univariate LR AUC.
+<a id="__codelineno-19-48" name="__codelineno-19-48" href="#__codelineno-19-48"></a>                                  Required for hybrid selection (default:
+<a id="__codelineno-19-49" name="__codelineno-19-49" href="#__codelineno-19-49"></a>                                  True).  [default: True]
+<a id="__codelineno-19-50" name="__codelineno-19-50" href="#__codelineno-19-50"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
+<a id="__codelineno-19-51" name="__codelineno-19-51" href="#__codelineno-19-51"></a>                                  only demotion. Samples with only CH
+<a id="__codelineno-19-52" name="__codelineno-19-52" href="#__codelineno-19-52"></a>                                  mutations are demoted to Possible ctDNA−.
+<a id="__codelineno-19-53" name="__codelineno-19-53" href="#__codelineno-19-53"></a>  --gpu-models TEXT               Comma-separated GPU models to run after CPU
+<a id="__codelineno-19-54" name="__codelineno-19-54" href="#__codelineno-19-54"></a>                                  models: tabpfn,tabicl. Empty (default) = CPU
+<a id="__codelineno-19-55" name="__codelineno-19-55" href="#__codelineno-19-55"></a>                                  only. Requires torch + model packages (pip
+<a id="__codelineno-19-56" name="__codelineno-19-56" href="#__codelineno-19-56"></a>                                  install kreview[gpu]).
+<a id="__codelineno-19-57" name="__codelineno-19-57" href="#__codelineno-19-57"></a>  --no-finetune                   Use zero-shot inference for GPU models
+<a id="__codelineno-19-58" name="__codelineno-19-58" href="#__codelineno-19-58"></a>                                  instead of fine-tuning (not recommended).
+<a id="__codelineno-19-59" name="__codelineno-19-59" href="#__codelineno-19-59"></a>  --finetune-epochs INTEGER       Number of fine-tuning epochs for GPU
+<a id="__codelineno-19-60" name="__codelineno-19-60" href="#__codelineno-19-60"></a>                                  foundation models.  [default: 30]
+<a id="__codelineno-19-61" name="__codelineno-19-61" href="#__codelineno-19-61"></a>  --device TEXT                   PyTorch device for GPU models: cuda, cpu.
+<a id="__codelineno-19-62" name="__codelineno-19-62" href="#__codelineno-19-62"></a>                                  [default: cuda]
 </code></pre></div>
 <h2 id="select">select</h2>
-<p>Score features and apply hybrid-union selection to extracted matrices.</p>
+<p>Score features and apply feature selection to extracted matrices.</p>
 <p>Reads all <code>*_matrix.parquet</code> files from <code>--matrices-dir</code>, computes
 feature scores (univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> + mutual information), and selects the
-top features using a hybrid union strategy (top N%% by <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> ∪ top N%%
-by MI).</p>
+top features using mRMR (default, redundancy-aware) or hybrid union
+(top N%% by <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> ∪ top N%% by MI).</p>
 <p>Writes selected matrices, eval stats, and <abbr title="Quality Control">QC</abbr> metadata to <code>--output</code>
 (or overwrites originals when <code>--overwrite</code> is set).</p>
 <p>Usage:</p>
@@ -1839,21 +1846,25 @@ by MI).</p>
 <p>Options:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>  --matrices-dir PATH             Directory with *_matrix.parquet files from
 <a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>                                  kreview extract  [required]
-<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>  --top-percentile FLOAT          Top X%% of features per metric for hybrid
-<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>                                  union selection  [default: 50.0]
-<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>  --cv-folds INTEGER              Cross-validation folds for univariate AUC
-<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>                                  scoring  [default: 5]
-<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>  --impute-strategy TEXT          Imputation strategy for variance check:
-<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>                                  median, mean, zero  [default: median]
-<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>  --output PATH                   Output directory for selected matrices
-<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a>                                  (ignored when --overwrite is set)  [default:
-<a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a>                                  output/]
-<a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a>  --overwrite                     Overwrite original matrices in --matrices-
-<a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a>                                  dir instead of writing to --output
-<a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a>  --compute-univariate-auc / --no-compute-univariate-auc
-<a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a>                                  Compute per-feature univariate AUC (disable
-<a id="__codelineno-21-16" name="__codelineno-21-16" href="#__codelineno-21-16"></a>                                  for MI-only selection)  [default: compute-
-<a id="__codelineno-21-17" name="__codelineno-21-17" href="#__codelineno-21-17"></a>                                  univariate-auc]
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>  --top-percentile FLOAT          Top X%% of features to select (controls K
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>                                  for mRMR, or per-metric cutoff for
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>                                  hybrid_union)  [default: 50.0]
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>  --strategy TEXT                 Feature selection strategy: mrmr (default,
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>                                  redundancy-aware) or hybrid_union (AUC∪MI)
+<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>                                  [default: mrmr]
+<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>  --cv-folds INTEGER              Cross-validation folds for univariate AUC
+<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a>                                  scoring  [default: 5]
+<a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a>  --impute-strategy TEXT          Imputation strategy for variance check:
+<a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a>                                  median, mean, zero  [default: median]
+<a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a>  --output PATH                   Output directory for selected matrices
+<a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a>                                  (ignored when --overwrite is set)  [default:
+<a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a>                                  output/]
+<a id="__codelineno-21-16" name="__codelineno-21-16" href="#__codelineno-21-16"></a>  --overwrite                     Overwrite original matrices in --matrices-
+<a id="__codelineno-21-17" name="__codelineno-21-17" href="#__codelineno-21-17"></a>                                  dir instead of writing to --output
+<a id="__codelineno-21-18" name="__codelineno-21-18" href="#__codelineno-21-18"></a>  --compute-univariate-auc / --no-compute-univariate-auc
+<a id="__codelineno-21-19" name="__codelineno-21-19" href="#__codelineno-21-19"></a>                                  Compute per-feature univariate AUC (disable
+<a id="__codelineno-21-20" name="__codelineno-21-20" href="#__codelineno-21-20"></a>                                  for MI-only selection)  [default: compute-
+<a id="__codelineno-21-21" name="__codelineno-21-21" href="#__codelineno-21-21"></a>                                  univariate-auc]
 </code></pre></div>
 
 
