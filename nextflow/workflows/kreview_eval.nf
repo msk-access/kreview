@@ -4,6 +4,8 @@
 //
 // DAG (multistage mode — per-evaluator parallel):
 //
+//   KREVIEW_LABEL (1 job)
+//        |
 //   KREVIEW_EXTRACT ×N          (scatter across evaluators)
 //        |
 //   KREVIEW_SELECT_SINGLE ×N   (per-evaluator feature selection)
@@ -13,11 +15,9 @@
 //  EVAL_CPU  FUSE EVAL_GPU     (CPU ×N parallel, GPU ×N on gpushort)
 //  (×N)      (1)  (×N)
 //     |       |   |
-//     +---+---+---+
-//         |
-//    EVAL_MULTIMODAL           (cross-evaluator stacking, 1 job)
-//         |
-//       REPORT
+//     +---+---+---+---+
+//         |           |
+//    EVAL_MULTIMODAL  REPORT   (multimodal + report run in parallel)
 //
 // The pipeline mode is controlled by params.pipeline_mode:
 //   'monolithic' — Original single-process KREVIEW_RUN (backward compat)
@@ -32,6 +32,9 @@
 // ── Module imports ──
 // Monolithic
 include { KREVIEW_RUN } from '../modules/local/kreview/run'
+
+// Multistage — labeling (run once, shared across all extractors)
+include { KREVIEW_LABEL } from '../modules/local/kreview/label'
 
 // Multistage — bulk modules (kept for backward compat, used by monolithic)
 include { KREVIEW_EXTRACT } from '../modules/local/kreview/extract'
@@ -64,6 +67,15 @@ workflow KREVIEW_EVAL {
     if (params.pipeline_mode == 'multistage') {
         // ── Multistage mode (per-evaluator parallelism) ──
 
+        // Step 0: Label — single job, produces labels.parquet once
+        KREVIEW_LABEL(
+            ch_cancer_samplesheet,
+            ch_healthy_xs1_samplesheet,
+            ch_healthy_xs2_samplesheet,
+            val_cbioportal_dir,
+        )
+        ch_labels = KREVIEW_LABEL.out.labels
+
         // Step 1: Build evaluator name channel for scatter
         if (params.features) {
             ch_evaluators = Channel.of(params.features.split(','))
@@ -85,13 +97,15 @@ workflow KREVIEW_EVAL {
         }
 
         // Step 2: Parallel extraction — one job per evaluator (×N)
+        //         Each receives pre-computed labels.parquet (no re-labeling)
         KREVIEW_EXTRACT(
             ch_cancer_samplesheet,
             ch_healthy_xs1_samplesheet,
             ch_healthy_xs2_samplesheet,
             val_cbioportal_dir,
             val_krewlyzer_results,
-            ch_evaluators
+            ch_evaluators,
+            ch_labels
         )
 
         // Step 3: Per-evaluator feature selection (×N, parallel)
@@ -127,8 +141,18 @@ workflow KREVIEW_EVAL {
         }
 
         // Step 6: Report generation [optional]
+        // Depends on BOTH selected matrices AND model results JSONs
+        // to render complete dashboards with ROC, SHAP, metrics.
+        // Runs in parallel with FUSE + MULTIMODAL.
         if (!params.skip_report) {
-            KREVIEW_REPORT(ch_all_selected)
+            ch_report_matrices = KREVIEW_SELECT_SINGLE.out.matrix.collect()
+            ch_report_jsons = params.run_gpu_eval
+                ? KREVIEW_EVAL_CPU_SINGLE.out.json_stats
+                    .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results)
+                    .collect()
+                : KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
+
+            KREVIEW_REPORT(ch_report_matrices, ch_report_jsons)
             ch_html_reports = KREVIEW_REPORT.out.html_reports
             ch_static_plots = KREVIEW_REPORT.out.static_plots
         }

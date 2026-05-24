@@ -5,19 +5,19 @@
 // *_matrix.parquet file. Nextflow scatters across evaluators
 // so each runs in parallel on its own node/slot.
 //
-// NOTE: kreview extract re-runs labeling internally (labels.parquet
-// is NOT consumed as input here). This is by design: extract needs
-// the full label DataFrame in memory to build the matrix. The label
-// step is fast (~30s) so the duplication is acceptable. The separate
-// KREVIEW_LABEL process exists for standalone label-only workflows.
+// In multistage mode, a pre-computed labels.parquet is passed
+// from the upstream KREVIEW_LABEL process via --labels, avoiding
+// redundant re-labeling across all N evaluator jobs.
 //
-// Inputs:  samplesheets, cBioPortal dir, krewlyzer dir, evaluator name
+// Inputs:  samplesheets, cBioPortal dir, krewlyzer dir,
+//          evaluator name, labels.parquet (optional)
 // Outputs: *_matrix.parquet
 // ---------------------------------------------------------
 
 process KREVIEW_EXTRACT {
     tag "extract-${evaluator_name}"
     label 'process_high'
+    publishDir "${params.outdir}/matrices/raw", mode: 'copy', pattern: 'output/*_matrix.parquet'
 
     input:
     path(cancer_sheet,  stageAs: 'cancer_samplesheet.csv')
@@ -26,6 +26,7 @@ process KREVIEW_EXTRACT {
     val cbioportal_dir
     val krewlyzer_results
     val evaluator_name
+    path labels_file    // Pre-computed labels.parquet from KREVIEW_LABEL
 
     output:
     path "output/*_matrix.parquet", emit: matrices
@@ -35,6 +36,8 @@ process KREVIEW_EXTRACT {
         ? "--ch-hotspot-maf \"${params.ch_hotspot_maf}\"" : ""
     def tier_flag = params.tier \
         ? "--tier ${params.tier}" : ""
+    def labels_flag = labels_file.name != 'NO_LABELS' \
+        ? "--labels ${labels_file}" : ""
     """
     set -euo pipefail
 
@@ -52,6 +55,7 @@ process KREVIEW_EXTRACT {
         --chunk-size ${params.chunk_size} \\
         ${ch_maf_flag} \\
         ${tier_flag} \\
+        ${labels_flag} \\
         --features "${evaluator_name}" \\
         --output output
     """

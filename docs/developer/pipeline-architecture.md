@@ -10,19 +10,22 @@ The `kreview` pipeline is decomposed into independent stages that can run either
 
 ```mermaid
 graph LR
-    A[Label] --> B["Extract ×N"]
-    B --> C[Select]
-    C --> D["Eval CPU"]
-    C --> E["Eval GPU"]
-    C --> F[Fuse]
-    D --> G["Eval Multimodal"]
+    classDef step fill:#8b5cf6,stroke:#5b21b6,color:#fff;
+    A["Label"]:::step --> B["Extract ×N"]:::step
+    B --> C[Select]:::step
+    C --> D["Eval CPU"]:::step
+    C --> E["Eval GPU"]:::step
+    C --> F[Fuse]:::step
+    D --> G["Eval Multimodal"]:::step
     E --> G
     F --> G
-    G --> H[Report]
+    D --> H[Report]:::step
+    E --> H
 ```
 
-!!! note "Steps 4a/4b/4c are independent"
-    After feature selection, `eval cpu`, `eval gpu`, and `fuse` can run in **parallel**. They all converge at `eval multimodal`, which needs the OOF predictions from eval + the super-matrix from fuse.
+!!! note "Parallel execution"
+    After feature selection, `eval cpu`, `eval gpu`, and `fuse` run in **parallel**.
+    After eval, `eval multimodal` and `report` also run in **parallel** — Report needs matrices + model results; Multimodal needs super_matrix + OOF probs.
 
 ---
 
@@ -75,6 +78,7 @@ When editing these shared functions, always edit the **source notebook** (`nbs/*
 Each stage communicates through **parquet files** on disk:
 
 ```
+Label:    → labels.parquet  (5-tier ctDNA labels)
 Extract:  → {evaluator}_matrix.parquet  (full features)
 Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
           → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
@@ -82,6 +86,7 @@ Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
 Eval:     → {evaluator}_model_results.json  (AUCs, OOF probs)
           → {evaluator}_{model}_model.joblib  (trained models)
 Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
+Multimodal: → multimodal_results.json  (stacking + ablation results)
 Report:   → reports/{evaluator}.html  (interactive dashboards)
 ```
 
@@ -94,22 +99,24 @@ See [Nextflow Integration](../operations/nextflow.md) for full HPC execution doc
 In Nextflow multistage mode (`params.pipeline_mode = 'multistage'`), the DAG executes as:
 
 ```
-EXTRACT ×N → [collect] → SELECT ──┬── EVAL_CPU ──┐
-                                   ├── EVAL_GPU ──┤→ EVAL_MULTIMODAL → REPORT
-                                   └── FUSE ──────┘
+LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── EVAL_CPU ──┬── EVAL_MULTIMODAL
+                                           ├── EVAL_GPU ──┤
+                                           └── FUSE ──────┘
+                                                          └── REPORT (parallel)
 ```
 
 Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 
-| Process | Module | Input | Output |
-|---------|--------|-------|--------|
-| `KREVIEW_EXTRACT` | `extract.nf` | Samplesheets + parquets | `*_matrix.parquet` |
-| `KREVIEW_SELECT` | `select.nf` | All raw matrices | Selected matrices + stats + QC |
-| `KREVIEW_EVAL_CPU` | `eval_cpu.nf` | Selected matrices | `*_model_results.json` |
-| `KREVIEW_EVAL_GPU` | `eval_gpu.nf` | Selected matrices | `*_model_results.json` |
-| `KREVIEW_FUSE` | `fuse.nf` | Selected matrices | `super_matrix.parquet` |
-| `KREVIEW_EVAL_MULTIMODAL` | `eval_multimodal.nf` | Fuse + eval results | Multimodal results |
-| `KREVIEW_REPORT` | `report.nf` | Selected matrices | HTML dashboards |
+| Process | Module | Input | Output | publishDir |
+|---------|--------|-------|--------|------------|
+| `KREVIEW_LABEL` | `label.nf` | Samplesheets + cBioPortal | `labels.parquet` | `outdir/labels/` |
+| `KREVIEW_EXTRACT` | `extract.nf` | Samplesheets + labels.parquet | `*_matrix.parquet` | `outdir/matrices/raw/` |
+| `KREVIEW_SELECT_SINGLE` | `select_single.nf` | Raw matrix | Selected matrix + stats + QC | `outdir/matrices/selected/` |
+| `KREVIEW_EVAL_CPU_SINGLE` | `eval_cpu_single.nf` | Selected matrix | `*_model_results.json` | `outdir/models/cpu/` |
+| `KREVIEW_EVAL_GPU_SINGLE` | `eval_gpu_single.nf` | Selected matrix | `*_model_results.json` | `outdir/models/gpu/` |
+| `KREVIEW_FUSE` | `fuse.nf` | All selected matrices | `super_matrix.parquet` | `outdir/matrices/fused/` |
+| `KREVIEW_EVAL_MULTIMODAL` | `eval_multimodal.nf` | Fuse + eval results | Multimodal results | `outdir/models/multimodal/` |
+| `KREVIEW_REPORT` | `report.nf` | Matrices + model results | HTML dashboards | `outdir/reports/` |
 
 ---
 

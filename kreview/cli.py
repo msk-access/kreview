@@ -1274,6 +1274,15 @@ def extract(
             "(e.g. --chunk-size 200)."
         ),
     ),
+    labels_path: Optional[Path] = typer.Option(
+        None,
+        "--labels",
+        help=(
+            "Path to a pre-computed labels.parquet file. When provided, "
+            "skips the internal labeling step entirely. Used by Nextflow "
+            "multistage to avoid re-running labeling per evaluator."
+        ),
+    ),
 ):
     """Label samples and extract feature matrices (no eval/model/report).
 
@@ -1297,12 +1306,12 @@ def extract(
     print(f"  --tier              : {tier or 'all'}", flush=True)
     print(f"  --chunk-size        : {chunk_size}", flush=True)
     print(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}", flush=True)
+    print(f"  --labels            : {labels_path or 'compute internally'}", flush=True)
     print("", flush=True)
 
     t0 = time.time()
 
-    # ── Step 1: Label ──
-    print("Step 1: Labeling...", flush=True)
+    # Paths object is always needed for feature extraction (krewlyzer access)
     paths = Paths(
         str(cancer_samplesheet),
         str(healthy_xs1_samplesheet),
@@ -1310,16 +1319,28 @@ def extract(
         str(cbioportal_dir),
         krewlyzer_dir,
     )
-    config = LabelConfig(
-        min_vaf=min_vaf,
-        min_fragments=min_fragments,
-        min_variants=min_variants,
-        chunk_size=15_000,
-        ch_hotspot_maf=ch_hotspot_maf,
-    )
-    labeler = CtDNALabeler(paths, config)
-    labels_df = labeler.label_all()
-    print(f"  Labels: {len(labels_df)} samples in {time.time()-t0:.1f}s", flush=True)
+
+    # ── Step 1: Label (or load pre-computed labels) ──
+    if labels_path is not None:
+        import pandas as pd
+
+        print(f"Step 1: Loading pre-computed labels from {labels_path}", flush=True)
+        labels_df = pd.read_parquet(labels_path)
+        print(f"  Labels: {len(labels_df)} samples (pre-computed)", flush=True)
+    else:
+        print("Step 1: Labeling...", flush=True)
+        config = LabelConfig(
+            min_vaf=min_vaf,
+            min_fragments=min_fragments,
+            min_variants=min_variants,
+            chunk_size=15_000,
+            ch_hotspot_maf=ch_hotspot_maf,
+        )
+        labeler = CtDNALabeler(paths, config)
+        labels_df = labeler.label_all()
+        print(
+            f"  Labels: {len(labels_df)} samples in {time.time()-t0:.1f}s", flush=True
+        )
     print(
         f"  Distribution:\n{labels_df['label'].value_counts().to_string()}", flush=True
     )

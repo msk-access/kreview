@@ -16,6 +16,7 @@
 process KREVIEW_EVAL_CPU_SINGLE {
     tag "eval-cpu-${matrix.baseName.replace('_matrix', '')}"
     label 'process_medium'
+    publishDir "${params.outdir}/models/cpu", mode: 'copy'
 
     input:
     path(matrix)  // Single selected *_matrix.parquet

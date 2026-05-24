@@ -14,6 +14,7 @@
 process KREVIEW_EVAL_MULTIMODAL {
     tag "kreview-eval-multimodal"
     label 'process_gpu'
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
 
     input:
     path(super_matrix)

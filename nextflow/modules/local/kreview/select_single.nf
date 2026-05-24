@@ -15,6 +15,7 @@
 process KREVIEW_SELECT_SINGLE {
     tag "select-${matrix.baseName.replace('_matrix', '')}"
     label 'process_medium'
+    publishDir "${params.outdir}/matrices/selected", mode: 'copy'
 
     input:
     path(matrix)  // Single *_matrix.parquet file

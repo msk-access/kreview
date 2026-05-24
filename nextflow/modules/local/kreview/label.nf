@@ -12,6 +12,7 @@
 process KREVIEW_LABEL {
     tag "kreview-label"
     label 'process_medium'
+    publishDir "${params.outdir}/labels", mode: 'copy'
 
     input:
     path(cancer_sheet,  stageAs: 'cancer_samplesheet.csv')

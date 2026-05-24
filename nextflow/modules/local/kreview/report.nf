@@ -1,20 +1,25 @@
 // ---------------------------------------------------------
-// KREVIEW_REPORT — Generate Quarto HTML dashboards from matrices
+// KREVIEW_REPORT — Generate Quarto HTML dashboards
 // ---------------------------------------------------------
-// Re-renders dashboards from existing *_matrix.parquet files.
-// Used in the multi-stage pipeline after extraction + eval
-// to produce standalone HTML reports per evaluator.
+// Renders per-evaluator HTML dashboards from *_matrix.parquet
+// and *_model_results.json files. Requires BOTH to render
+// complete dashboards with ROC curves, SHAP, and model metrics.
 //
-// Inputs:  collected *_matrix.parquet files
+// In multistage mode, this process starts after ALL CPU/GPU
+// eval jobs complete, running in parallel with FUSE + MULTIMODAL.
+//
+// Inputs:  collected *_matrix.parquet + *_model_results.json files
 // Outputs: HTML reports, static plots
 // ---------------------------------------------------------
 
 process KREVIEW_REPORT {
     tag "kreview-report"
     label 'process_medium'
+    publishDir "${params.outdir}/reports", mode: 'copy'
 
     input:
-    path(matrix_files)     // Collected from KREVIEW_EXTRACT outputs
+    path(matrix_files)     // Collected from KREVIEW_SELECT_SINGLE outputs
+    path(model_results)    // Collected from KREVIEW_EVAL_CPU/GPU outputs
 
     output:
     path "reports/*.html", emit: html_reports, optional: true
@@ -30,6 +35,11 @@ process KREVIEW_REPORT {
     # Stage matrices for report rendering
     for f in ${matrix_files}; do
         cp "\${f}" matrices/
+    done
+
+    # Stage model results alongside matrices
+    for f in ${model_results}; do
+        cp "\${f}" matrices/ 2>/dev/null || true
     done
 
     PYTHONUNBUFFERED=1 kreview report \\
