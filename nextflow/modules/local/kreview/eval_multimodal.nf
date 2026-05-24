@@ -25,6 +25,7 @@ process KREVIEW_EVAL_MULTIMODAL {
     script:
     def models_arg = params.multimodal_models ?: 'rf,xgb'
     def top_k_arg = params.multimodal_top_k ?: 50
+    def mm_sel = params.multimodal_selection ?: "mi"
     def cv_folds = params.cv_folds ?: 5
     // super_matrix is optional — passed if FUSE produced it
     def super_flag = super_matrix.name != 'NO_SUPER_MATRIX' ? "--super-matrix ${super_matrix}" : ""
@@ -44,6 +45,7 @@ process KREVIEW_EVAL_MULTIMODAL {
         ${super_flag} \\
         --models ${models_arg} \\
         --top-k ${top_k_arg} \\
+        --multimodal-selection ${mm_sel} \\
         --cv-folds ${cv_folds} \\
         --output multimodal_output
     """

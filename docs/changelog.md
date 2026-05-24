@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.11] - Unreleased
+### Changed
+- **Feature Selection (Default)**: Default single-evaluator strategy changed from `hybrid_union` to `mrmr` (Minimum Redundancy Maximum Relevance). mRMR selects features maximizing target correlation while minimizing inter-feature redundancy, preventing multi-collinearity.
+- **Multimodal Selection**: `--multimodal-selection` now supports `boruta_shap` (interaction-aware, SHAP-based) in addition to `mi` (mutual information, default).
+- **CLI Log Output**: `kreview select` and `kreview run` now display method-aware selection summaries (mRMR shows variance-dropped count; hybrid_union shows AUC∩MI overlap breakdown).
+
+### Added
+- **`mrmr-selection` dependency**: Added `mrmr-selection>=0.2.8` to `pyproject.toml`.
+- **`BorutaShap` dependency**: Added `BorutaShap>=1.0.17` to `pyproject.toml`.
+- **Structured startup logging**: `kreview select` and `kreview eval multimodal` now emit `log.info("select_start", ...)` and `log.info("eval_multimodal_start", ...)` at startup for machine-parseable audit trails.
+- **Multimodal selection method persistence**: `multimodal_results.json` now includes `raw_features_selection_method` (`"mi"` or `"boruta_shap"`).
+- **Selection Strategy value box**: Multimodal dashboard executive summary displays the cross-evaluator selection strategy.
+- **Scoreboard `selection_method` column**: Now visible in both single-evaluator and multimodal dashboard scoreboard tables.
+- **mRMR scatter disclaimer**: When `strategy="mrmr"`, the Feature Selection scatter plot displays a callout explaining that AUC/MI axes are observational (mRMR uses F-statistic + Pearson correlation internally).
+- **mRMR scatter coloring**: Selected features labeled "Selected (mRMR)" with cyan color, distinct from hybrid_union's 4-way AUC/MI overlap coloring.
+
+### Fixed
+- **`KeyError` crash in `cli_select.py`**: Fixed crash when `--strategy mrmr` was used — the log output tried to access hybrid-union-only QC keys (`n_overlap_both`, `n_auc_only`, `n_mi_only`).
+- **Misleading `cli.py` log output**: `kreview run --strategy mrmr` now shows mRMR-specific summary instead of zeroed-out hybrid_union counts.
+- **Stale docstrings**: Updated module docstrings in `selection.py`, `cli_select.py`, `cli_eval.py`, and `eval_engine.py` to reflect mRMR as default.
+
 ## [0.0.10] - 2026-05-22
 ### Added
 - **Modular CLI**: Extracted `run` into atomic sub-commands (`label`, `extract`, `fuse`, `eval`, `select`, `report`).

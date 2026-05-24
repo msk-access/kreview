@@ -467,6 +467,16 @@ def run(
         "--top-percentile",
         help="Top X%% of features to select per metric (AUC, MI). The union of both sets feeds into models.",
     ),
+    strategy: str = typer.Option(
+        "mrmr",
+        "--strategy",
+        help="Feature selection strategy: mrmr (default) or hybrid_union",
+    ),
+    multimodal_selection: str = typer.Option(
+        "mi",
+        "--multimodal-selection",
+        help="Multimodal selection: mi (default) or boruta_shap",
+    ),
     shap_samples: int = typer.Option(
         500,
         "--shap-samples",
@@ -557,6 +567,8 @@ def run(
     _echo(f"  --tier              : {tier or 'ALL'}")
     _echo(f"  --cv-folds          : {cv_folds}")
     _echo(f"  --top-percentile    : {top_percentile}")
+    _echo(f"  --strategy          : {strategy}")
+    _echo(f"  --multimodal-selection : {multimodal_selection}")
     _echo(f"  --impute-strategy   : {impute_strategy}")
     _echo(f"  --chunk-size        : {chunk_size}")
     _echo(f"  --shap-samples      : {shap_samples}")
@@ -755,13 +767,14 @@ def run(
         eval_df.to_parquet(eval_out, index=False)
         _echo(f"  Eval stats: {eval_df.shape[0]} features -> {eval_out}")
 
-        # ── Feature selection (hybrid union: top N% AUC ∪ top N% MI) ──
+        # ── Feature selection (mRMR or hybrid union) ──
         try:
             selected_df, selection_qc = select_features(
                 merged,
                 eval_df,
                 top_percentile=top_percentile,
                 impute_strategy=impute_strategy,
+                strategy=strategy,
             )
         except ValueError as exc:
             _echo(f"  SKIP selection for {e.name}: {exc}")
@@ -781,13 +794,20 @@ def run(
 
         # Determine selected feature columns from the result
         top_feats = [c for c in selected_df.columns if c not in LABEL_META_COLS]
-        _echo(
-            f"  Feature Selection (top {top_percentile}%): "
-            f"{len(top_feats)}/{len(numeric_cols)} features "
-            f"(AUC\u2229MI={selection_qc.get('n_overlap_both', 0)}, "
-            f"AUC-only={selection_qc.get('n_auc_only', 0)}, "
-            f"MI-only={selection_qc.get('n_mi_only', 0)})"
-        )
+        if selection_qc.get("method") == "mrmr":
+            _echo(
+                f"  Feature Selection (top {top_percentile}%): "
+                f"{len(top_feats)}/{len(numeric_cols)} features "
+                f"(mRMR, variance-dropped={selection_qc.get('n_variance_dropped', 0)})"
+            )
+        else:
+            _echo(
+                f"  Feature Selection (top {top_percentile}%): "
+                f"{len(top_feats)}/{len(numeric_cols)} features "
+                f"(AUC\u2229MI={selection_qc.get('n_overlap_both', 0)}, "
+                f"AUC-only={selection_qc.get('n_auc_only', 0)}, "
+                f"MI-only={selection_qc.get('n_mi_only', 0)})"
+            )
 
         # ── Prepare model inputs ──
         # Build binary target from the selected matrix using the shared function.
@@ -967,6 +987,7 @@ def run(
                 results_dir=out_path,
                 super_matrix_path=super_matrix_path,
                 n_folds=cv_folds,
+                multimodal_selection=multimodal_selection,
             )
             with open(multimodal_out, "w") as f:
                 json.dump(mm_results, f, indent=2, default=str)

@@ -1635,6 +1635,7 @@ def _select_multimodal_features(
     *,
     max_nan_frac: float = 0.80,
     top_k: int = 50,
+    strategy: str = "mi",
 ) -> tuple[pd.DataFrame, list[str]]:
     """Feature selection pipeline for multimodal evaluation.
 
@@ -1642,7 +1643,8 @@ def _select_multimodal_features(
         1. Drop columns with > ``max_nan_frac`` NaN
         2. Median-impute remaining NaNs
         3. Drop zero-variance columns
-        4. Rank by mutual information → keep top-K
+        4. Rank by Boruta-SHAP (if ``strategy="boruta_shap"``) or
+           mutual information (default/fallback) → keep top-K
 
     Args:
         df: Feature DataFrame (numeric columns only).
@@ -1688,7 +1690,36 @@ def _select_multimodal_features(
         log.error("multimodal_no_features_after_selection")
         return df, []
 
-    # Step 4: Mutual information ranking → top-K
+    # Step 4: Feature ranking
+    if strategy == "boruta_shap" and len(df.columns) > 1:
+        from BorutaShap import BorutaShap
+        from xgboost import XGBClassifier
+
+        log.info("boruta_shap_start", n_features=len(df.columns))
+
+        selector = BorutaShap(
+            model=XGBClassifier(
+                n_estimators=100, max_depth=5, use_label_encoder=False,
+                eval_metric="logloss", random_state=42, verbosity=0,
+            ),
+            importance_measure="shap",
+            classification=True,
+        )
+        y_series = pd.Series(y, index=df.index, name="target")
+        selector.fit(X=df, y=y_series, n_trials=50, sample=False, verbose=False)
+        subset = selector.Subset()
+
+        if not subset.empty:
+            selected = list(subset.columns)
+            df = df[selected]
+            log.info("boruta_shap_complete", n_selected=len(selected),
+                     top_5=selected[:5])
+            return df, selected
+        else:
+            log.warning("boruta_shap_no_features", fallback="mi_top_k")
+            # Fall through to MI ranking below
+
+    # Step 5: Mutual information ranking (also fallback for boruta_shap)
     if len(df.columns) > top_k:
         mi_scores = mutual_info_classif(df.values, y, random_state=42)
         mi_ranked = sorted(zip(df.columns, mi_scores), key=lambda x: x[1], reverse=True)
@@ -1719,6 +1750,7 @@ def multimodal_eval(
     n_folds: int = 5,
     top_k: int = 50,
     random_state: int = 42,
+    multimodal_selection: str = "mi",
 ) -> dict:
     """Cross-evaluator multimodal evaluation.
 
@@ -1730,8 +1762,8 @@ def multimodal_eval(
        fragmentomics signals improves classification.
 
     2. **Raw features** (optional): If ``super_matrix_path`` is provided,
-       trains directly on the fused feature matrix with MI-based
-       feature selection.
+       trains directly on the fused feature matrix with
+       ``multimodal_selection``-based feature selection (MI or Boruta-SHAP).
 
     3. **Ablation**: Leave-one-evaluator-out analysis on the stacking
        matrix, showing each evaluator's marginal contribution.
@@ -1860,7 +1892,7 @@ def multimodal_eval(
 
             X_raw = super_df[feature_cols]
             X_selected, selected_names = _select_multimodal_features(
-                X_raw, y_raw, top_k=top_k
+                X_raw, y_raw, top_k=top_k, strategy=multimodal_selection
             )
 
             if X_selected.empty:
@@ -1898,6 +1930,7 @@ def multimodal_eval(
             results["raw_features"] = raw_results
             results["raw_n_features_selected"] = len(selected_names)
             results["raw_features_selected"] = selected_names[:20]
+            results["raw_features_selection_method"] = multimodal_selection
 
         except Exception as e:
             log.error("multimodal_raw_failed", error=str(e))

@@ -16,7 +16,7 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
 - `nextflow/modules/local/kreview/` — Individual process modules:
     - `run.nf` — Monolithic mode (backward compatible)
     - `extract.nf` — Per-evaluator feature extraction
-    - `select.nf` — Feature scoring + hybrid-union selection
+    - `select.nf` — Feature scoring + mRMR/hybrid-union selection
     - `eval_cpu.nf` — CPU model evaluation (LR, RF, XGB)
     - `eval_gpu.nf` — GPU model evaluation (TabPFN, TabICL)
     - `fuse.nf` — Super-matrix construction

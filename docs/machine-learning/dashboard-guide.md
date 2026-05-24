@@ -170,7 +170,7 @@ Scatter plot of Univariate AUC (x-axis) vs Mutual Information (y-axis) for all f
 | 🟠 Orange | Selected (MI Only) | Top X% in MI but not AUC |
 | ⚪ Gray | Dropped | Below threshold in both metrics |
 
-This plot provides a visual audit trail for the [Hybrid Union selection](statistical-tests.md#hybrid-union-selection) method.
+This plot provides a visual audit trail for the selection method. Under `hybrid_union`, it shows exact overlaps. Under `mrmr`, all selected features are colored green.
 
 ### Feature #1 Violin
 Distribution of the single best feature (by Cohen's d) across the four ctDNA labels. Box plot overlay shows medians and IQR.
