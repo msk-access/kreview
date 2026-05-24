@@ -13,7 +13,7 @@ flowchart LR
     D --> E["Spearman Rank\n(confounders)"]:::step
     E --> F["Univariate AUC\n(per-feature LR)"]:::step
     F --> G["Mutual Information\n(non-linear)"]:::step
-    G --> H["Hybrid Union\n(top % AUC ∪ MI)"]:::step
+    G --> H["mRMR / Hybrid Union\n(Selection)"]:::step
     H --> I["Pass to ML\nModels"]:::step
 ```
 
@@ -84,28 +84,19 @@ These metrics are saved to `*_eval_stats.parquet` and surfaced in the dashboard'
 
 ## Feature Selection Scoring (v0.0.9+)
 
-After descriptive statistics are computed, kreview scores every feature using two complementary methods to decide which features enter the downstream ML models.
+After descriptive statistics are computed, kreview scores every feature using complementary methods to decide which features enter the downstream ML models. The default strategy is **mRMR**.
 
-### Univariate AUC
+### Minimum Redundancy Maximum Relevance (mRMR) [Default]
 
-`univariate_auc()` fits a single-feature **Logistic Regression pipeline** (StandardScaler + LR) using `StratifiedKFold` cross-validation and returns the out-of-fold ROC-AUC. This captures **linear, monotonic** relationships between a feature and the binary ctDNA label.
+The `strategy="mrmr"` method iteratively selects features that maximize correlation with the target label (relevance) while minimizing correlation with already selected features (redundancy). 
 
-- Returns `0.5` for constant features or when CV fails (< 2 samples per class)
-- Uses the same fold structure and random state as the downstream ensemble
-- Stored as `univariate_auc` in `*_eval_stats.parquet`
+- Resolves multicollinearity efficiently, ensuring models are not fed redundant fragments.
+- Automatically handles NaNs via median/mean/zero imputation.
+- The `--top-percentile` argument controls the final number of features retained ($K$).
 
-### Mutual Information
+### Hybrid Union Selection [Legacy/Fallback]
 
-`mutual_info_score()` uses `sklearn.feature_selection.mutual_info_classif` with `k=3` nearest neighbors to estimate the **non-linear dependency** between a feature and the label. Unlike AUC, MI captures arbitrary (non-monotonic) relationships.
-
-- Returns `0.0` for constant features
-- NaN values are replaced with 0 before computation
-- Deterministic with `random_state=42`
-- Stored as `mutual_info` in `*_eval_stats.parquet`
-
-### Hybrid Union Selection
-
-The final feature set passed to `single_feature_model()` is determined by:
+The `strategy="hybrid_union"` method determines the feature set by:
 
 $$\text{Selected} = \text{Top}_{X\%}(\text{AUC}) \cup \text{Top}_{X\%}(\text{MI})$$
 
@@ -114,10 +105,17 @@ where $X$ is controlled by `--top-percentile` (default: 10%). The **union** ensu
 !!! tip "Selection QC"
     The `selection_qc` metadata block in `model_results.json` records:
     
-    - `method`: Always `hybrid_union`
+    - `method`: `mrmr` or `hybrid_union`
     - `n_selected_union`: Total features selected
-    - `n_overlap_both`: Features in top-X% of *both* metrics
-    - `n_auc_only` / `n_mi_only`: Features exclusive to one metric
+    - `n_overlap_both`: Features in top-X% of *both* metrics (if hybrid)
+    - `n_auc_only` / `n_mi_only`: Features exclusive to one metric (if hybrid)
 
 !!! warning "Deprecated: `--top-n`"
     The `--top-n` flag (fixed count, Cohen's D ranking) is deprecated since v0.0.9. Use `--top-percentile` instead.
+
+## Multimodal Selection (v0.0.11+)
+
+When aggregating multiple feature sets in `kreview eval multimodal`, the pipeline offers two higher-order selection strategies via `--multimodal-selection`:
+
+1. **`mi` (Default)**: Rapidly selects the top $K$ features using Mutual Information ranking across all concatenated features in the super-matrix.
+2. **`boruta_shap`**: Interaction-aware selection using the Boruta-SHAP algorithm wrapping an XGBoost classifier. This rigorous approach verifies whether a feature is genuinely more important than a random shadow variable, ensuring extremely robust multimodal stacking performance.

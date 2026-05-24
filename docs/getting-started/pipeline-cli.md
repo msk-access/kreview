@@ -12,7 +12,7 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 |---------|---------|---------------|
 | `kreview label` | Generate ctDNA labels only | 1 |
 | `kreview extract` | Label + extract feature matrices per evaluator | 2 |
-| `kreview select` | Score features (AUC/MI) + hybrid union selection | 3 |
+| `kreview select` | Score features (AUC/MI) + mRMR or hybrid union selection | 3 |
 | `kreview eval cpu` | CPU model evaluation (LR, RF, XGB) | 4a (parallel) |
 | `kreview eval gpu` | GPU model evaluation (TabPFN, TabICL) | 4b (parallel) |
 | `kreview fuse` | Fuse per-evaluator matrices → super-matrix | 4c (parallel) |
@@ -109,11 +109,12 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       --top-percentile 20
     ```
 
-    Feature selection uses a **Hybrid Union** strategy: the top X% of features by Univariate AUC ∪ top X% by Mutual Information. This captures both linear (AUC) and non-linear (MI) predictors.
+    Feature selection uses **mRMR (Minimum Redundancy Maximum Relevance)** by default. It selects features that are highly correlated with the target but mutually dissimilar, preventing multi-collinearity. A legacy **Hybrid Union** strategy (top X% by AUC ∪ top X% by MI) is also available.
 
     | Flag | Default | Description |
     |------|---------|-------------|
-    | `--top-percentile` | 10.0 | Percentile cutoff per metric. Union of both sets feeds models. |
+    | `--strategy` | mrmr | Feature selection strategy: `mrmr` or `hybrid_union` |
+    | `--top-percentile` | 10.0 | Percentile cutoff. For mRMR, this controls `K` features to select. |
     | `--compute-univariate-auc` | True | Compute per-feature LR AUC (required for hybrid selection). |
     | `--no-compute-univariate-auc` | — | Opt-out: degrades selection to MI-only with a warning. |
 
@@ -192,8 +193,8 @@ kreview extract --cancer-samplesheet samplesheet.csv \
     --krewlyzer-dir /path/to/features/ \
     --output output/
 
-# Step 2: Feature selection
-kreview select --matrices-dir output/ --top-percentile 50 --output selected/
+# Step 2: Feature selection (mRMR is default)
+kreview select --matrices-dir output/ --top-percentile 50 --strategy mrmr --output selected/
 # Or overwrite in-place:
 # kreview select --matrices-dir output/ --top-percentile 50 --overwrite
 
@@ -209,6 +210,7 @@ kreview fuse --output-dir selected/
 kreview eval multimodal \
     --results-dir results/ \
     --super-matrix selected/super_matrix.parquet \
+    --multimodal-selection boruta_shap \
     --output results/
 
 # Step 5: Report
@@ -219,9 +221,10 @@ kreview report --results-dir results/
     | Flag | Default | Description |
     |------|---------|-------------|
     | `--matrices-dir` | required | Directory with `*_matrix.parquet` from extract |
-    | `--top-percentile` | 50 | Top N% per metric for hybrid union |
+    | `--top-percentile` | 50 | Top N% per metric for selection |
+    | `--strategy` | mrmr | Feature selection strategy: `mrmr` or `hybrid_union` |
     | `--cv-folds` | 5 | Folds for univariate AUC scoring |
-    | `--impute-strategy` | median | Imputation for variance check |
+    | `--impute-strategy` | median | Imputation for missing values |
     | `--output` | output/ | Output directory for selected matrices |
     | `--overwrite` | false | Overwrite originals instead of separate output |
 

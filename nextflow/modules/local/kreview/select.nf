@@ -1,9 +1,9 @@
 // ---------------------------------------------------------
-// KREVIEW_SELECT — Feature scoring + hybrid-union selection
+// KREVIEW_SELECT — Feature scoring + mRMR/hybrid-union selection
 // ---------------------------------------------------------
 // Reads per-evaluator *_matrix.parquet files (from KREVIEW_EXTRACT),
 // scores every feature (univariate AUC + mutual information), and
-// applies hybrid-union selection (top N% by AUC ∪ top N% by MI).
+// applies feature selection (mRMR by default, or top N% AUC ∪ top N% MI).
 //
 // Produces selected matrices with only the top features, plus
 // per-evaluator scoring stats and selection QC metadata.
@@ -30,6 +30,7 @@ process KREVIEW_SELECT {
     script:
     def top_pct  = params.top_percentile ?: 10
     def cv_folds = params.cv_folds       ?: 5
+    def strategy = params.strategy       ?: "mrmr"
     def impute   = params.impute_strategy ?: "median"
     def auc_flag = params.compute_univariate_auc ? '' : '--no-compute-univariate-auc'
     """
@@ -48,6 +49,7 @@ process KREVIEW_SELECT {
     PYTHONUNBUFFERED=1 kreview select \
         --matrices-dir matrices \
         --top-percentile ${top_pct} \
+        --strategy ${strategy} \
         --cv-folds ${cv_folds} \
         --impute-strategy ${impute} \
         ${auc_flag} \

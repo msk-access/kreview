@@ -143,7 +143,7 @@ command (e.g. `kreview select`), follow this pattern:
 
 ### Current shared functions (selection.py → used by cli.py + cli_select.py):
 - `score_features()` — univariate AUC + mutual information scoring
-- `select_features()` — hybrid-union feature selection + variance guard
+- `select_features()` — mRMR (default) or hybrid-union feature selection + variance guard
 - `build_binary_target()` — label filtering + binary target construction
 - `_impute()` — NaN imputation (zero/mean/median)
 

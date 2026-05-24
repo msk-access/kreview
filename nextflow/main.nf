@@ -78,7 +78,7 @@ def helpMessage() {
      Profiles:
      -profile docker            Run locally leveraging GHCR Docker
      -profile slurm             Run on HPC clusters leveraging Singularity
-     -profile iris              IRIS HPC: cmobic_cpu + gpushort GPU partition
+     -profile iris              IRIS HPC: cmobic_short + gpushort GPU partition
     ================================================================
     """.stripIndent()
 }

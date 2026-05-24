@@ -16,7 +16,7 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
 - `nextflow/modules/local/kreview/` — Individual process modules:
     - `run.nf` — Monolithic mode (backward compatible)
     - `extract.nf` — Per-evaluator feature extraction
-    - `select.nf` — Feature scoring + hybrid-union selection
+    - `select.nf` — Feature scoring + mRMR/hybrid-union selection
     - `eval_cpu.nf` — CPU model evaluation (LR, RF, XGB)
     - `eval_gpu.nf` — GPU model evaluation (TabPFN, TabICL)
     - `fuse.nf` — Super-matrix construction
@@ -68,7 +68,7 @@ When operating locally, `nextflow.config` strictly maps `docker.runOptions = '-v
 ### 2. High-Performance Computing (SLURM)
 `nextflow run ... -profile slurm`
 
-If analyzing clinical trials against HPC hardware (like MSK's `cmobic_cpu` queues on `IRIS`), the pipeline invokes `Singularity` (via `autoMounts = true`) and overrides the fallback logic. 
+If analyzing clinical trials against HPC hardware (like MSK's `cmobic_short` queues on `IRIS`), the pipeline invokes `Singularity` (via `autoMounts = true`) and overrides the fallback logic. 
 The configuration aggressively sets `--chunk-size 500` to maximize network ingestion speeds on hardware that naturally supports `102400` open network sockets.
 
 ---

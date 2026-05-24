@@ -382,6 +382,14 @@ dict(value=f"{len(numeric_cols)}", color="primary", icon="activity")
 
 ```{python}
 #| content: valuebox
+#| title: "Selection Strategy"
+_sel_strat = mres.get("raw_features_selection_method", "N/A") if mres else "N/A"
+_sel_icon = "funnel" if _sel_strat == "boruta_shap" else "filter"
+dict(value=_sel_strat.upper().replace("_", " ") if _sel_strat != "N/A" else "N/A", color="info", icon=_sel_icon)
+```
+
+```{python}
+#| content: valuebox
 #| title: "Verdict"
 if mres is not None and DYNAMIC_MODELS:
     best = max(mres.get(f"auc_{pfx}", 0) for pfx, _ in DYNAMIC_MODELS)
@@ -482,7 +490,7 @@ if not has_cal:
 ```{python}
 #| title: "Evaluator Scoreboard"
 if scoreboard_df is not None:
-    display_cols = ["evaluator", "best_auc", "sensitivity", "specificity", "n_features", "n_samples"]
+    display_cols = ["evaluator", "best_auc", "sensitivity", "specificity", "selection_method", "n_features", "n_samples"]
     avail = [c for c in display_cols if c in scoreboard_df.columns]
     itables.show(
         scoreboard_df[avail].round(3),
@@ -1424,14 +1432,20 @@ else:
 
 ```{python}
 #| title: "Feature Selection: AUC vs Mutual Information"
-# Show how features were selected by the hybrid union method
+# Show how features were selected (mRMR or hybrid union)
 if eval_df is not None and "univariate_auc" in eval_df.columns and "mutual_info" in eval_df.columns:
     _sel_df = eval_df.copy()
     _top_set = set(mres.get("top_features", [])) if mres else set()
     _sqc = mres.get("selection_qc", {}) if mres else {}
+    _method = _sqc.get("method", "unknown")
     _n_keep = _sqc.get("n_keep_per_metric", 0)
 
-    if _top_set and _n_keep > 0:
+    if _method == "mrmr" and _top_set:
+        # mRMR: binary Selected/Dropped — no AUC/MI overlap logic applies
+        _sel_df["selection"] = _sel_df["feature_column"].apply(
+            lambda f: "Selected (mRMR)" if f in _top_set else "Dropped"
+        )
+    elif _top_set and _n_keep > 0:
         _top_auc = set(_sel_df.nlargest(_n_keep, "univariate_auc")["feature_column"])
         _top_mi = set(_sel_df.nlargest(_n_keep, "mutual_info")["feature_column"])
 
@@ -1455,16 +1469,17 @@ if eval_df is not None and "univariate_auc" in eval_df.columns and "mutual_info"
         _sel_df, x="univariate_auc", y="mutual_info",
         color="selection",
         color_discrete_map={
-            "Selected (Both)": "#8DDA77",     # Green
-            "Selected (AUC Only)": "#4FC3F7", # Blue
-            "Selected (MI Only)": "#FF9B42",  # Orange
-            "Dropped": "#515865",             # Gray
+            "Selected (mRMR)": "#00E5FF",      # Cyan
+            "Selected (Both)": "#8DDA77",      # Green
+            "Selected (AUC Only)": "#4FC3F7",  # Blue
+            "Selected (MI Only)": "#FF9B42",   # Orange
+            "Dropped": "#515865",              # Gray
             "Selected": "#8DDA77",
             "Unknown": "#999999",
         },
         hover_name="feature_column",
         opacity=0.7,
-        category_orders={"selection": ["Selected (Both)", "Selected (AUC Only)", "Selected (MI Only)", "Dropped"]}
+        category_orders={"selection": ["Selected (mRMR)", "Selected (Both)", "Selected (AUC Only)", "Selected (MI Only)", "Dropped"]}
     )
     _ = fig_sel.update_layout(
         **{**LAYOUT_DEFAULTS, "legend": dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5)},
@@ -1473,6 +1488,15 @@ if eval_df is not None and "univariate_auc" in eval_df.columns and "mutual_info"
         yaxis_title="Mutual Information (non-linear relevance)",
     )
     show_plotly(fig_sel, filename="selection_scatter")
+
+    # mRMR disclaimer: AUC/MI axes are observational, not the selection criteria
+    if _method == "mrmr":
+        display(Markdown(
+            "> **Note:** Features were selected using mRMR (F-statistic relevance + "
+            "Pearson redundancy). They are projected onto Univariate AUC and Mutual "
+            "Information for observational context only. A feature with lower AUC/MI "
+            "may be selected if it provides highly unique, non-redundant signal."
+        ))
 else:
     display(Markdown("> Feature selection scatter requires univariate AUC and mutual information scores."))
 ```

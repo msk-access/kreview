@@ -443,6 +443,11 @@ def eval_multimodal(
         help="Comma-separated models for multimodal evaluation (lr,rf,xgb)",
     ),
     top_k: int = typer.Option(50, "--top-k", help="Top-K features for MI selection"),
+    multimodal_selection: str = typer.Option(
+        "mi",
+        "--multimodal-selection",
+        help="Multimodal feature selection: mi (default, fast) or boruta_shap (interaction-aware)",
+    ),
     cv_folds: int = typer.Option(5, "--cv-folds", help="Cross-validation folds"),
 ):
     """Cross-evaluator multimodal evaluation with stacking and ablation.
@@ -451,7 +456,7 @@ def eval_multimodal(
     and combines them into a stacking matrix.  Three strategies are run:
 
     1. **Stacking**: Meta-learner on OOF probabilities across evaluators
-    2. **Raw features** (if --super-matrix provided): MI-selected features
+    2. **Raw features** (if --super-matrix provided): MI or Boruta-SHAP selected features
     3. **Ablation**: Leave-one-evaluator-out importance analysis
     """
     from kreview.eval_engine import multimodal_eval as _multimodal_eval
@@ -462,8 +467,19 @@ def eval_multimodal(
     print(f"  --output       : {output}", flush=True)
     print(f"  --models       : {models}", flush=True)
     print(f"  --top-k        : {top_k}", flush=True)
+    print(f"  --multimodal-selection : {multimodal_selection}", flush=True)
     print(f"  --cv-folds     : {cv_folds}", flush=True)
     print("", flush=True)
+
+    log.info(
+        "eval_multimodal_start",
+        results_dir=str(results_dir),
+        super_matrix=str(super_matrix) if super_matrix else None,
+        models=models,
+        top_k=top_k,
+        multimodal_selection=multimodal_selection,
+        cv_folds=cv_folds,
+    )
 
     # ── Validation ──
     if not results_dir.exists():
@@ -494,6 +510,7 @@ def eval_multimodal(
             models=models_list,
             n_folds=cv_folds,
             top_k=top_k,
+            multimodal_selection=multimodal_selection,
         )
     except (FileNotFoundError, ValueError) as e:
         print(f"ERROR: {e}", flush=True)
