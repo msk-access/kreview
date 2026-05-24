@@ -12,6 +12,7 @@
 process KREVIEW_FUSE {
     tag "kreview-fuse"
     label 'process_medium'
+    publishDir "${params.outdir}/matrices/fused", mode: 'copy'
 
     input:
     path(matrix_files)     // Collected from all KREVIEW_EXTRACT outputs

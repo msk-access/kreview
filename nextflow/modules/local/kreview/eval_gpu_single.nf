@@ -21,6 +21,7 @@
 process KREVIEW_EVAL_GPU_SINGLE {
     tag "eval-gpu-${matrix.baseName.replace('_matrix', '')}"
     label 'process_gpu'
+    publishDir "${params.outdir}/models/gpu", mode: 'copy'
 
     input:
     path(matrix)  // Single selected *_matrix.parquet
