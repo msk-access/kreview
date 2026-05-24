@@ -72,6 +72,7 @@ nextflow run "${KREVIEW_REPO}" \
   --run_gpu_eval            true \
   --gpu_models              "tabpfn,tabicl" \
   --run_multimodal_eval     true \
+  --multimodal_selection    boruta_shap \
   --top_percentile          10.0 \
   --ch_hotspot_maf          /data1/core006/cch/production/resources/cmo-ch/versions/v1.0/regions_of_interest/versions/v1.0/hotspot-list-ch-pd-v1.maf \
   --compute_univariate_auc  \
