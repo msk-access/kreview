@@ -141,6 +141,55 @@ def _save_results(
     return out_path
 
 
+def _save_fitted_models(
+    fitted_models: dict[str, object],
+    output_dir: Path,
+    evaluator: str,
+    skip_gpu_joblib: bool = False,
+) -> None:
+    """Persist fitted model objects to joblib for downstream SHAP rendering.
+
+    Writes ``{evaluator}_{model_name}_model.joblib`` for each fitted model,
+    matching the naming convention expected by the report template's SHAP
+    beeswarm section.
+
+    Args:
+        fitted_models: Dict mapping model name → fitted model object.
+            Example: ``{"lr": pipeline, "rf": rf_model, "tabpfn": tabpfn_model}``.
+        output_dir: Directory to write joblib files.
+        evaluator: Evaluator name (e.g., ``"FSCOnTarget"``).
+        skip_gpu_joblib: If True, skip GPU models (TabPFN/TabICL can be >200MB).
+    """
+    import joblib
+
+    GPU_MODELS = {"tabpfn", "tabicl"}
+
+    for name, model in fitted_models.items():
+        if model is None:
+            continue
+        if skip_gpu_joblib and name in GPU_MODELS:
+            log.info(
+                "joblib_skip_gpu",
+                model=name,
+                evaluator=evaluator,
+                reason="--skip-gpu-joblib",
+            )
+            continue
+        out_path = output_dir / f"{evaluator}_{name}_model.joblib"
+        try:
+            joblib.dump(model, out_path)
+            log.info(
+                "joblib_saved", model=name, evaluator=evaluator, path=str(out_path)
+            )
+        except Exception as e:
+            log.warning(
+                "joblib_save_failed",
+                model=name,
+                evaluator=evaluator,
+                error=str(e),
+            )
+
+
 # ── eval cpu ──────────────────────────────────────────────────────────────────
 
 
@@ -249,6 +298,16 @@ def eval_cpu(
                 extra_meta={"evaluator": evaluator, "matrix_path": str(mf)},
             )
 
+            # Persist fitted models for downstream SHAP rendering
+            cpu_fitted = {}
+            if lr is not None:
+                cpu_fitted["lr"] = lr
+            if rf is not None:
+                cpu_fitted["rf"] = rf
+            if xgb is not None:
+                cpu_fitted["xgb"] = xgb
+            _save_fitted_models(cpu_fitted, output, evaluator)
+
             def _fmt(v):
                 return "N/A" if v is None else f"{v:.3f}"
 
@@ -303,6 +362,11 @@ def eval_gpu(
     shap_samples: int = typer.Option(500, "--shap-samples", help="Max SHAP samples"),
     resume: bool = typer.Option(
         False, "--resume", help="Skip evaluators with existing results"
+    ),
+    skip_gpu_joblib: bool = typer.Option(
+        False,
+        "--skip-gpu-joblib",
+        help="Skip saving GPU model joblib files (can be >200MB each)",
     ),
 ):
     """Per-evaluator evaluation using TabPFN, TabICL (GPU).
@@ -404,6 +468,11 @@ def eval_gpu(
                 extra_meta={"evaluator": evaluator, "matrix_path": str(mf)},
             )
 
+            # Persist fitted GPU models for downstream SHAP rendering
+            _save_fitted_models(
+                fitted, output, evaluator, skip_gpu_joblib=skip_gpu_joblib
+            )
+
             elapsed = _time.time() - t0
             for mn in models_list_run:
                 auc_val = results.get(f"auc_{mn}")
@@ -440,15 +509,36 @@ def eval_multimodal(
     models: str = typer.Option(
         "rf,xgb",
         "--models",
-        help="Comma-separated models for multimodal evaluation (lr,rf,xgb)",
+        help="Comma-separated CPU models for multimodal evaluation (lr,rf,xgb)",
     ),
-    top_k: int = typer.Option(50, "--top-k", help="Top-K features for MI selection"),
+    gpu_models: str = typer.Option(
+        "",
+        "--gpu-models",
+        help="Comma-separated GPU models: tabpfn,tabicl. Empty = CPU only.",
+    ),
+    top_percentile: float = typer.Option(
+        10.0,
+        "--top-percentile",
+        help="Top N%% features for MI selection (matches per-evaluator pipeline)",
+    ),
     multimodal_selection: str = typer.Option(
         "mi",
         "--multimodal-selection",
         help="Multimodal feature selection: mi (default, fast) or boruta_shap (interaction-aware)",
     ),
     cv_folds: int = typer.Option(5, "--cv-folds", help="Cross-validation folds"),
+    device: str = typer.Option("cuda", "--device", help="PyTorch device: cuda, cpu"),
+    no_finetune: bool = typer.Option(
+        False,
+        "--no-finetune",
+        help="Zero-shot GPU inference (not recommended)",
+    ),
+    finetune_epochs: int = typer.Option(
+        30, "--finetune-epochs", help="GPU fine-tuning epochs"
+    ),
+    finetune_lr: float = typer.Option(
+        1e-5, "--finetune-lr", help="GPU fine-tuning learning rate"
+    ),
 ):
     """Cross-evaluator multimodal evaluation with stacking and ablation.
 
@@ -462,21 +552,27 @@ def eval_multimodal(
     from kreview.eval_engine import multimodal_eval as _multimodal_eval
 
     print("=== kreview eval multimodal ===", flush=True)
-    print(f"  --results-dir  : {results_dir}", flush=True)
-    print(f"  --super-matrix : {super_matrix or '(not provided)'}", flush=True)
-    print(f"  --output       : {output}", flush=True)
-    print(f"  --models       : {models}", flush=True)
-    print(f"  --top-k        : {top_k}", flush=True)
-    print(f"  --multimodal-selection : {multimodal_selection}", flush=True)
-    print(f"  --cv-folds     : {cv_folds}", flush=True)
+    print(f"  --results-dir        : {results_dir}", flush=True)
+    print(f"  --super-matrix       : {super_matrix or '(not provided)'}", flush=True)
+    print(f"  --output             : {output}", flush=True)
+    print(f"  --models             : {models}", flush=True)
+    print(f"  --gpu-models         : {gpu_models or '(none)'}", flush=True)
+    print(f"  --top-percentile     : {top_percentile}", flush=True)
+    print(f"  --multimodal-selection: {multimodal_selection}", flush=True)
+    print(f"  --cv-folds           : {cv_folds}", flush=True)
+    print(f"  --device             : {device}", flush=True)
+    print(f"  --finetune           : {not no_finetune}", flush=True)
     print("", flush=True)
+
+    gpu_model_list = tuple(m.strip() for m in gpu_models.split(",") if m.strip())
 
     log.info(
         "eval_multimodal_start",
         results_dir=str(results_dir),
         super_matrix=str(super_matrix) if super_matrix else None,
         models=models,
-        top_k=top_k,
+        gpu_models=gpu_models,
+        top_percentile=top_percentile,
         multimodal_selection=multimodal_selection,
         cv_folds=cv_folds,
     )
@@ -508,8 +604,13 @@ def eval_multimodal(
             results_dir=results_dir,
             super_matrix_path=super_matrix,
             models=models_list,
+            gpu_models=gpu_model_list,
+            device=device,
+            finetune=not no_finetune,
+            finetune_epochs=finetune_epochs,
+            finetune_lr=finetune_lr,
             n_folds=cv_folds,
-            top_k=top_k,
+            top_percentile=top_percentile,
             multimodal_selection=multimodal_selection,
         )
     except (FileNotFoundError, ValueError) as e:

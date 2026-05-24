@@ -1134,13 +1134,19 @@ def _build_gpu_model(
         finetune: If True, use fine-tuned variant (default).
         finetune_epochs: Epochs for fine-tuning.
         finetune_lr: Learning rate for fine-tuning.
+
+    Versions:
+        - TabPFN v8.0.3+: import from ``tabpfn.finetuning`` (was tabpfn_extensions)
+        - TabICL v2.1+: ``FinetunedTabICLClassifier`` (was ``TabICLClassifier(finetune=True)``)
     """
     if name == "tabpfn":
         try:
             if finetune:
-                from tabpfn_extensions.fine_tuning import FineTunedTabPFNClassifier
+                # TabPFN v8: finetuning moved from tabpfn_extensions → tabpfn.finetuning
+                # Class renamed: FineTunedTabPFNClassifier → FinetunedTabPFNClassifier
+                from tabpfn.finetuning import FinetunedTabPFNClassifier
 
-                return FineTunedTabPFNClassifier(
+                return FinetunedTabPFNClassifier(
                     device=device,
                     n_epochs=finetune_epochs,
                     learning_rate=finetune_lr,
@@ -1154,21 +1160,30 @@ def _build_gpu_model(
                 "gpu_model_import_failed",
                 model=name,
                 error=str(e),
-                hint="Install with: pip install kreview[gpu]",
+                hint="Install with: pip install kreview[gpu]  # requires tabpfn>=8.0.3",
             )
             return None
 
     elif name == "tabicl":
         try:
-            from tabicl import TabICLClassifier
+            if finetune:
+                # TabICL v2.1+: separate class for fine-tuned variant
+                from tabicl import FinetunedTabICLClassifier
 
-            return TabICLClassifier(finetune=finetune)
+                return FinetunedTabICLClassifier(
+                    epochs=finetune_epochs,
+                    learning_rate=finetune_lr,
+                )
+            else:
+                from tabicl import TabICLClassifier
+
+                return TabICLClassifier()
         except ImportError as e:
             log.error(
                 "gpu_model_import_failed",
                 model=name,
                 error=str(e),
-                hint="Install with: pip install kreview[gpu]",
+                hint="Install with: pip install kreview[gpu]  # requires tabicl>=2.1",
             )
             return None
 
@@ -1186,33 +1201,43 @@ def _compute_shap(
 ) -> dict | None:
     """Compute SHAP values using the best available method for the model type.
 
-    Dispatches to native SHAP implementations for foundation models,
-    TreeExplainer for tree-based, or PermutationExplainer as fallback.
+    Dispatches to:
+    - ``shapiq.TabularExplainer`` for foundation models (TabPFN, TabICL)
+    - ``shap.TreeExplainer`` for tree-based models (RF, XGBoost)
+    - ``shap.PermutationExplainer`` as universal fallback
 
     Returns dict with shap_values (list) and feature_names, or None on failure.
     """
     X_shap = X[:max_samples] if len(X) > max_samples else X
 
     try:
-        # Native TabICL SHAP
-        if name == "tabicl":
-            from tabicl.shap import get_shap_values
+        # GPU foundation models: use shapiq (remove-and-recontextualize strategy)
+        if name in ("tabpfn", "tabicl"):
+            try:
+                import shapiq
 
-            sv = get_shap_values(fitted_model, X_shap)
-            return {
-                "shap_values": sv.tolist() if hasattr(sv, "tolist") else sv,
-                "feature_names": feature_names,
-            }
-
-        # Native TabPFN SHAP via tabpfn-extensions
-        if name == "tabpfn":
-            from tabpfn_extensions.interpretability import shap_values as tabpfn_shap
-
-            sv = tabpfn_shap(fitted_model, X_shap)
-            return {
-                "shap_values": sv.tolist() if hasattr(sv, "tolist") else sv,
-                "feature_names": feature_names,
-            }
+                explainer = shapiq.TabularExplainer(
+                    model=fitted_model.predict_proba,
+                    data=X_shap,
+                )
+                sv = explainer.explain(X_shap)
+                log.info("shapiq_computed", model=name, n_samples=len(X_shap))
+                return {
+                    "shap_values": (
+                        sv.values.tolist()
+                        if hasattr(sv.values, "tolist")
+                        else sv.values
+                    ),
+                    "feature_names": feature_names,
+                }
+            except Exception as e:
+                log.warning(
+                    "shapiq_failed",
+                    model=name,
+                    error=str(e),
+                    fallback="permutation",
+                )
+                # Fall through to PermutationExplainer below
 
         # Tree-based (RF, XGB)
         import shap
@@ -1634,7 +1659,7 @@ def _select_multimodal_features(
     y: np.ndarray,
     *,
     max_nan_frac: float = 0.80,
-    top_k: int = 50,
+    top_percentile: float = 10.0,
     strategy: str = "mi",
 ) -> tuple[pd.DataFrame, list[str]]:
     """Feature selection pipeline for multimodal evaluation.
@@ -1644,13 +1669,16 @@ def _select_multimodal_features(
         2. Median-impute remaining NaNs
         3. Drop zero-variance columns
         4. Rank by Boruta-SHAP (if ``strategy="boruta_shap"``) or
-           mutual information (default/fallback) → keep top-K
+           mutual information (default/fallback) → keep top percentile.
+           If Boruta-SHAP confirms >500 features, MI reduces within
+           the confirmed set to ``top_percentile``%.
 
     Args:
         df: Feature DataFrame (numeric columns only).
         y: Binary label array (same length as ``df``).
         max_nan_frac: Maximum fraction of NaN allowed per column.
-        top_k: Number of features to retain after MI ranking.
+        top_percentile: Percentage of features to retain after MI ranking.
+        strategy: ``"mi"`` (default) or ``"boruta_shap"``.
 
     Returns:
         (selected_df, selected_feature_names)
@@ -1714,26 +1742,55 @@ def _select_multimodal_features(
         subset = selector.Subset()
 
         if not subset.empty:
-            selected = list(subset.columns)
-            df = df[selected]
+            confirmed = list(subset.columns)
             log.info(
-                "boruta_shap_complete", n_selected=len(selected), top_5=selected[:5]
+                "boruta_shap_complete",
+                n_confirmed=len(confirmed),
+                top_5=confirmed[:5],
             )
-            return df, selected
+
+            # If Boruta confirms >500 features, apply MI reduction
+            if len(confirmed) > 500:
+                n_keep = max(1, int(len(confirmed) * (top_percentile / 100.0)))
+                mi_scores = mutual_info_classif(
+                    df[confirmed].values, y, random_state=42
+                )
+                mi_ranked = sorted(
+                    zip(confirmed, mi_scores),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+                confirmed = [name for name, _ in mi_ranked[:n_keep]]
+                log.info(
+                    "boruta_shap_mi_reduction",
+                    n_boruta=len(subset.columns),
+                    n_after_mi=len(confirmed),
+                    top_percentile=top_percentile,
+                    top_5=[(n, f"{s:.3f}") for n, s in mi_ranked[:5]],
+                )
+
+            df = df[confirmed]
+            return df, confirmed
         else:
-            log.warning("boruta_shap_no_features", fallback="mi_top_k")
+            log.warning(
+                "boruta_shap_no_features",
+                fallback="mi_top_percentile",
+                n_features=len(df.columns),
+            )
             # Fall through to MI ranking below
 
     # Step 5: Mutual information ranking (also fallback for boruta_shap)
-    if len(df.columns) > top_k:
+    n_keep = max(1, int(len(df.columns) * (top_percentile / 100.0)))
+    if len(df.columns) > n_keep:
         mi_scores = mutual_info_classif(df.values, y, random_state=42)
         mi_ranked = sorted(zip(df.columns, mi_scores), key=lambda x: x[1], reverse=True)
-        selected = [name for name, _ in mi_ranked[:top_k]]
+        selected = [name for name, _ in mi_ranked[:n_keep]]
         df = df[selected]
         log.info(
             "multimodal_feature_mi_selected",
             n_before=len(mi_ranked),
             n_after=len(selected),
+            top_percentile=top_percentile,
             top_5=[(name, f"{score:.3f}") for name, score in mi_ranked[:5]],
         )
     else:
@@ -1743,6 +1800,7 @@ def _select_multimodal_features(
         "multimodal_feature_selection_complete",
         n_initial=n_initial,
         n_final=len(selected),
+        strategy=strategy,
     )
     return df, selected
 
@@ -1752,8 +1810,13 @@ def multimodal_eval(
     super_matrix_path: str | Path | None = None,
     *,
     models: tuple[str, ...] = ("rf", "xgb"),
+    gpu_models: tuple[str, ...] = (),
+    device: str = "cuda",
+    finetune: bool = True,
+    finetune_epochs: int = 30,
+    finetune_lr: float = 1e-5,
     n_folds: int = 5,
-    top_k: int = 50,
+    top_percentile: float = 10.0,
     random_state: int = 42,
     multimodal_selection: str = "mi",
 ) -> dict:
@@ -1776,19 +1839,36 @@ def multimodal_eval(
     Args:
         results_dir: Directory with ``*_model_results.json`` files.
         super_matrix_path: Optional path to ``super_matrix.parquet``.
-        models: Model names to use (``rf``, ``xgb``, ``lr``).
+        models: CPU model names to use (``rf``, ``xgb``, ``lr``).
+        gpu_models: GPU model names (``tabpfn``, ``tabicl``). Empty = CPU only.
+        device: PyTorch device string for GPU models.
+        finetune: If True, use fine-tuned GPU variants.
+        finetune_epochs: Epochs for GPU model fine-tuning.
+        finetune_lr: Learning rate for GPU model fine-tuning.
         n_folds: Cross-validation folds.
-        top_k: Top-K features for raw-feature strategy.
+        top_percentile: Top N% features for feature selection.
         random_state: Reproducibility seed.
+        multimodal_selection: Feature selection strategy ('mi' or 'boruta_shap').
 
     Returns:
         A comprehensive results dict with keys for each strategy.
     """
     from kreview.core import LABEL_META_COLS
 
+    # GPU kwargs for _build_model dispatch
+    gpu_kwargs = dict(
+        device=device,
+        finetune=finetune,
+        finetune_epochs=finetune_epochs,
+        finetune_lr=finetune_lr,
+    )
+    # Merge CPU + GPU model lists for unified iteration
+    all_models = list(models) + list(gpu_models)
+
     results = {
         "strategy": "multimodal",
-        "models_requested": list(models),
+        "models_requested": all_models,
+        "gpu_models_requested": list(gpu_models),
     }
 
     # ── Load baselines ──
@@ -1829,9 +1909,19 @@ def multimodal_eval(
         )
 
         stacking_results = {}
-        for model_name in models:
+        for model_name in all_models:
             try:
-                model = _build_model(model_name, random_state)
+                is_gpu = model_name in ("tabpfn", "tabicl")
+                model = _build_model(
+                    model_name, random_state, **(gpu_kwargs if is_gpu else {})
+                )
+                if model is None:
+                    log.warning(
+                        "stacking_model_skipped",
+                        model=model_name,
+                        reason="build returned None (import failed?)",
+                    )
+                    continue
                 res, _ = evaluate_model(
                     model,
                     stacking_df.values,
@@ -1851,6 +1941,7 @@ def multimodal_eval(
                         model=model_name,
                         auc=stacking_auc,
                         delta_vs_best_single=delta,
+                        is_gpu=is_gpu,
                     )
             except Exception as e:
                 log.error("stacking_model_failed", model=model_name, error=str(e))
@@ -1897,7 +1988,10 @@ def multimodal_eval(
 
             X_raw = super_df[feature_cols]
             X_selected, selected_names = _select_multimodal_features(
-                X_raw, y_raw, top_k=top_k, strategy=multimodal_selection
+                X_raw,
+                y_raw,
+                top_percentile=top_percentile,
+                strategy=multimodal_selection,
             )
 
             if X_selected.empty:
@@ -1910,9 +2004,19 @@ def multimodal_eval(
             )
 
             raw_results = {}
-            for model_name in models:
+            for model_name in all_models:
                 try:
-                    model = _build_model(model_name, random_state)
+                    is_gpu = model_name in ("tabpfn", "tabicl")
+                    model = _build_model(
+                        model_name, random_state, **(gpu_kwargs if is_gpu else {})
+                    )
+                    if model is None:
+                        log.warning(
+                            "raw_model_skipped",
+                            model=model_name,
+                            reason="build returned None (import failed?)",
+                        )
+                        continue
                     res, _ = evaluate_model(
                         model,
                         X_selected.values,
@@ -1949,7 +2053,7 @@ def multimodal_eval(
             # Use the best stacking model for ablation
             best_stack_model = None
             best_stack_auc = 0.0
-            for mn in models:
+            for mn in all_models:
                 auc_val = results["stacking"].get(f"auc_stacking_{mn}", 0.0)
                 if auc_val and auc_val > best_stack_auc:
                     best_stack_auc = auc_val
@@ -2026,7 +2130,7 @@ def multimodal_eval(
     return results
 
 
-def _build_model(model_name: str, random_state: int):
+def _build_model(model_name: str, random_state: int, **kwargs):
     """Instantiate a model by name for multimodal evaluation.
 
     Centralises model construction so that ``multimodal_eval`` does not
@@ -2034,11 +2138,13 @@ def _build_model(model_name: str, random_state: int):
     combination.
 
     Args:
-        model_name: One of ``lr``, ``rf``, ``xgb``.
+        model_name: One of ``lr``, ``rf``, ``xgb``, ``tabpfn``, ``tabicl``.
         random_state: Seed for reproducibility.
+        **kwargs: GPU model params (``device``, ``finetune``, ``finetune_epochs``,
+            ``finetune_lr``). Ignored for CPU models.
 
     Returns:
-        An sklearn-compatible estimator.
+        An sklearn-compatible estimator, or None if GPU model import fails.
 
     Raises:
         ValueError: If ``model_name`` is not recognised.
@@ -2071,5 +2177,17 @@ def _build_model(model_name: str, random_state: int):
         except ImportError:
             log.error("xgb_import_failed", hint="pip install xgboost")
             raise
+    elif model_name in ("tabpfn", "tabicl"):
+        # Delegate to GPU model factory; returns None on ImportError (logged there)
+        return _build_gpu_model(
+            model_name,
+            device=kwargs.get("device", "cuda"),
+            finetune=kwargs.get("finetune", True),
+            finetune_epochs=kwargs.get("finetune_epochs", 30),
+            finetune_lr=kwargs.get("finetune_lr", 1e-5),
+        )
     else:
-        raise ValueError(f"Unknown model: {model_name!r}. Choose from: lr, rf, xgb")
+        raise ValueError(
+            f"Unknown model: {model_name!r}. "
+            f"Choose from: lr, rf, xgb, tabpfn, tabicl"
+        )

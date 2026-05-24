@@ -602,15 +602,17 @@ if mres is not None:
                 "Training Time (s)": f"{t_sec:.2f}" if t_sec else "N/A",
             })
     if summary_rows:
-        delta_rf_lr = mres.get("auc_delta_rf_lr")
-        delta_xgb_rf = mres.get("auc_delta_xgb_rf")
-        delta_text = ""
-        if delta_rf_lr is not None:
-            delta_text += f"RF–LR: {delta_rf_lr:+.3f}"
-        if delta_xgb_rf is not None:
-            delta_text += f" | XGB–RF: {delta_xgb_rf:+.3f}"
-        if delta_text:
-            display(Markdown(f"**AUC Deltas**: {delta_text}"))
+        # Dynamic AUC deltas: show pairwise differences from mres
+        delta_parts = []
+        for pfx, name in DYNAMIC_MODELS:
+            # Check for any stored delta keys involving this model
+            for k, v in mres.items():
+                if k.startswith("auc_delta_") and pfx in k and isinstance(v, (int, float)):
+                    label = k.replace("auc_delta_", "").upper().replace("_", "–")
+                    if f"{label}: {v:+.3f}" not in delta_parts:
+                        delta_parts.append(f"{label}: {v:+.3f}")
+        if delta_parts:
+            display(Markdown(f"**AUC Deltas**: {' | '.join(delta_parts)}"))
         itables.show(pd.DataFrame(summary_rows), classes="display compact nowrap", maxBytes=0, paging=False)
 ```
 
@@ -636,7 +638,9 @@ if _ci_y is not None and len(_ci_scores) > 0:
         auc_val = _roc_auc(_ci_y, preds)
         
         # CI from mres (bootstrap CI computed during eval)
-        prefix = {"Logistic Regression": "lr", "Random Forest": "rf", "XGBoost": "xgb"}[name]
+        # Build reverse map dynamically from DYNAMIC_MODELS (avoids KeyError for GPU models)
+        _display_to_prefix = {display: pfx for pfx, display in DYNAMIC_MODELS}
+        prefix = _display_to_prefix.get(name, name.lower())
         ci_lo = mres.get(f"auc_{prefix}_ci_lower") if mres else None
         ci_hi = mres.get(f"auc_{prefix}_ci_upper") if mres else None
         ci_str = f" [{ci_lo:.2f}\u2013{ci_hi:.2f}]" if ci_lo and ci_hi else ""
@@ -1230,6 +1234,32 @@ for prefix, display_name in DYNAMIC_MODELS:
                 shap_results[prefix] = (sv, top, sl, sid, display_name)
         except Exception as e:
             import structlog as _stlog; _stlog.get_logger().warning(f"{prefix}_shap_beeswarm_failed", error=str(e))
+    elif mres and f"{prefix}_shap" in mres:
+        # Fallback: pre-computed SHAP values from JSON (GPU models with --skip-gpu-joblib)
+        try:
+            _shap_data = mres[f"{prefix}_shap"]
+            _sv_arr = np.array(_shap_data["shap_values"])
+            _feat_names = _shap_data.get("feature_names", [])
+            
+            # Render a mean |SHAP| bar chart (no beeswarm without fitted model)
+            mean_abs = np.abs(_sv_arr).mean(axis=0)
+            top_idx = np.argsort(mean_abs)[::-1][:_shap_display_n]
+            top_names = [_feat_names[i] if i < len(_feat_names) else f"f{i}" for i in top_idx]
+            top_vals = [float(mean_abs[i]) for i in top_idx]
+            
+            fig_shap_bar = go.Figure(go.Bar(
+                x=top_vals[::-1], y=top_names[::-1],
+                orientation="h",
+                marker_color=THEME["models"][DYNAMIC_MODELS.index((prefix, display_name)) % len(THEME["models"])]
+            ))
+            _ = fig_shap_bar.update_layout(
+                **LAYOUT_DEFAULTS, height=max(300, 30 * len(top_names)),
+                title=f"{display_name} — Mean |SHAP| (Pre-computed, no joblib)",
+                xaxis_title="Mean |SHAP value|"
+            )
+            show_plotly(fig_shap_bar, filename=f"shap_bar_{prefix}")
+        except Exception as e:
+            import structlog as _stlog; _stlog.get_logger().warning(f"{prefix}_precomputed_shap_failed", error=str(e))
 ```
 
 ### Feature Dependence
