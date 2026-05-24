@@ -28,7 +28,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
 <body data-md-color-accent="custom" data-md-color-primary="custom" data-md-color-scheme="default" dir="ltr">
 <input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox">
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
@@ -855,23 +855,26 @@
 </button>
 </nav>
 <pre class="mermaid"><code>graph LR
-    A[Label] --&gt; B["Extract ×N"]
-    B --&gt; C[Select]
-    C --&gt; D["Eval CPU"]
-    C --&gt; E["Eval GPU"]
-    C --&gt; F[Fuse]
-    D --&gt; G["Eval Multimodal"]
+    classDef step fill:#8b5cf6,stroke:#5b21b6,color:#fff;
+    A["Label"]:::step --&gt; B["Extract ×N"]:::step
+    B --&gt; C[Select]:::step
+    C --&gt; D["Eval CPU"]:::step
+    C --&gt; E["Eval GPU"]:::step
+    C --&gt; F[Fuse]:::step
+    D --&gt; G["Eval Multimodal"]:::step
     E --&gt; G
     F --&gt; G
-    G --&gt; H[Report]
+    D --&gt; H[Report]:::step
+    E --&gt; H
 </code></pre>
 <div class="panzoom-info-box panzoom-info-box-bottom panzoom-hidden">
 Use mouse to pan and zoom
 </div>
 </div>
 <div class="admonition note">
-<p class="admonition-title">Steps 4a/4b/4c are independent</p>
-<p>After feature selection, <code>eval cpu</code>, <code>eval gpu</code>, and <code>fuse</code> can run in <strong>parallel</strong>. They all converge at <code>eval multimodal</code>, which needs the OOF predictions from eval + the super-matrix from fuse.</p>
+<p class="admonition-title">Parallel execution</p>
+<p>After feature selection, <code>eval cpu</code>, <code>eval gpu</code>, and <code>fuse</code> run in <strong>parallel</strong>.
+After eval, <code>eval multimodal</code> and <code>report</code> also run in <strong>parallel</strong> — Report needs matrices + model results; Multimodal needs super_matrix + OOF probs.</p>
 </div>
 <hr>
 <h2 id="command-module-notebook-mapping">Command → Module → Notebook Mapping</h2>
@@ -998,22 +1001,25 @@ Use mouse to pan and zoom
 <hr>
 <h2 id="data-flow">Data Flow</h2>
 <p>Each stage communicates through <strong>parquet files</strong> on disk:</p>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-1-1" id="__codelineno-1-1" name="__codelineno-1-1"></a>Extract:  → {evaluator}_matrix.parquet  (full features)
-<a href="#__codelineno-1-2" id="__codelineno-1-2" name="__codelineno-1-2"></a>Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
-<a href="#__codelineno-1-3" id="__codelineno-1-3" name="__codelineno-1-3"></a>          → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
-<a href="#__codelineno-1-4" id="__codelineno-1-4" name="__codelineno-1-4"></a>          → {evaluator}_selection_qc.json  (selection audit trail)
-<a href="#__codelineno-1-5" id="__codelineno-1-5" name="__codelineno-1-5"></a>Eval:     → {evaluator}_model_results.json  (AUCs, OOF probs)
-<a href="#__codelineno-1-6" id="__codelineno-1-6" name="__codelineno-1-6"></a>          → {evaluator}_{model}_model.joblib  (trained models)
-<a href="#__codelineno-1-7" id="__codelineno-1-7" name="__codelineno-1-7"></a>Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
-<a href="#__codelineno-1-8" id="__codelineno-1-8" name="__codelineno-1-8"></a>Report:   → reports/{evaluator}.html  (interactive dashboards)
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-1-1" id="__codelineno-1-1" name="__codelineno-1-1"></a>Label:    → labels.parquet  (5-tier ctDNA labels)
+<a href="#__codelineno-1-2" id="__codelineno-1-2" name="__codelineno-1-2"></a>Extract:  → {evaluator}_matrix.parquet  (full features)
+<a href="#__codelineno-1-3" id="__codelineno-1-3" name="__codelineno-1-3"></a>Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
+<a href="#__codelineno-1-4" id="__codelineno-1-4" name="__codelineno-1-4"></a>          → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
+<a href="#__codelineno-1-5" id="__codelineno-1-5" name="__codelineno-1-5"></a>          → {evaluator}_selection_qc.json  (selection audit trail)
+<a href="#__codelineno-1-6" id="__codelineno-1-6" name="__codelineno-1-6"></a>Eval:     → {evaluator}_model_results.json  (AUCs, OOF probs)
+<a href="#__codelineno-1-7" id="__codelineno-1-7" name="__codelineno-1-7"></a>          → {evaluator}_{model}_model.joblib  (trained models)
+<a href="#__codelineno-1-8" id="__codelineno-1-8" name="__codelineno-1-8"></a>Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
+<a href="#__codelineno-1-9" id="__codelineno-1-9" name="__codelineno-1-9"></a>Multimodal: → multimodal_results.json  (stacking + ablation results)
+<a href="#__codelineno-1-10" id="__codelineno-1-10" name="__codelineno-1-10"></a>Report:   → reports/{evaluator}.html  (interactive dashboards)
 </code></pre></div>
 <hr>
 <h2 id="nextflow-parallelism">Nextflow Parallelism</h2>
 <p>See <a href="../../operations/nextflow/">Nextflow Integration</a> for full <abbr title="High-Performance Computing">HPC</abbr> execution docs.</p>
 <p>In Nextflow multistage mode (<code>params.pipeline_mode = 'multistage'</code>), the DAG executes as:</p>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-2-1" id="__codelineno-2-1" name="__codelineno-2-1"></a>EXTRACT ×N → [collect] → SELECT ──┬── EVAL_CPU ──┐
-<a href="#__codelineno-2-2" id="__codelineno-2-2" name="__codelineno-2-2"></a>                                   ├── EVAL_GPU ──┤→ EVAL_MULTIMODAL → REPORT
-<a href="#__codelineno-2-3" id="__codelineno-2-3" name="__codelineno-2-3"></a>                                   └── FUSE ──────┘
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-2-1" id="__codelineno-2-1" name="__codelineno-2-1"></a>LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── EVAL_CPU ──┬── EVAL_MULTIMODAL
+<a href="#__codelineno-2-2" id="__codelineno-2-2" name="__codelineno-2-2"></a>                                           ├── EVAL_GPU ──┤
+<a href="#__codelineno-2-3" id="__codelineno-2-3" name="__codelineno-2-3"></a>                                           └── FUSE ──────┘
+<a href="#__codelineno-2-4" id="__codelineno-2-4" name="__codelineno-2-4"></a>                                                          └── REPORT (parallel)
 </code></pre></div>
 <p>Each stage is a separate Nextflow process in <code>nextflow/modules/local/kreview/</code>:</p>
 <table>
@@ -1023,50 +1029,65 @@ Use mouse to pan and zoom
 <th>Module</th>
 <th>Input</th>
 <th>Output</th>
+<th>publishDir</th>
 </tr>
 </thead>
 <tbody>
 <tr>
+<td><code>KREVIEW_LABEL</code></td>
+<td><code>label.nf</code></td>
+<td>Samplesheets + cBioPortal</td>
+<td><code>labels.parquet</code></td>
+<td><code>outdir/labels/</code></td>
+</tr>
+<tr>
 <td><code>KREVIEW_EXTRACT</code></td>
 <td><code>extract.nf</code></td>
-<td>Samplesheets + parquets</td>
+<td>Samplesheets + labels.parquet</td>
 <td><code>*_matrix.parquet</code></td>
+<td><code>outdir/matrices/raw/</code></td>
 </tr>
 <tr>
-<td><code>KREVIEW_SELECT</code></td>
-<td><code>select.nf</code></td>
-<td>All raw matrices</td>
-<td>Selected matrices + stats + <abbr title="Quality Control">QC</abbr></td>
+<td><code>KREVIEW_SELECT_SINGLE</code></td>
+<td><code>select_single.nf</code></td>
+<td>Raw matrix</td>
+<td>Selected matrix + stats + <abbr title="Quality Control">QC</abbr></td>
+<td><code>outdir/matrices/selected/</code></td>
 </tr>
 <tr>
-<td><code>KREVIEW_EVAL_CPU</code></td>
-<td><code>eval_cpu.nf</code></td>
-<td>Selected matrices</td>
+<td><code>KREVIEW_EVAL_CPU_SINGLE</code></td>
+<td><code>eval_cpu_single.nf</code></td>
+<td>Selected matrix</td>
 <td><code>*_model_results.json</code></td>
+<td><code>outdir/models/cpu/</code></td>
 </tr>
 <tr>
-<td><code>KREVIEW_EVAL_GPU</code></td>
-<td><code>eval_gpu.nf</code></td>
-<td>Selected matrices</td>
+<td><code>KREVIEW_EVAL_GPU_SINGLE</code></td>
+<td><code>eval_gpu_single.nf</code></td>
+<td>Selected matrix</td>
 <td><code>*_model_results.json</code></td>
+<td><code>outdir/models/gpu/</code></td>
 </tr>
 <tr>
 <td><code>KREVIEW_FUSE</code></td>
 <td><code>fuse.nf</code></td>
-<td>Selected matrices</td>
+<td>All selected matrices</td>
 <td><code>super_matrix.parquet</code></td>
+<td><code>outdir/matrices/fused/</code></td>
 </tr>
 <tr>
 <td><code>KREVIEW_EVAL_MULTIMODAL</code></td>
 <td><code>eval_multimodal.nf</code></td>
 <td>Fuse + eval results</td>
 <td>Multimodal results</td>
+<td><code>outdir/models/multimodal/</code></td>
 </tr>
 <tr>
 <td><code>KREVIEW_REPORT</code></td>
 <td><code>report.nf</code></td>
-<td>Selected matrices</td>
+<td>Matrices + model results</td>
 <td>HTML dashboards</td>
+<td><code>outdir/reports/</code></td>
 </tr>
 </tbody>
 </table>
@@ -1093,7 +1114,7 @@ Use mouse to pan and zoom
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 24, 2026 03:49:12 UTC"><span class="timeago" datetime="2026-05-24T03:49:12+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 24, 2026 03:49:12 UTC">2026-05-24</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 24, 2026 05:06:05 UTC"><span class="timeago" datetime="2026-05-24T05:06:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 24, 2026 05:06:05 UTC">2026-05-24</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">
