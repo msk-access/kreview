@@ -1338,7 +1338,9 @@ def extract(
         )
         labeler = CtDNALabeler(paths, config)
         labels_df = labeler.label_all()
-        print(f"  Labels: {len(labels_df)} samples in {time.time()-t0:.1f}s", flush=True)
+        print(
+            f"  Labels: {len(labels_df)} samples in {time.time()-t0:.1f}s", flush=True
+        )
     print(
         f"  Distribution:\n{labels_df['label'].value_counts().to_string()}", flush=True
     )

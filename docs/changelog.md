@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.12] - 2026-05-24
+### Added
+- **Nextflow publishDir**: All 8 multistage modules now publish outputs to `params.outdir` with `mode: copy`. Output structure: `labels/`, `matrices/raw/`, `matrices/selected/`, `models/cpu/`, `models/gpu/`, `matrices/fused/`, `models/multimodal/`, `reports/`.
+- **Label-first DAG**: `KREVIEW_LABEL` runs once as the first step in multistage mode, producing `labels.parquet` shared across all extract jobs. Eliminates 26× redundant re-labeling (~13 min saved).
+- **`--labels` CLI flag**: `kreview extract` now accepts `--labels /path/to/labels.parquet` to skip internal labeling and use pre-computed labels.
+- **Boruta-SHAP in HPC script**: `scripts/run_hpc_v0.0.11.sh` now passes `--multimodal_selection boruta_shap` for rigorous multimodal feature selection.
+
+### Changed
+- **Report DAG dependency**: Report process now receives both matrices AND `*_model_results.json` from CPU/GPU eval, enabling complete dashboard rendering (ROC, SHAP, metrics). Report runs in parallel with FUSE + MULTIMODAL.
+- **Extract module**: `extract.nf` now accepts `labels.parquet` as input from upstream `KREVIEW_LABEL`.
+
+### Documentation
+- **README**: Comprehensive overhaul — added mRMR/Boruta-SHAP, GPU models, multimodal stacking, Nextflow HPC, pipeline architecture Mermaid diagram, fixed stale `--workers` flag.
+- **Statistical Tests**: Detailed mRMR documentation (optimization objective, F-statistic/Pearson explanation, algorithm steps), Boruta-SHAP documentation (shadow features, SHAP importance, flowchart, configuration table, when-to-choose guide), fixed stale Selection QC keys.
+- **Nextflow Operations**: Updated module list to match actual filenames, added `iris` profile docs, added publishDir output structure tree, added `parq-cli` tip.
+- **Pipeline CLI**: Fixed stale `--workers 4`, added `--labels` to extract example, added `--ch-hotspot-maf`, added label-first modular pipeline flow, added `parq-cli` tip.
+- **Pipeline Architecture**: Updated DAG (Label-first, Report parallel with Multimodal), fixed process table with actual `_single.nf` module names, added publishDir column.
+
 ## [0.0.11] - 2026-05-24
 ### Changed
 - **Feature Selection (Default)**: Default single-evaluator strategy changed from `hybrid_union` to `mrmr` (Minimum Redundancy Maximum Relevance). mRMR selects features maximizing target correlation while minimizing inter-feature redundancy, preventing multi-collinearity.
