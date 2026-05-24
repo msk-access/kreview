@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1696,6 +1696,10 @@ evaluator into <code>*_matrix.parquet</code> files. This is the first half of
 <a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a>                                  (default) probes parquet row density at
 <a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a>                                  runtime, or pass an integer to override
 <a id="__codelineno-10-22" name="__codelineno-10-22" href="#__codelineno-10-22"></a>                                  (e.g. --chunk-size 200).  [default: auto]
+<a id="__codelineno-10-23" name="__codelineno-10-23" href="#__codelineno-10-23"></a>  --labels PATH                   Path to a pre-computed labels.parquet file.
+<a id="__codelineno-10-24" name="__codelineno-10-24" href="#__codelineno-10-24"></a>                                  When provided, skips the internal labeling
+<a id="__codelineno-10-25" name="__codelineno-10-25" href="#__codelineno-10-25"></a>                                  step entirely. Used by Nextflow multistage
+<a id="__codelineno-10-26" name="__codelineno-10-26" href="#__codelineno-10-26"></a>                                  to avoid re-running labeling per evaluator.
 </code></pre></div>
 <h2 id="features-list">features-list</h2>
 <p>List all registered feature evaluators.</p>
