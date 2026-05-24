@@ -41,7 +41,8 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
       --cbioportal-dir "/path/to/msk_solid_heme_cbioportal" \
       --krewlyzer-dir "/path/to/feature_parquets" \
       --output output/ \
-      --workers 4 \
+      --strategy mrmr \
+      --ch-hotspot-maf /path/to/ch_hotspots.maf \
       --export-duckdb
     ```
     *Note: `--export-duckdb` automatically writes a persistent SQL-queryable `kreview_lake.duckdb` after processing.*
@@ -185,12 +186,23 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 The same pipeline can be run step-by-step for HPC parallelization or debugging:
 
 ```bash
+# Step 0: Label (run once, share across all extractors)
+kreview label \
+    --cancer-samplesheet samplesheet.csv \
+    --healthy-xs1-samplesheet healthy1.csv \
+    --healthy-xs2-samplesheet healthy2.csv \
+    --cbioportal-dir /path/to/cbioportal/ \
+    --ch-hotspot-maf /path/to/ch_hotspots.maf \
+    --output labels.parquet
+
 # Step 1: Extract matrices (parallelizable per evaluator)
+# Use --labels to skip re-labeling in each extract job
 kreview extract --cancer-samplesheet samplesheet.csv \
     --healthy-xs1-samplesheet healthy1.csv \
     --healthy-xs2-samplesheet healthy2.csv \
     --cbioportal-dir /path/to/cbioportal/ \
     --krewlyzer-dir /path/to/features/ \
+    --labels labels.parquet \
     --output output/
 
 # Step 2: Feature selection (mRMR is default)
@@ -216,6 +228,13 @@ kreview eval multimodal \
 # Step 5: Report
 kreview report --results-dir results/
 ```
+
+!!! tip "Inspecting Parquet Outputs"
+    Use [`parq-cli`](https://github.com/Tendo33/parq-cli) to quickly inspect parquet files directly from the terminal:
+    ```bash
+    parq schema output/AtacOnTarget_matrix.parquet  # Column names and types
+    parq meta   output/AtacOnTarget_matrix.parquet  # Row count, compression, metadata
+    ```
 
 !!! tip "kreview select options"
     | Flag | Default | Description |
