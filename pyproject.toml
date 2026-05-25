@@ -62,9 +62,10 @@ docs = [
 ]
 gpu = [
     "torch>=2.0",
-    "tabpfn>=2.0",
+    "tabpfn>=8.0.3",
     "tabpfn-extensions[interpretability]",
-    "tabicl[finetune]",
+    "shapiq",
+    "tabicl[finetune,shap]>=2.1",
 ]
 all = [
     "papermill>=2.5.0",

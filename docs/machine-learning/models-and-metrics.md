@@ -116,6 +116,56 @@ Serialized into the results JSON under `cancer_type_stats` and `assay_stats`.
 
 ---
 
+## GPU Foundation Models (v0.0.13)
+
+In addition to the CPU ensemble, kreview can optionally train **GPU-accelerated foundation models** when a CUDA-capable device is available.
+
+### TabPFN (Tabular Prior-Data Fitted Network)
+
+TabPFN is a prior-data fitted network that performs in-context learning on tabular classification tasks. It was pre-trained on millions of synthetic datasets and can achieve strong performance without hyperparameter tuning.
+
+```python
+# v8.0.3 API (updated import paths)
+from tabpfn import TabPFNClassifier
+
+tabpfn = TabPFNClassifier(device="cuda")
+```
+
+### TabICL (Tabular In-Context Learning)
+
+TabICL is a large-scale in-context learning model for tabular data that uses transformer-based architectures.
+
+```python
+# v2.1 API
+from tabicl import TabICLClassifier
+
+tabicl = TabICLClassifier(device="cuda")
+```
+
+### GPU SHAP with shapiq
+
+SHAP values for GPU models cannot use `TreeExplainer` (designed for tree models). Instead, kreview uses the `shapiq` package, which provides model-agnostic Shapley value computation via kernel-based approximation:
+
+```python
+import shapiq
+
+explainer = shapiq.TabularExplainer(
+    model=model.predict_proba,
+    data=X_background,
+    index="SV",
+)
+interaction_values = explainer.explain(X_explain)
+```
+
+!!! note "Performance"
+    `shapiq` is computationally expensive. The `--shap-samples` flag controls how many background samples are used. Default is 500. GPU SHAP is only computed when `--shap` flag is passed to `eval gpu`.
+
+### GPU Model Persistence
+
+By default, fitted GPU models are saved as `.joblib` files (like CPU models) for downstream SHAP rendering in reports. Since these files can be large (>200MB), use `--skip-gpu-joblib` to opt out. When joblib is skipped, reports will render mean |SHAP| bar charts from pre-computed values in the JSON instead of interactive beeswarm plots.
+
+---
+
 ## QC Metrics
 
 For every feature, `evaluate_feature()` also computes data quality metrics:

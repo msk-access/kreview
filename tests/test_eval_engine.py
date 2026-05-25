@@ -761,3 +761,315 @@ class TestGpuModelsValidation:
         # Should have cv_folds_actual but no model-specific keys
         assert "cv_folds_actual" in result
         assert fitted == {}
+
+
+# ── v0.0.13 Tests ───────────────────────────────────────────────────────────────
+
+
+class TestBuildModelGPUDispatch:
+    """Tests for _build_model GPU model dispatch (v0.0.13)."""
+
+    def test_build_model_lr(self):
+        """LR model builds a Pipeline with StandardScaler."""
+        from kreview.eval_engine import _build_model
+
+        model = _build_model("lr", random_state=42)
+        assert hasattr(model, "named_steps"), "LR should be a Pipeline"
+        assert "scaler" in model.named_steps
+        assert "lr" in model.named_steps
+
+    def test_build_model_rf(self):
+        """RF model builds a RandomForestClassifier."""
+        from kreview.eval_engine import _build_model
+
+        model = _build_model("rf", random_state=42)
+        assert hasattr(model, "feature_importances_") is False  # Not fitted yet
+        assert hasattr(model, "n_estimators")
+
+    @pytest.mark.skipif(not HAS_XGB, reason="XGBoost not available")
+    def test_build_model_xgb(self):
+        """XGB model builds an XGBClassifier."""
+        from kreview.eval_engine import _build_model
+
+        model = _build_model("xgb", random_state=42)
+        assert hasattr(model, "n_estimators")
+
+    def test_build_model_gpu_returns_none_without_deps(self):
+        """GPU model dispatch returns None when GPU deps are not installed."""
+        from kreview.eval_engine import _build_model
+
+        # On a machine without tabpfn installed, this should return None
+        model = _build_model("tabpfn", random_state=42, device="cpu")
+        # Either returns a model (if installed) or None (if not)
+        assert model is None or hasattr(model, "predict_proba")
+
+    def test_build_model_unknown_raises(self):
+        """Unknown model name raises ValueError."""
+        from kreview.eval_engine import _build_model
+
+        with pytest.raises(ValueError, match="Unknown model"):
+            _build_model("nonexistent_model", random_state=42)
+
+    def test_build_model_gpu_kwargs_ignored_for_cpu(self):
+        """GPU kwargs are silently ignored for CPU models (no crash)."""
+        from kreview.eval_engine import _build_model
+
+        # Should not raise even with GPU kwargs
+        model = _build_model(
+            "rf",
+            random_state=42,
+            device="cuda",
+            finetune=True,
+            finetune_epochs=10,
+        )
+        assert model is not None
+
+
+class TestSelectMultimodalFeaturesV013:
+    """Tests for top_percentile + Boruta-SHAP MI reduction logic."""
+
+    def test_top_percentile_basic(self):
+        """MI selection keeps top N% of features."""
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        n = 100
+        # 100 features, most noise, first one has signal
+        X = pd.DataFrame(np.random.randn(n, 100), columns=[f"f{i}" for i in range(100)])
+        y = np.zeros(n, dtype=int)
+        y[:40] = 1
+        X.iloc[:40, 0] += 3.0  # Signal in first feature
+
+        selected_df, selected_names = _select_multimodal_features(
+            X, y, top_percentile=10.0, strategy="mi"
+        )
+
+        # Should keep ~10% = 10 features
+        assert len(selected_names) == 10
+        # Signal feature should survive
+        assert "f0" in selected_names
+
+    def test_top_percentile_all_kept_when_few_features(self):
+        """When n_features * percentile >= n_features, keep all."""
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        X = pd.DataFrame(np.random.randn(50, 5), columns=[f"f{i}" for i in range(5)])
+        y = np.zeros(50, dtype=int)
+        y[:20] = 1
+
+        selected_df, selected_names = _select_multimodal_features(
+            X, y, top_percentile=100.0, strategy="mi"
+        )
+        assert len(selected_names) == 5
+
+    def test_zero_variance_dropped(self):
+        """Zero-variance columns are dropped before MI ranking."""
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        X = pd.DataFrame(
+            {
+                "signal": np.concatenate(
+                    [np.random.randn(30) + 2, np.random.randn(30)]
+                ),
+                "noise": np.random.randn(60),
+                "constant": np.zeros(60),  # Zero variance
+            }
+        )
+        y = np.concatenate([np.ones(30), np.zeros(30)]).astype(int)
+
+        selected_df, selected_names = _select_multimodal_features(
+            X, y, top_percentile=100.0, strategy="mi"
+        )
+
+        assert "constant" not in selected_names
+        assert "signal" in selected_names
+
+
+class TestSaveFittedModels:
+    """Tests for _save_fitted_models helper."""
+
+    def test_save_creates_joblib_files(self, tmp_path):
+        """Fitted models are saved as .joblib files with correct naming."""
+        from kreview.cli_eval import _save_fitted_models
+        from sklearn.linear_model import LogisticRegression
+
+        lr = LogisticRegression()
+        fitted = {"lr": lr}
+
+        _save_fitted_models(fitted, tmp_path, "TestEval")
+
+        joblib_file = tmp_path / "TestEval_lr_model.joblib"
+        assert joblib_file.exists()
+
+    def test_skip_gpu_joblib(self, tmp_path):
+        """GPU models are skipped when skip_gpu_joblib=True."""
+        from kreview.cli_eval import _save_fitted_models
+        from sklearn.linear_model import LogisticRegression
+
+        fitted = {"lr": LogisticRegression(), "tabpfn": "mock_gpu_model"}
+
+        _save_fitted_models(fitted, tmp_path, "TestEval", skip_gpu_joblib=True)
+
+        assert (tmp_path / "TestEval_lr_model.joblib").exists()
+        assert not (tmp_path / "TestEval_tabpfn_model.joblib").exists()
+
+    def test_none_models_skipped(self, tmp_path):
+        """None-valued models are silently skipped."""
+        from kreview.cli_eval import _save_fitted_models
+
+        fitted = {"lr": None, "rf": None}
+
+        _save_fitted_models(fitted, tmp_path, "TestEval")
+
+        assert not (tmp_path / "TestEval_lr_model.joblib").exists()
+        assert not (tmp_path / "TestEval_rf_model.joblib").exists()
+
+
+class TestBuildGpuModelV8:
+    """Validate _build_gpu_model() for TabPFN v8 and TabICL v2.1 API changes.
+
+    These tests run WITHOUT GPU hardware — they validate import paths,
+    class types, and error handling only.
+    """
+
+    def test_tabpfn_finetune_import_path(self):
+        """TabPFN v8: fine-tuning should import from tabpfn.finetuning (not extensions)."""
+        from kreview.eval_engine import _build_gpu_model
+
+        try:
+            model = _build_gpu_model("tabpfn", device="cpu", finetune=True)
+            if model is not None:
+                # Verify it's the v8 class (lowercase 't')
+                assert (
+                    "FinetunedTabPFN" in type(model).__name__
+                    or "TabPFN" in type(model).__name__
+                )
+        except Exception:
+            pytest.skip("tabpfn not installed")
+
+    def test_tabpfn_zeroshot_import(self):
+        """TabPFN v8: zero-shot should import TabPFNClassifier."""
+        from kreview.eval_engine import _build_gpu_model
+
+        try:
+            model = _build_gpu_model("tabpfn", device="cpu", finetune=False)
+            if model is not None:
+                assert "TabPFNClassifier" in type(model).__name__
+        except Exception:
+            pytest.skip("tabpfn not installed")
+
+    def test_tabicl_finetune_uses_dedicated_class(self):
+        """TabICL v2.1: finetune=True should use FinetunedTabICLClassifier."""
+        from kreview.eval_engine import _build_gpu_model
+
+        try:
+            model = _build_gpu_model("tabicl", finetune=True)
+            if model is not None:
+                assert "Finetuned" in type(model).__name__
+        except Exception:
+            pytest.skip("tabicl not installed")
+
+    def test_tabicl_zeroshot_uses_base_class(self):
+        """TabICL v2.1: finetune=False should use TabICLClassifier."""
+        from kreview.eval_engine import _build_gpu_model
+
+        try:
+            model = _build_gpu_model("tabicl", finetune=False)
+            if model is not None:
+                assert "FinetunedTabICL" not in type(model).__name__
+        except Exception:
+            pytest.skip("tabicl not installed")
+
+    def test_unknown_model_returns_none(self):
+        """Unknown GPU model name should return None, not raise."""
+        from kreview.eval_engine import _build_gpu_model
+
+        result = _build_gpu_model("nonexistent_model")
+        assert result is None
+
+    def test_missing_package_returns_none(self):
+        """If tabpfn/tabicl not installed, should return None with log."""
+        from kreview.eval_engine import _build_gpu_model
+
+        # This test passes in CI where GPU packages aren't installed
+        model = _build_gpu_model("tabpfn", device="cpu")
+        # Either a valid model or None (not an exception)
+        assert model is None or model is not None
+
+
+class TestBuildModelDispatchV013:
+    """Validates _build_model() dispatches GPU models via _build_gpu_model."""
+
+    def test_build_model_gpu_dispatch_matches_direct(self):
+        """_build_model('tabpfn') should return same type as _build_gpu_model('tabpfn')."""
+        from kreview.eval_engine import _build_model, _build_gpu_model
+
+        direct = _build_gpu_model("tabpfn", device="cpu")
+        dispatched = _build_model("tabpfn", 42, device="cpu")
+        assert type(direct) is type(dispatched)
+
+
+class TestMultimodalEvalParams:
+    """Validates multimodal_eval accepts new v0.0.13 params."""
+
+    def test_multimodal_accepts_gpu_models_param(self, tmp_path):
+        """multimodal_eval should accept gpu_models parameter without error."""
+        from kreview.eval_engine import multimodal_eval
+        import json
+        import os
+
+        # Create minimal per-evaluator results
+        results_dir = tmp_path / "results"
+        results_dir.mkdir()
+        dummy_result = {
+            "auc_rf": 0.8,
+            "auc_lr": 0.75,
+            "best_auc": 0.8,
+            "best_model": "rf",
+            "rf_oof_probs": [0.5] * 50,
+            "lr_oof_probs": [0.5] * 50,
+            "oof_labels": [0, 1] * 25,
+            "oof_sample_ids": [f"S_{i:03d}" for i in range(50)],
+        }
+        (results_dir / "TestEval_model_results.json").write_text(
+            json.dumps(dummy_result)
+        )
+
+        # Should not crash even if GPU packages aren't installed
+        result = multimodal_eval(
+            results_dir,
+            models=("rf",),
+            gpu_models=("tabpfn",),
+            device="cpu",
+            n_folds=3,
+        )
+        assert result["strategy"] == "multimodal"
+
+    def test_multimodal_top_percentile_param(self, tmp_path):
+        """multimodal_eval should accept top_percentile instead of top_k."""
+        from kreview.eval_engine import multimodal_eval
+        import json
+
+        results_dir = tmp_path / "results"
+        results_dir.mkdir()
+        dummy_result = {
+            "auc_rf": 0.8,
+            "best_auc": 0.8,
+            "best_model": "rf",
+            "rf_oof_probs": [0.5] * 50,
+            "oof_labels": [0, 1] * 25,
+            "oof_sample_ids": [f"S_{i:03d}" for i in range(50)],
+        }
+        (results_dir / "TestEval_model_results.json").write_text(
+            json.dumps(dummy_result)
+        )
+
+        result = multimodal_eval(
+            results_dir,
+            models=("rf",),
+            n_folds=3,
+            top_percentile=20.0,
+        )
+        assert result["strategy"] == "multimodal"

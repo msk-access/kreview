@@ -332,3 +332,65 @@ class TestSelectFeatures:
         selected, qc = select_features(small_matrix, eval_df, strategy="hybrid_union")
         assert len(selected) > 0
         assert qc["total_input_features"] == 2  # feat_a, feat_b
+
+
+# ---------------------------------------------------------------------------
+# _select_multimodal_features (v0.0.13)
+# ---------------------------------------------------------------------------
+
+
+class TestMultimodalFeatureSelection:
+    """Tests for _select_multimodal_features() with top_percentile."""
+
+    def test_mi_uses_percentile(self):
+        """MI strategy should use top_percentile, not fixed top_k."""
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        n, p = 200, 100
+        X = pd.DataFrame(np.random.randn(n, p), columns=[f"f{i}" for i in range(p)])
+        y = np.array([0] * 100 + [1] * 100)
+
+        selected_df, names = _select_multimodal_features(
+            X, y, top_percentile=10.0, strategy="mi"
+        )
+        # 10% of 100 features = 10
+        assert len(names) == 10
+
+    def test_mi_percentile_20(self):
+        """20% percentile should select 20 features from 100."""
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        n, p = 200, 100
+        X = pd.DataFrame(np.random.randn(n, p), columns=[f"f{i}" for i in range(p)])
+        y = np.array([0] * 100 + [1] * 100)
+
+        selected_df, names = _select_multimodal_features(
+            X, y, top_percentile=20.0, strategy="mi"
+        )
+        assert len(names) == 20
+
+    def test_boruta_shap_passes_through(self):
+        """Boruta-SHAP strategy should not crash on small data."""
+        try:
+            from kreview.eval_engine import _select_multimodal_features
+        except ImportError:
+            pytest.skip("BorutaShap not importable (scipy compatibility)")
+        # Boruta-SHAP may fail to import due to scipy.stats.binom_test removal
+        try:
+            import BorutaShap  # noqa: F401
+        except ImportError:
+            pytest.skip("BorutaShap not installed or scipy incompatible")
+        np.random.seed(42)
+        n, p = 100, 10
+        X = pd.DataFrame(np.random.randn(n, p), columns=[f"f{i}" for i in range(p)])
+        y = np.array([0] * 50 + [1] * 50)
+        # Add signal
+        X.iloc[:50, 0] += 3.0
+
+        selected_df, names = _select_multimodal_features(
+            X, y, top_percentile=50.0, strategy="boruta_shap"
+        )
+        assert len(names) > 0
+        assert len(names) <= p

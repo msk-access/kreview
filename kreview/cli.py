@@ -520,10 +520,20 @@ def run(
         "--finetune-epochs",
         help="Number of fine-tuning epochs for GPU foundation models.",
     ),
+    finetune_lr: float = typer.Option(
+        1e-5,
+        "--finetune-lr",
+        help="Learning rate for GPU model fine-tuning.",
+    ),
     device: str = typer.Option(
         "cuda",
         "--device",
         help="PyTorch device for GPU models: cuda, cpu.",
+    ),
+    skip_gpu_joblib: bool = typer.Option(
+        False,
+        "--skip-gpu-joblib",
+        help="Skip saving GPU model joblib files (can be >200MB each).",
     ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
@@ -859,6 +869,7 @@ def run(
             )
 
         # ── GPU models (tabpfn, tabicl) ──
+        gpu_fitted = {}  # Initialized here so joblib save block never gets NameError
         if gpu_model_list:
             gpu_remaining = [m for m in gpu_model_list if m not in models_to_skip]
             if not gpu_remaining:
@@ -871,7 +882,7 @@ def run(
                 try:
                     from kreview.eval_engine import gpu_models
 
-                    gpu_res, _ = gpu_models(
+                    gpu_res, gpu_fitted = gpu_models(
                         X,
                         y,
                         feature_names=top_feats,
@@ -882,6 +893,7 @@ def run(
                         device=device,
                         finetune=not no_finetune,
                         finetune_epochs=finetune_epochs,
+                        finetune_lr=finetune_lr,
                         compute_shap=False,
                     )
                     model_res.update(gpu_res)
@@ -932,14 +944,23 @@ def run(
             existing_results.update(model_res)
             model_res = existing_results
 
-        import joblib
+        from kreview.cli_eval import _save_fitted_models
 
+        # Unified save for CPU models
+        cpu_fitted = {}
         if lr_model is not None:
-            joblib.dump(lr_model, out_path / f"{e.name}_lr_model.joblib")
+            cpu_fitted["lr"] = lr_model
         if rf_model is not None:
-            joblib.dump(rf_model, out_path / f"{e.name}_rf_model.joblib")
+            cpu_fitted["rf"] = rf_model
         if xgb_model is not None:
-            joblib.dump(xgb_model, out_path / f"{e.name}_xgb_model.joblib")
+            cpu_fitted["xgb"] = xgb_model
+        _save_fitted_models(cpu_fitted, out_path, e.name)
+
+        # Unified save for GPU models (if GPU eval was run)
+        if gpu_model_list and gpu_fitted:
+            _save_fitted_models(
+                gpu_fitted, out_path, e.name, skip_gpu_joblib=skip_gpu_joblib
+            )
 
         with open(model_out, "w") as f:
             json.dump(model_res, f, indent=2, default=str)
