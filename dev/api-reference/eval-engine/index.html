@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -3297,7 +3297,7 @@ DCA, feature stability, subgroup analysis).</p>
 
 
 <h3 id="kreview.eval_engine.multimodal_eval" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">multimodal_eval</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'rf'</span><span class="p">,</span> <span class="s1">'xgb'</span><span class="p">),</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">multimodal_selection</span><span class="o">=</span><span class="s1">'mi'</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">multimodal_eval</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'rf'</span><span class="p">,</span> <span class="s1">'xgb'</span><span class="p">),</span> <span class="n">gpu_models</span><span class="o">=</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="s1">'cuda'</span><span class="p">,</span> <span class="n">finetune</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">finetune_epochs</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">finetune_lr</span><span class="o">=</span><span class="mf">1e-05</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">top_percentile</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">multimodal_selection</span><span class="o">=</span><span class="s1">'mi'</span><span class="p">)</span></code>
 
 </h3>
 
@@ -3377,11 +3377,91 @@ DCA, feature stability, subgroup analysis).</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Model names to use (<code>rf</code>, <code>xgb</code>, <code>lr</code>).</p>
+                <p>CPU model names to use (<code>rf</code>, <code>xgb</code>, <code>lr</code>).</p>
               </div>
             </td>
             <td>
                   <code>('rf', 'xgb')</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>gpu_models</code>
+            </td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>GPU model names (<code>tabpfn</code>, <code>tabicl</code>). Empty = CPU only.</p>
+              </div>
+            </td>
+            <td>
+                  <code>()</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>PyTorch device string for GPU models.</p>
+              </div>
+            </td>
+            <td>
+                  <code>'cuda'</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>finetune</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, use fine-tuned GPU variants.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>finetune_epochs</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Epochs for GPU model fine-tuning.</p>
+              </div>
+            </td>
+            <td>
+                  <code>30</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>finetune_lr</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Learning rate for GPU model fine-tuning.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1e-05</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -3402,18 +3482,18 @@ DCA, feature stability, subgroup analysis).</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                <code>top_k</code>
+                <code>top_percentile</code>
             </td>
             <td>
-                  <code><span title="int">int</span></code>
+                  <code><span title="float">float</span></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Top-K features for raw-feature strategy.</p>
+                <p>Top N% features for feature selection.</p>
               </div>
             </td>
             <td>
-                  <code>50</code>
+                  <code>10.0</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -3430,6 +3510,22 @@ DCA, feature stability, subgroup analysis).</p>
             </td>
             <td>
                   <code>42</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>multimodal_selection</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature selection strategy ('mi' or 'boruta_shap').</p>
+              </div>
+            </td>
+            <td>
+                  <code>'mi'</code>
             </td>
           </tr>
       </tbody>
