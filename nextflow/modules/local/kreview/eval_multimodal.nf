@@ -61,6 +61,8 @@ process KREVIEW_EVAL_MULTIMODAL {
         --top-percentile ${top_pct_arg} \\
         --multimodal-selection ${mm_sel} \\
         --cv-folds ${cv_folds} \\
+        --seed ${params.seed ?: 42} \\
+        ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output multimodal_output
     """
 }

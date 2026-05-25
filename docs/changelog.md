@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.14] - 2026-05-25
+
+### Added
+- **Reproducibility Seed**: `--seed` CLI flag on `run`, `eval cpu`, `eval gpu`, `eval multimodal`, and `select` commands (default: 42).
+- **Deterministic Mode**: `--deterministic / --no-deterministic` flag for PyTorch cudnn (default: True) on all eval commands.
+- **`kreview/reproducibility.py`**: `seed_everything()` utility for Python, PyTorch, and cuDNN seeding.
+- **Nextflow Params**: `seed` and `deterministic` params in `nextflow.config`, forwarded through all 8 pipeline modules.
+- **Reproducibility Docs**: New section in `models-and-metrics.md` documenting seed propagation strategy.
+
+### Fixed
+- 3 hardcoded `random_state=42` in `_select_multimodal_features()` now accept caller seed.
+- 7 internal forwarding gaps where `random_state` was not passed to child functions.
+- GPU models (TabPFN, TabICL) now receive `random_state` parameter via `_build_gpu_model()`.
+- `shapiq.TabularExplainer` and `shap.PermutationExplainer` now seeded for reproducible SHAP values.
+- `BorutaShap.fit()` now receives `random_state` for deterministic feature selection.
+- **SLURM Partition Routing**: All `withName` process blocks now pin `queue` explicitly to bypass the nf-core iris institutional config's dynamic queue closure that injects the inaccessible `cpu` partition into `sbatch -p`.
+- **KREVIEW_LABEL Error Strategy**: Changed from inherited `'ignore'` (from iris config) to `'terminate'` — pipeline aborts immediately if labeling fails instead of deadlocking.
+
 ## [0.0.13] - 2026-05-24
 
 ### Added

@@ -40,6 +40,8 @@ process KREVIEW_EVAL_CPU_SINGLE {
     PYTHONUNBUFFERED=1 kreview eval cpu \\
         --matrices-dir matrices \\
         --cv-folds ${cv_folds} \\
+        --seed ${params.seed ?: 42} \\
+        ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output .
 
     # Verify output exists (fail loudly, not silently)

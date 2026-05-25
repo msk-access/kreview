@@ -53,6 +53,7 @@ process KREVIEW_SELECT {
         --cv-folds ${cv_folds} \
         --impute-strategy ${impute} \
         ${auc_flag} \
+        --seed ${params.seed ?: 42} \
         --output selected
 
     echo "Output matrices: \$(ls selected/*_matrix.parquet | wc -l)"

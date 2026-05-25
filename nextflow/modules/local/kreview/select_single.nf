@@ -48,6 +48,7 @@ process KREVIEW_SELECT_SINGLE {
         --cv-folds ${cv_folds} \\
         --impute-strategy ${impute} \\
         ${auc_flag} \\
+        --seed ${params.seed ?: 42} \\
         --output selected
 
     # Verify outputs exist (fail loudly, not silently)
