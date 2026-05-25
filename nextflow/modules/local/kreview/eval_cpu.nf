@@ -37,6 +37,8 @@ process KREVIEW_EVAL_CPU {
         --matrices-dir matrices \\
         --cv-folds ${cv_folds} \\
         ${resume_flag} \\
+        --seed ${params.seed ?: 42} \\
+        ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output cpu_output
     """
 }

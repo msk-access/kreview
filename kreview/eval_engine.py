@@ -737,6 +737,7 @@ def evaluate_model(
     refit: bool = True,
     compute_shap: bool = False,
     shap_samples: int = 500,
+    random_state: int = 42,
 ) -> tuple[dict, object | None]:
     """Evaluate any sklearn-compatible model via stratified cross-validation.
 
@@ -771,7 +772,7 @@ def evaluate_model(
     result[f"{name}_oof_probs"] = np.round(oof_probs, 6).tolist()
 
     # 3. Bootstrap 95% CI
-    ci_lo, ci_hi = _bootstrap_auc(y, oof_probs)
+    ci_lo, ci_hi = _bootstrap_auc(y, oof_probs, seed=random_state)
     result[f"auc_{name}_ci_lower"] = ci_lo
     result[f"auc_{name}_ci_upper"] = ci_hi
 
@@ -931,7 +932,13 @@ def cpu_models(
             ]
         )
         lr_res, lr_pipe = evaluate_model(
-            lr_pipe, X, y, cv, "lr", feature_names=feature_names
+            lr_pipe,
+            X,
+            y,
+            cv,
+            "lr",
+            feature_names=feature_names,
+            random_state=random_state,
         )
         results.update(lr_res)
         results["lr_coef_direction"] = (
@@ -946,7 +953,15 @@ def cpu_models(
             random_state=random_state,
             class_weight="balanced",
         )
-        rf_res, rf = evaluate_model(rf, X, y, cv, "rf", feature_names=feature_names)
+        rf_res, rf = evaluate_model(
+            rf,
+            X,
+            y,
+            cv,
+            "rf",
+            feature_names=feature_names,
+            random_state=random_state,
+        )
         results.update(rf_res)
 
         # ── XGBoost ──
@@ -963,7 +978,13 @@ def cpu_models(
             )
             try:
                 xgb_res, xgb = evaluate_model(
-                    xgb_model, X, y, cv, "xgb", feature_names=feature_names
+                    xgb_model,
+                    X,
+                    y,
+                    cv,
+                    "xgb",
+                    feature_names=feature_names,
+                    random_state=random_state,
                 )
                 results.update(xgb_res)
             except Exception as e:
@@ -1122,6 +1143,7 @@ def _build_gpu_model(
     finetune: bool = True,
     finetune_epochs: int = 30,
     finetune_lr: float = 1e-5,
+    random_state: int = 42,
 ) -> object | None:
     """Factory: instantiate a GPU foundation model.
 
@@ -1150,11 +1172,12 @@ def _build_gpu_model(
                     device=device,
                     n_epochs=finetune_epochs,
                     learning_rate=finetune_lr,
+                    random_state=random_state,
                 )
             else:
                 from tabpfn import TabPFNClassifier
 
-                return TabPFNClassifier(device=device)
+                return TabPFNClassifier(device=device, random_state=random_state)
         except ImportError as e:
             log.error(
                 "gpu_model_import_failed",
@@ -1173,11 +1196,12 @@ def _build_gpu_model(
                 return FinetunedTabICLClassifier(
                     epochs=finetune_epochs,
                     learning_rate=finetune_lr,
+                    random_state=random_state,
                 )
             else:
                 from tabicl import TabICLClassifier
 
-                return TabICLClassifier()
+                return TabICLClassifier(random_state=random_state)
         except ImportError as e:
             log.error(
                 "gpu_model_import_failed",
@@ -1198,6 +1222,7 @@ def _compute_shap(
     name: str,
     feature_names: list[str] | None = None,
     max_samples: int = 500,
+    random_state: int = 42,
 ) -> dict | None:
     """Compute SHAP values using the best available method for the model type.
 
@@ -1219,6 +1244,7 @@ def _compute_shap(
                 explainer = shapiq.TabularExplainer(
                     model=fitted_model.predict_proba,
                     data=X_shap,
+                    random_state=random_state,
                 )
                 sv = explainer.explain(X_shap)
                 log.info("shapiq_computed", model=name, n_samples=len(X_shap))
@@ -1272,7 +1298,9 @@ def _compute_shap(
                 }
 
         # Fallback: PermutationExplainer (slow but universal)
-        explainer = shap.PermutationExplainer(fitted_model.predict_proba, X_shap)
+        explainer = shap.PermutationExplainer(
+            fitted_model.predict_proba, X_shap, seed=random_state
+        )
         sv = explainer(X_shap)
         return {
             "shap_values": (
@@ -1356,6 +1384,7 @@ def gpu_models(
                 finetune=finetune,
                 finetune_epochs=finetune_epochs,
                 finetune_lr=finetune_lr,
+                random_state=random_state,
             )
             if model is None:
                 log.warning(
@@ -1376,6 +1405,7 @@ def gpu_models(
                     refit=True,
                     compute_shap=compute_shap,
                     shap_samples=shap_samples,
+                    random_state=random_state,
                 )
                 results.update(model_res)
                 fitted_models[model_name] = fitted
@@ -1383,7 +1413,12 @@ def gpu_models(
                 # SHAP via native dispatchers
                 if compute_shap and fitted is not None:
                     shap_result = _compute_shap(
-                        fitted, X, model_name, feature_names, shap_samples
+                        fitted,
+                        X,
+                        model_name,
+                        feature_names,
+                        shap_samples,
+                        random_state=random_state,
                     )
                     if shap_result is not None:
                         results[f"{model_name}_shap"] = shap_result
@@ -1661,6 +1696,7 @@ def _select_multimodal_features(
     max_nan_frac: float = 0.80,
     top_percentile: float = 10.0,
     strategy: str = "mi",
+    random_state: int = 42,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Feature selection pipeline for multimodal evaluation.
 
@@ -1731,14 +1767,21 @@ def _select_multimodal_features(
                 max_depth=5,
                 use_label_encoder=False,
                 eval_metric="logloss",
-                random_state=42,
+                random_state=random_state,
                 verbosity=0,
             ),
             importance_measure="shap",
             classification=True,
         )
         y_series = pd.Series(y, index=df.index, name="target")
-        selector.fit(X=df, y=y_series, n_trials=50, sample=False, verbose=False)
+        selector.fit(
+            X=df,
+            y=y_series,
+            n_trials=50,
+            sample=False,
+            verbose=False,
+            random_state=random_state,
+        )
         subset = selector.Subset()
 
         if not subset.empty:
@@ -1753,7 +1796,7 @@ def _select_multimodal_features(
             if len(confirmed) > 500:
                 n_keep = max(1, int(len(confirmed) * (top_percentile / 100.0)))
                 mi_scores = mutual_info_classif(
-                    df[confirmed].values, y, random_state=42
+                    df[confirmed].values, y, random_state=random_state
                 )
                 mi_ranked = sorted(
                     zip(confirmed, mi_scores),
@@ -1782,7 +1825,7 @@ def _select_multimodal_features(
     # Step 5: Mutual information ranking (also fallback for boruta_shap)
     n_keep = max(1, int(len(df.columns) * (top_percentile / 100.0)))
     if len(df.columns) > n_keep:
-        mi_scores = mutual_info_classif(df.values, y, random_state=42)
+        mi_scores = mutual_info_classif(df.values, y, random_state=random_state)
         mi_ranked = sorted(zip(df.columns, mi_scores), key=lambda x: x[1], reverse=True)
         selected = [name for name, _ in mi_ranked[:n_keep]]
         df = df[selected]
@@ -1861,6 +1904,7 @@ def multimodal_eval(
         finetune=finetune,
         finetune_epochs=finetune_epochs,
         finetune_lr=finetune_lr,
+        random_state=random_state,
     )
     # Merge CPU + GPU model lists for unified iteration
     all_models = list(models) + list(gpu_models)
@@ -1929,6 +1973,7 @@ def multimodal_eval(
                     cv,
                     f"stacking_{model_name}",
                     feature_names=list(stacking_df.columns),
+                    random_state=random_state,
                 )
                 stacking_results.update(res)
 
@@ -1992,6 +2037,7 @@ def multimodal_eval(
                 y_raw,
                 top_percentile=top_percentile,
                 strategy=multimodal_selection,
+                random_state=random_state,
             )
 
             if X_selected.empty:
@@ -2024,6 +2070,7 @@ def multimodal_eval(
                         cv_raw,
                         f"raw_{model_name}",
                         feature_names=selected_names,
+                        random_state=random_state,
                     )
                     raw_results.update(res)
 
@@ -2081,6 +2128,7 @@ def multimodal_eval(
                             cv,
                             f"ablation_{eval_name}",
                             feature_names=list(X_ablated.columns),
+                            random_state=random_state,
                         )
                         ablated_auc = res.get(f"auc_ablation_{eval_name}", 0.0)
                         delta = best_stack_auc - (ablated_auc or 0.0)
@@ -2185,6 +2233,7 @@ def _build_model(model_name: str, random_state: int, **kwargs):
             finetune=kwargs.get("finetune", True),
             finetune_epochs=kwargs.get("finetune_epochs", 30),
             finetune_lr=kwargs.get("finetune_lr", 1e-5),
+            random_state=random_state,
         )
     else:
         raise ValueError(

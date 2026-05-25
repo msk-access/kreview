@@ -74,6 +74,11 @@ def select(
         "--compute-univariate-auc/--no-compute-univariate-auc",
         help="Compute per-feature univariate AUC (disable for MI-only selection)",
     ),
+    seed: int = typer.Option(
+        42,
+        "--seed",
+        help="Random seed for reproducibility.",
+    ),
 ):
     """Score features and apply feature selection to extracted matrices.
 
@@ -86,6 +91,9 @@ def select(
     (or overwrites originals when ``--overwrite`` is set).
     """
     from kreview.selection import score_features, select_features
+    from kreview.reproducibility import seed_everything
+
+    seed_everything(seed)
 
     print("=== kreview select ===", flush=True)
     print("Configuration:", flush=True)
@@ -177,6 +185,7 @@ def select(
                 df,
                 cv_folds=cv_folds,
                 compute_auc=compute_univariate_auc,
+                random_state=seed,
             )
         except ValueError as exc:
             print(f"  WARNING: Scoring failed for {eval_name}: {exc}", flush=True)

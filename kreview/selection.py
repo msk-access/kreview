@@ -119,6 +119,7 @@ def score_features(
     label_col: str = "label",
     cv_folds: int = 5,
     compute_auc: bool = True,
+    random_state: int = 42,
 ) -> pd.DataFrame:
     """Score every numeric feature by statistical tests, univariate AUC, and MI.
 
@@ -191,7 +192,9 @@ def score_features(
         log.info("univariate_auc_start", n_features=len(numeric_cols))
         uauc_scores = []
         for col in numeric_cols:
-            auc_val = univariate_auc(model_df[col], y, n_folds=cv_folds)
+            auc_val = univariate_auc(
+                model_df[col], y, n_folds=cv_folds, random_state=random_state
+            )
             uauc_scores.append(auc_val)
         eval_df["univariate_auc"] = uauc_scores
     else:
@@ -204,7 +207,7 @@ def score_features(
     log.info("mutual_info_start", n_features=len(numeric_cols))
     mi_scores = []
     for col in numeric_cols:
-        mi_val = mi_score(model_df[col], y)
+        mi_val = mi_score(model_df[col], y, random_state=random_state)
         mi_scores.append(mi_val)
     eval_df["mutual_info"] = mi_scores
 
