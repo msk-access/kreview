@@ -25,6 +25,7 @@
 #   - --top-percentile replaces --top-k
 #   - Multimodal GPU models via --multimodal-gpu-models
 #   - SLURM hardening: cache='lenient', scratch=false on LABEL + GPU_SINGLE
+#   - --seed and --deterministic for reproducible randomization across all stages
 #
 # Resource math (Multistage DAG):
 #   - Head process: 2 CPUs + 8GB (Nextflow JVM orchestrator — lightweight)
@@ -86,6 +87,8 @@ nextflow run "${KREVIEW_REPO}" \
   --top_percentile          10.0 \
   --ch_hotspot_maf          /data1/core006/cch/production/resources/cmo-ch/versions/v1.0/regions_of_interest/versions/v1.0/hotspot-list-ch-pd-v1.maf \
   --compute_univariate_auc  \
+  --seed                    42 \
+  --deterministic           true \
   -profile iris \
   ${RESUME_FLAG}
 

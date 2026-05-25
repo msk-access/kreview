@@ -14,7 +14,7 @@ Three classifier families are trained on every feature set:
 # 1. Linear Baseline (Logistic Regression)
 lr = Pipeline([
     ('scaler', StandardScaler()),
-    ('clf', LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced"))
+    ('clf', LogisticRegression(max_iter=1000, random_state=random_state, class_weight="balanced"))
 ])
 
 # 2. Tree-Based (Random Forest)
@@ -22,7 +22,7 @@ rf = RandomForestClassifier(
     n_estimators=100,
     max_depth=5,
     min_samples_leaf=max(1, min(10, len(y) // 10)),
-    random_state=42,
+    random_state=random_state,
     class_weight="balanced",
 )
 
@@ -31,7 +31,7 @@ xgb = XGBClassifier(
     n_estimators=100,
     max_depth=5,
     learning_rate=0.1,
-    random_state=42,
+    random_state=random_state,
     eval_metric="logloss",
     use_label_encoder=False,
 )
@@ -45,7 +45,7 @@ xgb = XGBClassifier(
 Clinical cohorts are typically imbalanced (e.g. 4,000 cancer patients vs 300 healthy controls). To prevent majority-class bias, the pipeline uses **Stratified K-Fold Cross Validation**:
 
 ```python
-cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
+cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
 rf_probs = cross_val_predict(rf, X, y, cv=cv, method="predict_proba")
 ```
 
@@ -213,3 +213,47 @@ To assess whether the same features are consistently ranked as important across 
 | AUC Deltas | `auc_delta_rf_lr`, `auc_delta_xgb_rf` | 2 |
 | Subgroups | `cancer_type_stats`, `assay_stats` | 2 |
 | Selection QC | `selection_qc` (method, overlap stats, feature counts) | 1 |
+
+---
+
+## Reproducibility
+
+All randomization points in kreview are parameterized via `--seed` (default: 42) and `--deterministic` (default: True).
+
+### CLI Flags
+
+```bash
+# Default (seed=42, deterministic GPU ops)
+kreview run ... --seed 42 --deterministic
+
+# Custom seed, faster GPU (non-deterministic cuDNN)
+kreview eval gpu ... --seed 123 --no-deterministic
+
+# Nextflow
+nextflow run main.nf --seed 42 --deterministic true
+```
+
+### What Gets Seeded
+
+| Library | Mechanism | Deterministic? |
+|---------|-----------|----------------|
+| Python `random` | `random.seed(seed)` | ✅ Always |
+| PyTorch | `torch.manual_seed(seed)` + `cuda.manual_seed_all(seed)` | ✅ When `--deterministic` |
+| cuDNN | `cudnn.deterministic=True`, `benchmark=False` | ✅ When `--deterministic` |
+| scikit-learn | `random_state=` on all models + `StratifiedKFold` | ✅ Always |
+| XGBoost | `random_state=` on `XGBClassifier` | ✅ Always |
+| TabPFN | `TabPFNClassifier(random_state=)` | ✅ Always |
+| TabICL | `TabICLClassifier(random_state=)` | ✅ Always |
+| shapiq | `TabularExplainer(random_state=)` | ✅ Always |
+| shap | `PermutationExplainer(seed=)` | ✅ Always |
+| BorutaShap | `selector.fit(random_state=)` | ✅ Always |
+| Mutual Information | `mutual_info_classif(random_state=)` | ✅ Always |
+
+### NumPy Policy
+
+NumPy randomness is **never** set globally via `np.random.seed()`. Instead, all functions accept a `random_state` parameter and create local `RandomState` objects. This prevents side effects on third-party libraries.
+
+### Deterministic Mode Trade-off
+
+`--deterministic` (default True) enables `torch.backends.cudnn.deterministic=True` and disables autotuning (`benchmark=False`). This ensures bit-exact GPU results across runs but incurs a ~10–20% speed penalty. Use `--no-deterministic` for faster training when exact reproducibility is not required.
+

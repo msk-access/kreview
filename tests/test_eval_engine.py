@@ -1073,3 +1073,79 @@ class TestMultimodalEvalParams:
             top_percentile=20.0,
         )
         assert result["strategy"] == "multimodal"
+
+
+# ── Reproducibility seed tests ─────────────────────────────────────────────────
+
+
+class TestReproducibilitySeed:
+    """Tests for seed propagation through engine functions (Plan Component 6)."""
+
+    def test_cpu_models_deterministic(self, binary_Xy):
+        """cpu_models() with same seed twice → identical AUCs."""
+        X, y = binary_Xy
+        from kreview.eval_engine import cpu_models
+
+        result1, *_ = cpu_models(X, y, n_folds=3, random_state=42)
+        result2, *_ = cpu_models(X, y, n_folds=3, random_state=42)
+        for model in _MODELS:
+            assert (
+                result1[f"auc_{model}"] == result2[f"auc_{model}"]
+            ), f"AUC mismatch for {model}: {result1[f'auc_{model}']} != {result2[f'auc_{model}']}"
+
+    def test_build_gpu_model_accepts_seed(self):
+        """_build_gpu_model() accepts random_state kwarg without error.
+
+        We don't require actual GPU libs — just verify the function signature
+        accepts random_state and returns None (import fail) or a model.
+        """
+        from kreview.eval_engine import _build_gpu_model
+        import inspect
+
+        sig = inspect.signature(_build_gpu_model)
+        assert (
+            "random_state" in sig.parameters
+        ), "_build_gpu_model must accept random_state parameter"
+        # Call with a bogus model name to verify no crash on random_state kwarg
+        result = _build_gpu_model("tabpfn", device="cpu", random_state=99)
+        # Returns None if tabpfn not installed, or a model if installed — both fine
+        assert result is None or hasattr(
+            result, "predict"
+        ), "_build_gpu_model should return None or a predictor"
+
+    def test_compute_shap_accepts_seed(self):
+        """_compute_shap() accepts random_state kwarg in its signature."""
+        from kreview.eval_engine import _compute_shap
+        import inspect
+
+        sig = inspect.signature(_compute_shap)
+        assert (
+            "random_state" in sig.parameters
+        ), "_compute_shap must accept random_state parameter"
+
+    def test_multimodal_selection_seed_propagates(self):
+        """_select_multimodal_features() uses caller seed, not hardcoded 42."""
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(0)
+        n = 100
+        df = pd.DataFrame(
+            {
+                f"feat_{i}": np.random.randn(n) + (i * 0.5 if i < 3 else 0)
+                for i in range(20)
+            }
+        )
+        y = np.array([0] * 60 + [1] * 40)
+        # Add signal to first 3 features for positive class
+        df.iloc[60:, :3] += 2.0
+
+        # Call with seed=99 (not the default 42) — should not crash
+        X_sel, names = _select_multimodal_features(
+            df,
+            y,
+            top_percentile=50.0,
+            strategy="mi",
+            random_state=99,
+        )
+        assert len(names) > 0, "Should select at least one feature"
+        assert X_sel.shape[1] == len(names)

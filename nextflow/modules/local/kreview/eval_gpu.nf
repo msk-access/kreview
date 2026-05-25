@@ -41,6 +41,8 @@ process KREVIEW_EVAL_GPU {
         --finetune-epochs ${epochs_arg} \\
         --cv-folds ${params.cv_folds ?: 5} \\
         ${resume_flag} \\
+        --seed ${params.seed ?: 42} \\
+        ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output gpu_output
     """
 }

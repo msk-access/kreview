@@ -210,6 +210,16 @@ def eval_cpu(
     resume: bool = typer.Option(
         False, "--resume", help="Skip evaluators with existing results"
     ),
+    seed: int = typer.Option(
+        42,
+        "--seed",
+        help="Random seed for reproducibility.",
+    ),
+    deterministic: bool = typer.Option(
+        True,
+        "--deterministic/--no-deterministic",
+        help="Enable PyTorch deterministic mode (slower but reproducible).",
+    ),
 ):
     """Per-evaluator evaluation using LR, RF, XGBoost (CPU).
 
@@ -218,6 +228,9 @@ def eval_cpu(
     to --output.
     """
     from kreview.eval_engine import cpu_models
+    from kreview.reproducibility import seed_everything
+
+    seed_everything(seed, deterministic=deterministic)
 
     print("=== kreview eval cpu ===", flush=True)
     print(f"  --matrices-dir : {matrices_dir}", flush=True)
@@ -283,6 +296,7 @@ def eval_cpu(
                 cancer_types=c_types,
                 assays=a_types,
                 n_folds=cv_folds,
+                random_state=seed,
             )
 
             # Add sample IDs for multimodal alignment (check both cases)
@@ -368,6 +382,16 @@ def eval_gpu(
         "--skip-gpu-joblib",
         help="Skip saving GPU model joblib files (can be >200MB each)",
     ),
+    seed: int = typer.Option(
+        42,
+        "--seed",
+        help="Random seed for reproducibility.",
+    ),
+    deterministic: bool = typer.Option(
+        True,
+        "--deterministic/--no-deterministic",
+        help="Enable PyTorch deterministic mode (slower but reproducible).",
+    ),
 ):
     """Per-evaluator evaluation using TabPFN, TabICL (GPU).
 
@@ -375,6 +399,9 @@ def eval_gpu(
     Iterates over all *_matrix.parquet files and writes results JSONs.
     """
     from kreview.eval_engine import gpu_models
+    from kreview.reproducibility import seed_everything
+
+    seed_everything(seed, deterministic=deterministic)
 
     print("=== kreview eval gpu ===", flush=True)
     print(f"  --matrices-dir   : {matrices_dir}", flush=True)
@@ -441,6 +468,7 @@ def eval_gpu(
                 cancer_types=c_types,
                 assays=a_types,
                 n_folds=cv_folds,
+                random_state=seed,
                 models=models_list_run,
                 device=device,
                 finetune=not no_finetune,
@@ -539,6 +567,16 @@ def eval_multimodal(
     finetune_lr: float = typer.Option(
         1e-5, "--finetune-lr", help="GPU fine-tuning learning rate"
     ),
+    seed: int = typer.Option(
+        42,
+        "--seed",
+        help="Random seed for reproducibility.",
+    ),
+    deterministic: bool = typer.Option(
+        True,
+        "--deterministic/--no-deterministic",
+        help="Enable PyTorch deterministic mode (slower but reproducible).",
+    ),
 ):
     """Cross-evaluator multimodal evaluation with stacking and ablation.
 
@@ -550,6 +588,9 @@ def eval_multimodal(
     3. **Ablation**: Leave-one-evaluator-out importance analysis
     """
     from kreview.eval_engine import multimodal_eval as _multimodal_eval
+    from kreview.reproducibility import seed_everything
+
+    seed_everything(seed, deterministic=deterministic)
 
     print("=== kreview eval multimodal ===", flush=True)
     print(f"  --results-dir        : {results_dir}", flush=True)
@@ -611,6 +652,7 @@ def eval_multimodal(
             finetune_lr=finetune_lr,
             n_folds=cv_folds,
             top_percentile=top_percentile,
+            random_state=seed,
             multimodal_selection=multimodal_selection,
         )
     except (FileNotFoundError, ValueError) as e:

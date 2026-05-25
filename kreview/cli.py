@@ -535,6 +535,16 @@ def run(
         "--skip-gpu-joblib",
         help="Skip saving GPU model joblib files (can be >200MB each).",
     ),
+    seed: int = typer.Option(
+        42,
+        "--seed",
+        help="Random seed for reproducibility across all models and CV splits.",
+    ),
+    deterministic: bool = typer.Option(
+        True,
+        "--deterministic/--no-deterministic",
+        help="Enable PyTorch deterministic mode (slower but reproducible). Default: True.",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig
@@ -542,8 +552,12 @@ def run(
     from kreview.registry import get_all_evaluators
 
     from kreview.eval_engine import evaluate_feature, cpu_models
+    from kreview.reproducibility import seed_everything
     import glob
     import json
+
+    # ── Global reproducibility seed ──
+    seed_everything(seed, deterministic=deterministic)
 
     def _echo(msg):
         print(msg, flush=True)
@@ -594,6 +608,8 @@ def run(
         _echo(f"  --device            : {device}")
         _echo(f"  --finetune          : {not no_finetune}")
         _echo(f"  --finetune-epochs   : {finetune_epochs}")
+    _echo(f"  --seed              : {seed}")
+    _echo(f"  --deterministic     : {deterministic}")
     _echo("")
 
     # ── Parse GPU models ──
@@ -767,6 +783,7 @@ def run(
                 merged,
                 cv_folds=cv_folds,
                 compute_auc=compute_univariate_auc,
+                random_state=seed,
             )
         except ValueError as exc:
             _echo(f"  SKIP scoring for {e.name}: {exc}")
@@ -861,6 +878,7 @@ def run(
                 cancer_types=c_types,
                 assays=a_types,
                 n_folds=cv_folds,
+                random_state=seed,
             )
             _echo(
                 f"  CPU: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
@@ -889,6 +907,7 @@ def run(
                         cancer_types=c_types,
                         assays=a_types,
                         n_folds=cv_folds,
+                        random_state=seed,
                         models=tuple(gpu_remaining),
                         device=device,
                         finetune=not no_finetune,
@@ -1009,6 +1028,7 @@ def run(
                 super_matrix_path=super_matrix_path,
                 n_folds=cv_folds,
                 multimodal_selection=multimodal_selection,
+                random_state=seed,
             )
             with open(multimodal_out, "w") as f:
                 json.dump(mm_results, f, indent=2, default=str)

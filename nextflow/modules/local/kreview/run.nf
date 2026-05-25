@@ -60,6 +60,8 @@ process KREVIEW_RUN {
         ${uauc_flag} \\
         ${duckdb_flag} \\
         ${ch_maf_flag} \\
+        --seed ${params.seed ?: 42} \\
+        ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output ${persistent_out}
     
     # 3. Copy results to output/ for Nextflow publishDir collection
