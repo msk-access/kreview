@@ -1608,13 +1608,18 @@ to --output.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kreview eval cpu [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>  --matrices-dir PATH  Directory containing *_matrix.parquet files from
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>                       kreview extract  [required]
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  --output PATH        Output directory  [default: output/]
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  --models TEXT        Comma-separated CPU models: lr,rf,xgb  [default:
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>                       lr,rf,xgb]
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>  --cv-folds INTEGER   Cross-validation folds  [default: 5]
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>  --resume             Skip evaluators with existing results
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>  --matrices-dir PATH             Directory containing *_matrix.parquet files
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>                                  from kreview extract  [required]
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  --output PATH                   Output directory  [default: output/]
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  --models TEXT                   Comma-separated CPU models: lr,rf,xgb
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>                                  [default: lr,rf,xgb]
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>  --resume                        Skip evaluators with existing results
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>                                  42]
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>                                  but reproducible).  [default: deterministic]
 </code></pre></div>
 <h3 id="gpu">gpu</h3>
 <p>Per-evaluator evaluation using TabPFN, TabICL (GPU).</p>
@@ -1624,22 +1629,27 @@ Iterates over all *_matrix.parquet files and writes results JSONs.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kreview eval gpu [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>  --matrices-dir PATH        Directory containing *_matrix.parquet files from
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>                             kreview extract  [required]
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  --output PATH              Output directory  [default: output/]
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>  --models TEXT              Comma-separated GPU models: tabpfn,tabicl
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>                             [default: tabpfn,tabicl]
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  --cv-folds INTEGER         Cross-validation folds  [default: 5]
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>  --no-finetune              Use zero-shot inference instead of fine-tuning
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>                             (not recommended)
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>  --finetune-epochs INTEGER  Fine-tuning epochs  [default: 30]
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>  --finetune-lr FLOAT        Fine-tuning learning rate  [default: 1e-05]
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>  --device TEXT              PyTorch device: cuda, cpu  [default: cuda]
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>  --shap                     Compute SHAP values
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>  --shap-samples INTEGER     Max SHAP samples  [default: 500]
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>  --resume                   Skip evaluators with existing results
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>  --skip-gpu-joblib          Skip saving GPU model joblib files (can be &gt;200MB
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>                             each)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>  --matrices-dir PATH             Directory containing *_matrix.parquet files
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>                                  from kreview extract  [required]
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  --output PATH                   Output directory  [default: output/]
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>  --models TEXT                   Comma-separated GPU models: tabpfn,tabicl
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>                                  [default: tabpfn,tabicl]
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>  --no-finetune                   Use zero-shot inference instead of fine-
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>                                  tuning (not recommended)
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>  --finetune-epochs INTEGER       Fine-tuning epochs  [default: 30]
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>  --finetune-lr FLOAT             Fine-tuning learning rate  [default: 1e-05]
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>  --device TEXT                   PyTorch device: cuda, cpu  [default: cuda]
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>  --shap                          Compute SHAP values
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>  --shap-samples INTEGER          Max SHAP samples  [default: 500]
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>  --resume                        Skip evaluators with existing results
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>  --skip-gpu-joblib               Skip saving GPU model joblib files (can be
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>                                  &gt;200MB each)
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>                                  42]
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>                                  but reproducible).  [default: deterministic]
 </code></pre></div>
 <h3 id="multimodal">multimodal</h3>
 <p>Cross-evaluator multimodal evaluation with stacking and ablation.</p>
@@ -1654,25 +1664,31 @@ and combines them into a stacking matrix.  Three strategies are run:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview eval multimodal [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>  --results-dir PATH           Directory with *_model_results.json files from
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>                               eval cpu/gpu  [required]
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>  --super-matrix PATH          Optional path to super_matrix.parquet for raw-
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>                               feature strategy
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>  --output PATH                Output directory  [default: output/]
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>  --models TEXT                Comma-separated CPU models for multimodal
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>                               evaluation (lr,rf,xgb)  [default: rf,xgb]
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>  --gpu-models TEXT            Comma-separated GPU models: tabpfn,tabicl.
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>                               Empty = CPU only.
-<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>  --top-percentile FLOAT       Top N%% features for MI selection (matches per-
-<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>                               evaluator pipeline)  [default: 10.0]
-<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>  --multimodal-selection TEXT  Multimodal feature selection: mi (default,
-<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>                               fast) or boruta_shap (interaction-aware)
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>                               [default: mi]
-<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>  --cv-folds INTEGER           Cross-validation folds  [default: 5]
-<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>  --device TEXT                PyTorch device: cuda, cpu  [default: cuda]
-<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>  --no-finetune                Zero-shot GPU inference (not recommended)
-<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>  --finetune-epochs INTEGER    GPU fine-tuning epochs  [default: 30]
-<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>  --finetune-lr FLOAT          GPU fine-tuning learning rate  [default: 1e-05]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>  --results-dir PATH              Directory with *_model_results.json files
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>                                  from eval cpu/gpu  [required]
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>  --super-matrix PATH             Optional path to super_matrix.parquet for
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>                                  raw-feature strategy
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>  --output PATH                   Output directory  [default: output/]
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>  --models TEXT                   Comma-separated CPU models for multimodal
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>                                  evaluation (lr,rf,xgb)  [default: rf,xgb]
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>  --gpu-models TEXT               Comma-separated GPU models: tabpfn,tabicl.
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>                                  Empty = CPU only.
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>  --top-percentile FLOAT          Top N%% features for MI selection (matches
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>                                  per-evaluator pipeline)  [default: 10.0]
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>  --multimodal-selection TEXT     Multimodal feature selection: mi (default,
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>                                  fast) or boruta_shap (interaction-aware)
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>                                  [default: mi]
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>  --device TEXT                   PyTorch device: cuda, cpu  [default: cuda]
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>  --no-finetune                   Zero-shot GPU inference (not recommended)
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>  --finetune-epochs INTEGER       GPU fine-tuning epochs  [default: 30]
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>  --finetune-lr FLOAT             GPU fine-tuning learning rate  [default:
+<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>                                  1e-05]
+<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
+<a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>                                  42]
+<a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>                                  but reproducible).  [default: deterministic]
 </code></pre></div>
 <h2 id="extract">extract</h2>
 <p>Label samples and extract feature matrices (no eval/model/report).</p>
@@ -1848,6 +1864,12 @@ block the remaining dashboards.</p>
 <a id="__codelineno-19-64" name="__codelineno-19-64" href="#__codelineno-19-64"></a>                                  [default: cuda]
 <a id="__codelineno-19-65" name="__codelineno-19-65" href="#__codelineno-19-65"></a>  --skip-gpu-joblib               Skip saving GPU model joblib files (can be
 <a id="__codelineno-19-66" name="__codelineno-19-66" href="#__codelineno-19-66"></a>                                  &gt;200MB each).
+<a id="__codelineno-19-67" name="__codelineno-19-67" href="#__codelineno-19-67"></a>  --seed INTEGER                  Random seed for reproducibility across all
+<a id="__codelineno-19-68" name="__codelineno-19-68" href="#__codelineno-19-68"></a>                                  models and CV splits.  [default: 42]
+<a id="__codelineno-19-69" name="__codelineno-19-69" href="#__codelineno-19-69"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-19-70" name="__codelineno-19-70" href="#__codelineno-19-70"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-19-71" name="__codelineno-19-71" href="#__codelineno-19-71"></a>                                  but reproducible). Default: True.  [default:
+<a id="__codelineno-19-72" name="__codelineno-19-72" href="#__codelineno-19-72"></a>                                  deterministic]
 </code></pre></div>
 <h2 id="select">select</h2>
 <p>Score features and apply feature selection to extracted matrices.</p>
@@ -1882,6 +1904,8 @@ top features using mRMR (default, redundancy-aware) or hybrid union
 <a id="__codelineno-21-19" name="__codelineno-21-19" href="#__codelineno-21-19"></a>                                  Compute per-feature univariate AUC (disable
 <a id="__codelineno-21-20" name="__codelineno-21-20" href="#__codelineno-21-20"></a>                                  for MI-only selection)  [default: compute-
 <a id="__codelineno-21-21" name="__codelineno-21-21" href="#__codelineno-21-21"></a>                                  univariate-auc]
+<a id="__codelineno-21-22" name="__codelineno-21-22" href="#__codelineno-21-22"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
+<a id="__codelineno-21-23" name="__codelineno-21-23" href="#__codelineno-21-23"></a>                                  42]
 </code></pre></div>
 
 
