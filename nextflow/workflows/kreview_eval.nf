@@ -47,7 +47,8 @@ include { KREVIEW_EVAL_CPU_SINGLE } from '../modules/local/kreview/eval_cpu_sing
 include { KREVIEW_EVAL_GPU_SINGLE } from '../modules/local/kreview/eval_gpu_single'
 
 // Multistage — collect-only modules (need all evaluator results)
-include { KREVIEW_EVAL_MULTIMODAL } from '../modules/local/kreview/eval_multimodal'
+include { KREVIEW_EVAL_MULTIMODAL   } from '../modules/local/kreview/eval_multimodal'
+include { KREVIEW_REPORT_MULTIMODAL } from '../modules/local/kreview/report_multimodal'
 
 workflow KREVIEW_EVAL {
     take:
@@ -138,6 +139,14 @@ workflow KREVIEW_EVAL {
                 KREVIEW_FUSE.out.super_matrix,
                 ch_results
             )
+
+            // Step 5b: Multimodal report — renders stacking dashboard
+            if (!params.skip_report) {
+                KREVIEW_REPORT_MULTIMODAL(
+                    KREVIEW_EVAL_MULTIMODAL.out.multimodal_json,
+                    KREVIEW_FUSE.out.super_matrix,
+                )
+            }
         }
 
         // Step 6: Report generation [optional]

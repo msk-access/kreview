@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.13] - 2026-05-24
+
+### Added
+- **GPU Foundation Models**: TabPFN v8.0.3 and TabICL v2.1 support via `_build_gpu_model()` with updated import paths (`tabpfn.TabPFNClassifier`, `tabicl.TabICLClassifier`).
+- **shapiq Integration**: SHAP values for GPU models now computed via `shapiq.TabularExplainer` (model-agnostic kernel-based Shapley values), replacing the deprecated `tabpfn-extensions` interpreter.
+- **Unified Model Persistence**: `_save_fitted_models()` helper in `cli_eval.py` provides consistent joblib saves for both CPU and GPU models. `--skip-gpu-joblib` flag opts out of large GPU model files.
+- **Multimodal GPU Models**: `kreview eval multimodal` now accepts `--gpu-models tabpfn,tabicl` for GPU-accelerated stacking and raw feature evaluation.
+- **Pre-computed SHAP Fallback**: Report templates render mean |SHAP| bar charts from JSON when joblib files are unavailable (e.g., `--skip-gpu-joblib`).
+- **KREVIEW_REPORT_MULTIMODAL**: New Nextflow process for rendering multimodal stacking dashboards in multistage mode.
+- **HPC Script v0.0.13**: Updated SLURM launch script with GPU multimodal params, Boruta-SHAP selection, and top_percentile.
+
+### Changed
+- **Feature Selection**: `--top-percentile` replaces `--top-k` for MI-based feature selection. Percentage-based selection adapts to varying feature set sizes across evaluators.
+- **Boruta-SHAP MI Reducer**: When Boruta-SHAP confirms >500 features, an MI-based reducer narrows the set to `top_percentile` (default 10%).
+- **SLURM Hardening**: `KREVIEW_LABEL` and `KREVIEW_EVAL_GPU_SINGLE` processes now set `cache = 'lenient'` and `scratch = false` to prevent institutional queue/cache interference on IRIS.
+- **Dynamic Report Rendering**: ROC CI reverse-map, DCA loop, and AUC deltas now dynamically discover models from `DYNAMIC_MODELS` instead of hardcoding LR/RF/XGB.
+
+### Fixed
+- **ROC CI KeyError**: Hardcoded `{"Logistic Regression": "lr", ...}` reverse-map in `report_template.qmd` replaced with dynamic lookup from `DYNAMIC_MODELS`, preventing crashes when GPU models are present.
+- **DCA Loop**: DCA now renders curves for all trained models (was hardcoded to RF/XGB only).
+- **AUC Deltas**: Pairwise AUC delta display now discovers all `auc_delta_*` keys dynamically.
+- **Monolithic GPU Fitted Capture**: `gpu_res, gpu_fitted = gpu_models(...)` now captures fitted models (was `_ = ...`).
+
+### Dependencies
+- `tabpfn >= 8.0.3` (was `>= 2.0`)
+- `tabicl >= 2.1` (was `>= 0.0.4`)
+- Added `shapiq` for GPU model SHAP computation.
+
 ## [0.0.12] - 2026-05-24
 ### Added
 - **Nextflow publishDir**: All 8 multistage modules now publish outputs to `params.outdir` with `mode: copy`. Output structure: `labels/`, `matrices/raw/`, `matrices/selected/`, `models/cpu/`, `models/gpu/`, `matrices/fused/`, `models/multimodal/`, `reports/`.
