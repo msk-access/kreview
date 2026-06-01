@@ -3,7 +3,7 @@
 #
 # Targets:
 #   cpu   → python:3.12-slim (~1.5 GB) — default, used by all CPU NF processes
-#   gpu   → nvidia/cuda:12.4 + Python 3.12 (~5–7 GB) — used by process_gpu
+#   gpu   → nvidia/cuda:12.4 + Python 3.12 (~8–10 GB) — used by process_gpu
 #
 # Build:
 #   docker build --target cpu -t ghcr.io/msk-access/kreview:vX.Y.Z .
@@ -15,10 +15,11 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /src
 
-# Copy only what's needed for the wheel build (not docs, tests, nextflow, etc.)
-COPY pyproject.toml settings.ini README.md ./
+# Copy only what's needed for the wheel build.
+# LICENSE is required — pyproject.toml references it for dist-info embedding.
+# nbs/ is NOT needed — kreview/ already contains the exported Python modules.
+COPY pyproject.toml settings.ini README.md LICENSE ./
 COPY kreview/ kreview/
-COPY nbs/ nbs/
 
 # Build the kreview wheel (used by both cpu and gpu targets)
 RUN pip install --no-cache-dir --upgrade pip build && \
@@ -40,8 +41,7 @@ WORKDIR /app
 # Copy wheel from builder and install (CPU-only, no GPU extras)
 COPY --from=builder /src/dist/*.whl /app/
 RUN pip install --no-cache-dir /app/*.whl && \
-    rm /app/*.whl && \
-    pip cache purge 2>/dev/null || true
+    rm /app/*.whl
 
 # Install runtime essentials (procps, bash) for Nextflow compatibility
 RUN export DEBIAN_FRONTEND=noninteractive && \
@@ -66,8 +66,10 @@ LABEL org.opencontainers.image.title="kreview-gpu" \
       org.opencontainers.image.licenses="AGPL-3.0" \
       org.opencontainers.image.authors="Ronak Shah <shahr2@mskcc.org>"
 
-# Install Python 3.12 runtime (no -dev headers — not needed at runtime)
-# deadsnakes PPA provides Python 3.12 for Ubuntu 22.04
+# Install Python 3.12 runtime (no -dev headers — not needed at runtime).
+# If a transitive dep ever ships only an sdist, this will fail; all current
+# GPU deps have cp312 wheels so this is safe today.
+# deadsnakes PPA provides Python 3.12 for Ubuntu 22.04.
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common tzdata && \
@@ -77,26 +79,24 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     procps bash curl && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
-    # Clean up packages only needed for setup (curl, software-properties-common)
+    # Clean up packages only needed for setup
     apt-get remove -y software-properties-common curl && \
     apt-get autoremove -y && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Single pip install: kreview + GPU extras in one resolution pass.
-# --extra-index-url for PyTorch CUDA 12.4 wheels — these link against the
-# system CUDA runtime from the nvidia/cuda base image instead of bundling
-# duplicate nvidia-* pip packages (~5 GB savings).
+# Install kreview with GPU extras from the local wheel.
+# Apply the [gpu] extra directly to the wheel file path to ensure pip
+# resolves it locally rather than pulling kreview from PyPI.
+# Note: torch 2.x pip wheels bundle their own CUDA runtime as nvidia-*
+# pip packages regardless of --index-url, so the GPU image is ~8-10 GB.
+# The CI disk-space issue is solved by jlumbroso/free-disk-space in the
+# workflow, not by image-size tricks.
 COPY --from=builder /src/dist/*.whl /app/
-RUN pip3 install --no-cache-dir \
-        --extra-index-url https://download.pytorch.org/whl/cu124 \
-        /app/*.whl "kreview[gpu]" && \
-    rm /app/*.whl && \
-    pip3 cache purge 2>/dev/null || true && \
-    # Remove Python bytecode caches to reduce image size
-    find /usr/local/lib/python3.12 -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python3.12 -name "*.pyc" -delete 2>/dev/null || true
+RUN WHL="$(ls /app/*.whl)" && \
+    pip3 install --no-cache-dir "${WHL}[gpu]" && \
+    rm /app/*.whl
 
 # Ensure output directories exist
 RUN mkdir -p /app/data /app/results
