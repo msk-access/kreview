@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.15] - 2026-06-01
+
+### Added
+- **CPU+GPU JSON Merge Helpers**: `load_model_results(directory, evaluator_name)` and `load_all_model_results(directory)` in `eval_engine.py` transparently discover and merge `*_model_results.json` (CPU) and `*_gpu_model_results.json` (GPU) files. GPU model keys (AUC, OOF probs, SHAP) are merged into the CPU dict. Used by report templates, scoreboard, and multimodal engine.
+- **KREVIEW_SCOREBOARD**: New Nextflow process (`scoreboard.nf`) generates `scoreboard_combined__all.parquet` after all CPU/GPU eval jobs complete. Uses `build_scoreboard()` which now calls `load_all_model_results()` for unified GPU+CPU scoring.
+- **GPU Exit Code**: `kreview eval gpu` now exits with code 1 if NO models produced valid AUC results (was silent success). Prevents Nextflow from treating empty GPU results as success.
+- **Unit Tests**: 11 new tests in `test_merge_helpers.py` covering CPU-only, GPU-only, CPU+GPU merge, malformed JSON, and directory scan scenarios.
+
+### Changed
+- **GPU JSON Output Naming**: GPU eval module now produces `*_gpu_model_results.json` (was `*_model_results.json`), preventing filename collision when CPU and GPU outputs are collected into the same Nextflow channel.
+- **Report Input Signature**: `KREVIEW_REPORT` now accepts 6 inputs (matrices, model_results, eval_stats, selection_qc, joblib_files, scoreboard) for complete dashboard rendering.
+- **Workflow Wiring**: `kreview_eval.nf` creates unified `ch_all_jsons` and `ch_all_joblib` channels that mix CPU+GPU outputs, feeds them to SCOREBOARD → REPORT.
+- **Scoreboard Loading**: `build_scoreboard()` now uses `load_all_model_results()` instead of manual glob+load loop.
+- **Multimodal Baselines Loading**: `_load_per_evaluator_baselines()` now uses `load_all_model_results()` instead of manual glob+load loop.
+- **FSD Density Calculation**: Added `select_dtypes(include="number")` filter before density computation in `fsd.py` and `fsd_genomewide.py` to prevent TypeError on non-numeric metadata columns.
+- **Multimodal NF Module**: Removed unnecessary staging loop — `--results-dir .` uses Nextflow work dir symlinks directly.
+
+### Fixed
+- **OOF Label Key Search**: `"oof_labels".endswith("_oof_labels")` is `False` — fixed to check both exact match and suffix match. Applied to both `report_template.qmd` and `report_multimodal_template.qmd`.
+- **FSD TypeError**: Non-numeric columns (e.g., `sample_id`, `filename`) caused `TypeError: ufunc 'divide' not supported` in FSD density calculation. Now filtered to numeric columns only.
+- **Multimodal Validation Logging**: Now shows CPU vs GPU JSON counts separately for better debugging.
+
+### Breaking Changes
+- GPU JSON output renamed: `{eval}_model_results.json` → `{eval}_gpu_model_results.json`
+- `KREVIEW_REPORT` input signature expanded from 2 to 6 inputs
+
 ## [0.0.14] - 2026-05-25
 
 ### Added

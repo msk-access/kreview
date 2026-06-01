@@ -23,6 +23,7 @@ process KREVIEW_EVAL_CPU_SINGLE {
 
     output:
     path "*_model_results.json", emit: json_stats
+    path "*_model.joblib",       emit: joblib_models, optional: true
 
     script:
     def evaluator = matrix.baseName.replace('_matrix', '')

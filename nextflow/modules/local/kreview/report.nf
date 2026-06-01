@@ -6,9 +6,10 @@
 // complete dashboards with ROC curves, SHAP, and model metrics.
 //
 // In multistage mode, this process starts after ALL CPU/GPU
-// eval jobs complete, running in parallel with FUSE + MULTIMODAL.
+// eval jobs complete and the SCOREBOARD has been built.
 //
-// Inputs:  collected *_matrix.parquet + *_model_results.json files
+// Inputs:  collected matrices, JSONs, eval_stats, selection_qc,
+//          joblib models, and the scoreboard parquet.
 // Outputs: HTML reports, static plots
 // ---------------------------------------------------------
 
@@ -20,6 +21,10 @@ process KREVIEW_REPORT {
     input:
     path(matrix_files)     // Collected from KREVIEW_SELECT_SINGLE outputs
     path(model_results)    // Collected from KREVIEW_EVAL_CPU/GPU outputs
+    path(eval_stats)       // Collected from KREVIEW_SELECT_SINGLE
+    path(selection_qc)     // Collected from KREVIEW_SELECT_SINGLE
+    path(joblib_files)     // Collected from KREVIEW_EVAL_CPU + GPU
+    path(scoreboard_file)  // From KREVIEW_SCOREBOARD
 
     output:
     path "reports/*.html", emit: html_reports, optional: true
@@ -32,15 +37,13 @@ process KREVIEW_REPORT {
 
     mkdir -p matrices reports
 
-    # Stage matrices for report rendering
-    for f in ${matrix_files}; do
-        cp "\${f}" matrices/
-    done
-
-    # Stage model results alongside matrices
-    for f in ${model_results}; do
-        cp "\${f}" matrices/ 2>/dev/null || true
-    done
+    # Stage ALL files into one flat directory (report expects co-located files)
+    for f in ${matrix_files}; do cp "\${f}" matrices/; done
+    for f in ${model_results}; do cp "\${f}" matrices/ 2>/dev/null || true; done
+    for f in ${eval_stats}; do cp "\${f}" matrices/ 2>/dev/null || true; done
+    for f in ${selection_qc}; do cp "\${f}" matrices/ 2>/dev/null || true; done
+    for f in ${joblib_files}; do cp "\${f}" matrices/ 2>/dev/null || true; done
+    cp ${scoreboard_file} matrices/ 2>/dev/null || true
 
     PYTHONUNBUFFERED=1 kreview report \\
         --input-dir matrices \\

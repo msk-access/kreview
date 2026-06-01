@@ -42,16 +42,18 @@ class FSDOnTargetEvaluator(FeatureEvaluator):
                 log.warning("fsd_ontarget_missing_total_col")
                 return extracted
 
-            total_reads = df["total"].sum()
+            total_reads = float(df["total"].sum())
             if total_reads == 0:
                 return extracted
 
-            # Global density per size bucket
+            # Global density per size bucket — filter to numeric columns only
+            # to avoid TypeError when non-numeric metadata columns are present
             skip_cols = {"region", "total", "chrom"}
+            numeric_set = set(df.select_dtypes(include="number").columns)
             for c in df.columns:
-                if c not in skip_cols:
-                    bucket_sum = df[c].sum()
-                    extracted[f"{prefix}_density_{c}"] = float(bucket_sum / total_reads)
+                if c not in skip_cols and c in numeric_set:
+                    bucket_sum = float(df[c].sum())
+                    extracted[f"{prefix}_density_{c}"] = bucket_sum / total_reads
 
             # 143/166 ratio
             if "140-144" in cols and "165-169" in cols:

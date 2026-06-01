@@ -27,7 +27,8 @@ process KREVIEW_EVAL_GPU_SINGLE {
     path(matrix)  // Single selected *_matrix.parquet
 
     output:
-    path "*_model_results.json", emit: gpu_results
+    path "*_gpu_model_results.json", emit: gpu_results
+    path "*_model.joblib",           emit: joblib_models, optional: true
 
     script:
     def evaluator     = matrix.baseName.replace('_matrix', '')
@@ -59,13 +60,20 @@ process KREVIEW_EVAL_GPU_SINGLE {
         ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output .
 
+    # Rename to GPU-prefixed filenames (avoid collision with CPU outputs)
+    for f in *_model_results.json; do
+        [ -f "\$f" ] || continue
+        base=\$(basename "\$f" _model_results.json)
+        mv "\$f" "\${base}_gpu_model_results.json"
+    done
+
     # Verify output exists (fail loudly, not silently)
-    if [ ! -f *_model_results.json ]; then
+    if ! ls *_gpu_model_results.json 1>/dev/null 2>&1; then
         echo "ERROR: No GPU model results produced for ${evaluator}" >&2
         exit 1
     fi
 
-    echo "Output: \$(ls *_model_results.json)"
+    echo "Output: \$(ls *_gpu_model_results.json)"
     echo "=== KREVIEW_EVAL_GPU_SINGLE: ${evaluator} DONE ==="
     """
 }
