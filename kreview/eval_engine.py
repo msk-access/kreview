@@ -48,6 +48,8 @@ __all__ = [
     "cpu_models",
     "gpu_models",
     "multimodal_eval",
+    "load_model_results",
+    "load_all_model_results",
 ]
 
 
@@ -1448,6 +1450,127 @@ def gpu_models(
         return {"error": str(e)}, {}
 
 
+# ── CPU+GPU JSON Merge Helpers ──────────────────────────────────────────────
+
+
+def load_model_results(
+    directory: Path,
+    evaluator_name: str,
+) -> dict | None:
+    """Load and merge CPU + GPU model results for a single evaluator.
+
+    Looks for ``{evaluator_name}_model_results.json`` (CPU) and
+    ``{evaluator_name}_gpu_model_results.json`` (GPU). If both exist,
+    GPU keys are merged into the CPU dict (GPU keys take precedence
+    for overlapping model keys, metadata keys like 'evaluator' are
+    kept from CPU).
+
+    Used by report templates where the evaluator name is known.
+
+    Args:
+        directory: Directory containing the JSON result files.
+        evaluator_name: Evaluator name (e.g., ``"FSCOnTarget"``).
+
+    Returns:
+        Merged dict, or None if no JSON exists for this evaluator.
+    """
+    directory = Path(directory)
+    cpu_path = directory / f"{evaluator_name}_model_results.json"
+    gpu_path = directory / f"{evaluator_name}_gpu_model_results.json"
+
+    merged = None
+    # Load CPU results
+    if cpu_path.exists():
+        try:
+            with open(cpu_path) as f:
+                merged = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            log.warning(
+                "load_model_results_cpu_failed",
+                evaluator=evaluator_name,
+                path=str(cpu_path),
+                error=str(exc),
+            )
+
+    # Load and merge GPU results
+    if gpu_path.exists():
+        try:
+            with open(gpu_path) as f:
+                gpu_data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            log.warning(
+                "load_model_results_gpu_failed",
+                evaluator=evaluator_name,
+                path=str(gpu_path),
+                error=str(exc),
+            )
+            gpu_data = None
+
+        if gpu_data is not None:
+            if merged is not None:
+                # Merge: GPU model keys added to CPU dict
+                # Skip metadata that should come from CPU
+                _skip = {"evaluator", "matrix_path", "cv_folds_actual"}
+                merged.update({k: v for k, v in gpu_data.items() if k not in _skip})
+                log.info(
+                    "load_model_results_merged",
+                    evaluator=evaluator_name,
+                    cpu_keys=len(merged),
+                    gpu_keys=len(gpu_data),
+                )
+            else:
+                # GPU-only (no CPU results) — use GPU data directly
+                merged = gpu_data
+
+    return merged
+
+
+def load_all_model_results(
+    directory: Path,
+) -> dict[str, dict]:
+    """Load and merge all CPU + GPU model results from a directory.
+
+    Scans for ``*_model_results.json`` and ``*_gpu_model_results.json``,
+    groups by evaluator name, and merges GPU keys into CPU dicts.
+
+    Used by scoreboard and multimodal engine for directory scanning.
+
+    Args:
+        directory: Directory containing model result JSON files.
+
+    Returns:
+        Dict keyed by evaluator name → merged model results dict.
+        Empty dict if no results found.
+    """
+    directory = Path(directory)
+    # Discover all evaluator names from both CPU and GPU JSONs
+    evaluators = set()
+    for f in directory.glob("*_model_results.json"):
+        name = f.stem
+        if name.endswith("_gpu_model_results"):
+            evaluators.add(name.replace("_gpu_model_results", ""))
+        else:
+            evaluators.add(name.replace("_model_results", ""))
+
+    if not evaluators:
+        log.warning("load_all_model_results_empty", dir=str(directory))
+        return {}
+
+    results = {}
+    for eval_name in sorted(evaluators):
+        merged = load_model_results(directory, eval_name)
+        if merged is not None:
+            results[eval_name] = merged
+
+    log.info(
+        "load_all_model_results_complete",
+        dir=str(directory),
+        n_evaluators=len(results),
+        evaluators=sorted(results.keys()),
+    )
+    return results
+
+
 # ── Phase D: Multimodal Evaluation ──────────────────────────────────────────
 
 
@@ -1483,32 +1606,19 @@ def _load_per_evaluator_baselines(
         FileNotFoundError: If ``results_dir`` does not exist.
         ValueError: If no valid JSON files are found.
     """
-    import glob
-
     results_dir = Path(results_dir)
     if not results_dir.exists():
         raise FileNotFoundError(f"Results directory not found: {results_dir}")
 
-    json_paths = sorted(glob.glob(str(results_dir / "*_model_results.json")))
-    if not json_paths:
+    # Use merge helper to discover and merge CPU+GPU JSONs automatically
+    all_results = load_all_model_results(results_dir)
+    if not all_results:
         raise ValueError(f"No *_model_results.json files in {results_dir}")
 
     baselines = {}
     n_loaded, n_skipped = 0, 0
 
-    for jp in json_paths:
-        eval_name = Path(jp).stem.replace("_model_results", "")
-        try:
-            with open(jp) as f:
-                data = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            log.error(
-                "multimodal_json_load_failed",
-                path=jp,
-                error=str(exc),
-            )
-            n_skipped += 1
-            continue
+    for eval_name, data in all_results.items():
 
         # Skip error results
         if "error" in data:

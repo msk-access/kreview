@@ -16,16 +16,20 @@ graph LR
     C --> D["Eval CPU"]:::step
     C --> E["Eval GPU"]:::step
     C --> F[Fuse]:::step
+    D --> S[Scoreboard]:::step
+    E --> S
     D --> G["Eval Multimodal"]:::step
     E --> G
     F --> G
-    D --> H[Report]:::step
+    S --> H[Report]:::step
+    D --> H
     E --> H
+    G --> I["Report Multimodal"]:::step
 ```
 
 !!! note "Parallel execution"
     After feature selection, `eval cpu`, `eval gpu`, and `fuse` run in **parallel**.
-    After eval, `eval multimodal` and `report` also run in **parallel** — Report needs matrices + model results; Multimodal needs super_matrix + OOF probs.
+    After eval, `scoreboard`, `report`, and `eval multimodal` run in **parallel** — Scoreboard needs all JSONs; Report needs matrices + model results + scoreboard; Multimodal needs super_matrix + OOF probs.
 
 ---
 
@@ -51,7 +55,8 @@ Every module in `kreview` is auto-generated from an nbdev notebook in `nbs/`. **
 | Module | Source Notebook | Functions | Used By |
 |--------|-----------------|-----------|---------|
 | `selection.py` | `nbs/04_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()` | `kreview run`, `kreview select` |
-| `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()` | `kreview run`, `kreview eval cpu/gpu`, `selection.py` |
+| `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()`, `load_model_results()`, `load_all_model_results()` | `kreview run`, `kreview eval cpu/gpu`, `selection.py`, `scoreboard.py`, report templates |
+| `scoreboard.py` | Standalone | `build_scoreboard()` | `kreview report`, `KREVIEW_SCOREBOARD` |
 | `core.py` | `nbs/00_core.ipynb` | `LABEL_META_COLS`, `Paths`, `LabelConfig` | All commands |
 | `registry.py` | `nbs/03_registry.ipynb` | `get_all_evaluators()` | `kreview run`, `kreview extract`, `kreview features-list` |
 
@@ -83,9 +88,11 @@ Extract:  → {evaluator}_matrix.parquet  (full features)
 Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
           → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
           → {evaluator}_selection_qc.json  (selection audit trail)
-Eval:     → {evaluator}_model_results.json  (AUCs, OOF probs)
+Eval CPU: → {evaluator}_model_results.json  (AUCs, OOF probs)
           → {evaluator}_{model}_model.joblib  (trained models)
+Eval GPU: → {evaluator}_gpu_model_results.json  (GPU AUCs, OOF probs)
 Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
+Scoreboard: → scoreboard_combined__all.parquet  (cross-evaluator rankings)
 Multimodal: → multimodal_results.json  (stacking + ablation results)
 Report:   → reports/{evaluator}.html  (interactive dashboards)
 ```
@@ -112,11 +119,13 @@ Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 | `KREVIEW_LABEL` | `label.nf` | Samplesheets + cBioPortal | `labels.parquet` | `outdir/labels/` |
 | `KREVIEW_EXTRACT` | `extract.nf` | Samplesheets + labels.parquet | `*_matrix.parquet` | `outdir/matrices/raw/` |
 | `KREVIEW_SELECT_SINGLE` | `select_single.nf` | Raw matrix | Selected matrix + stats + QC | `outdir/matrices/selected/` |
-| `KREVIEW_EVAL_CPU_SINGLE` | `eval_cpu_single.nf` | Selected matrix | `*_model_results.json` | `outdir/models/cpu/` |
-| `KREVIEW_EVAL_GPU_SINGLE` | `eval_gpu_single.nf` | Selected matrix | `*_model_results.json` | `outdir/models/gpu/` |
+| `KREVIEW_EVAL_CPU_SINGLE` | `eval_cpu_single.nf` | Selected matrix | `*_model_results.json` + `*.joblib` | `outdir/models/cpu/` |
+| `KREVIEW_EVAL_GPU_SINGLE` | `eval_gpu_single.nf` | Selected matrix | `*_gpu_model_results.json` + `*.joblib` | `outdir/models/gpu/` |
 | `KREVIEW_FUSE` | `fuse.nf` | All selected matrices | `super_matrix.parquet` | `outdir/matrices/fused/` |
+| `KREVIEW_SCOREBOARD` | `scoreboard.nf` | Collected CPU + GPU JSONs | `scoreboard_combined__all.parquet` | `outdir/` |
 | `KREVIEW_EVAL_MULTIMODAL` | `eval_multimodal.nf` | Fuse + eval results | Multimodal results | `outdir/models/multimodal/` |
-| `KREVIEW_REPORT` | `report.nf` | Matrices + model results | HTML dashboards | `outdir/reports/` |
+| `KREVIEW_REPORT` | `report.nf` | Matrices + JSONs + stats + QC + joblib + scoreboard | HTML dashboards | `outdir/reports/` |
+| `KREVIEW_REPORT_MULTIMODAL` | `report_multimodal.nf` | Multimodal JSON + super_matrix | Multimodal dashboard | `outdir/reports/` |
 
 ---
 

@@ -32,6 +32,7 @@ kreview_cache/
 # Quarto
 .quarto/
 _site/
+_docs/
 
 # IDE
 .idea/
@@ -47,3 +48,18 @@ krewlyzer_output/
 *.csv
 *.tsv
 *.bam
+
+# Directories not needed for wheel build
+docs/
+nextflow/
+scripts/
+tests/
+.github/
+.agents/
+.gemini/
+
+# Misc
+nohup.out
+*.html
+*.png
+coverage.xml

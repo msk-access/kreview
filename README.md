@@ -37,10 +37,13 @@ graph LR
     C --> D["Eval CPU"]
     C --> E["Eval GPU"]
     C --> F[Fuse]
-    D --> G["Eval Multimodal"]
+    D --> G[Scoreboard]
     E --> G
-    F --> G
+    D --> I["Eval Multimodal"]
+    E --> I
+    F --> I
     G --> H[Report]
+    I --> J["Report Multimodal"]
 ```
 
 The pipeline supports two modes:
@@ -58,9 +61,15 @@ The pipeline supports two modes:
 > **Quarto is strictly required** for programmatic dashboard generation. Because `quarto-cli` wrapper packages are unreliable across Python environments, `kreview` assumes the Quarto executable is installed dynamically on your OS or container.
 
 #### Option 1: Docker (Recommended "Batteries-Included" Method)
-The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker container (hosted on GHCR). It natively ships with `Python 3.12`, all ML libraries, and the underlying `quarto` linux binaries configured flawlessly:
+The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker containers (hosted on GHCR). They ship with `Python 3.12`, all ML libraries, and `quarto`:
 ```bash
+# CPU image (~1.5 GB) — for all standard pipeline processes
 docker pull ghcr.io/msk-access/kreview:latest
+
+# GPU image (~8-10 GB) — adds PyTorch, TabPFN, TabICL (requires NVIDIA drivers)
+docker pull ghcr.io/msk-access/kreview:latest-gpu
+
+# Run
 docker run -v /your/data:/data ghcr.io/msk-access/kreview:latest \
   kreview run --cancer-samplesheet /data/cancer.csv ...
 ```
