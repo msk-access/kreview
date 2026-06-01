@@ -28,7 +28,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
 <body data-md-color-accent="custom" data-md-color-primary="custom" data-md-color-scheme="default" dir="ltr">
 <input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox">
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
@@ -861,11 +861,15 @@
     C --&gt; D["Eval CPU"]:::step
     C --&gt; E["Eval GPU"]:::step
     C --&gt; F[Fuse]:::step
+    D --&gt; S[Scoreboard]:::step
+    E --&gt; S
     D --&gt; G["Eval Multimodal"]:::step
     E --&gt; G
     F --&gt; G
-    D --&gt; H[Report]:::step
+    S --&gt; H[Report]:::step
+    D --&gt; H
     E --&gt; H
+    G --&gt; I["Report Multimodal"]:::step
 </code></pre>
 <div class="panzoom-info-box panzoom-info-box-bottom panzoom-hidden">
 Use mouse to pan and zoom
@@ -874,7 +878,7 @@ Use mouse to pan and zoom
 <div class="admonition note">
 <p class="admonition-title">Parallel execution</p>
 <p>After feature selection, <code>eval cpu</code>, <code>eval gpu</code>, and <code>fuse</code> run in <strong>parallel</strong>.
-After eval, <code>eval multimodal</code> and <code>report</code> also run in <strong>parallel</strong> — Report needs matrices + model results; Multimodal needs super_matrix + OOF probs.</p>
+After eval, <code>scoreboard</code>, <code>report</code>, and <code>eval multimodal</code> run in <strong>parallel</strong> — Scoreboard needs all JSONs; Report needs matrices + model results + scoreboard; Multimodal needs super_matrix + OOF probs.</p>
 </div>
 <hr>
 <h2 id="command-module-notebook-mapping">Command → Module → Notebook Mapping</h2>
@@ -971,8 +975,14 @@ After eval, <code>eval multimodal</code> and <code>report</code> also run in <st
 <tr>
 <td><code>eval_engine.py</code></td>
 <td><code>nbs/02_eval_engine.ipynb</code></td>
-<td><code>cpu_models()</code>, <code>gpu_models()</code>, <code>univariate_auc()</code>, <code>mutual_info_score()</code></td>
-<td><code>kreview run</code>, <code>kreview eval cpu/gpu</code>, <code>selection.py</code></td>
+<td><code>cpu_models()</code>, <code>gpu_models()</code>, <code>univariate_auc()</code>, <code>mutual_info_score()</code>, <code>load_model_results()</code>, <code>load_all_model_results()</code></td>
+<td><code>kreview run</code>, <code>kreview eval cpu/gpu</code>, <code>selection.py</code>, <code>scoreboard.py</code>, report templates</td>
+</tr>
+<tr>
+<td><code>scoreboard.py</code></td>
+<td>Standalone</td>
+<td><code>build_scoreboard()</code></td>
+<td><code>kreview report</code>, <code>KREVIEW_SCOREBOARD</code></td>
 </tr>
 <tr>
 <td><code>core.py</code></td>
@@ -1006,11 +1016,13 @@ After eval, <code>eval multimodal</code> and <code>report</code> also run in <st
 <a href="#__codelineno-1-3" id="__codelineno-1-3" name="__codelineno-1-3"></a>Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
 <a href="#__codelineno-1-4" id="__codelineno-1-4" name="__codelineno-1-4"></a>          → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
 <a href="#__codelineno-1-5" id="__codelineno-1-5" name="__codelineno-1-5"></a>          → {evaluator}_selection_qc.json  (selection audit trail)
-<a href="#__codelineno-1-6" id="__codelineno-1-6" name="__codelineno-1-6"></a>Eval:     → {evaluator}_model_results.json  (AUCs, OOF probs)
+<a href="#__codelineno-1-6" id="__codelineno-1-6" name="__codelineno-1-6"></a>Eval CPU: → {evaluator}_model_results.json  (AUCs, OOF probs)
 <a href="#__codelineno-1-7" id="__codelineno-1-7" name="__codelineno-1-7"></a>          → {evaluator}_{model}_model.joblib  (trained models)
-<a href="#__codelineno-1-8" id="__codelineno-1-8" name="__codelineno-1-8"></a>Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
-<a href="#__codelineno-1-9" id="__codelineno-1-9" name="__codelineno-1-9"></a>Multimodal: → multimodal_results.json  (stacking + ablation results)
-<a href="#__codelineno-1-10" id="__codelineno-1-10" name="__codelineno-1-10"></a>Report:   → reports/{evaluator}.html  (interactive dashboards)
+<a href="#__codelineno-1-8" id="__codelineno-1-8" name="__codelineno-1-8"></a>Eval GPU: → {evaluator}_gpu_model_results.json  (GPU AUCs, OOF probs)
+<a href="#__codelineno-1-9" id="__codelineno-1-9" name="__codelineno-1-9"></a>Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
+<a href="#__codelineno-1-10" id="__codelineno-1-10" name="__codelineno-1-10"></a>Scoreboard: → scoreboard_combined__all.parquet  (cross-evaluator rankings)
+<a href="#__codelineno-1-11" id="__codelineno-1-11" name="__codelineno-1-11"></a>Multimodal: → multimodal_results.json  (stacking + ablation results)
+<a href="#__codelineno-1-12" id="__codelineno-1-12" name="__codelineno-1-12"></a>Report:   → reports/{evaluator}.html  (interactive dashboards)
 </code></pre></div>
 <hr>
 <h2 id="nextflow-parallelism">Nextflow Parallelism</h2>
@@ -1058,14 +1070,14 @@ After eval, <code>eval multimodal</code> and <code>report</code> also run in <st
 <td><code>KREVIEW_EVAL_CPU_SINGLE</code></td>
 <td><code>eval_cpu_single.nf</code></td>
 <td>Selected matrix</td>
-<td><code>*_model_results.json</code></td>
+<td><code>*_model_results.json</code> + <code>*.joblib</code></td>
 <td><code>outdir/models/cpu/</code></td>
 </tr>
 <tr>
 <td><code>KREVIEW_EVAL_GPU_SINGLE</code></td>
 <td><code>eval_gpu_single.nf</code></td>
 <td>Selected matrix</td>
-<td><code>*_model_results.json</code></td>
+<td><code>*_gpu_model_results.json</code> + <code>*.joblib</code></td>
 <td><code>outdir/models/gpu/</code></td>
 </tr>
 <tr>
@@ -1074,6 +1086,13 @@ After eval, <code>eval multimodal</code> and <code>report</code> also run in <st
 <td>All selected matrices</td>
 <td><code>super_matrix.parquet</code></td>
 <td><code>outdir/matrices/fused/</code></td>
+</tr>
+<tr>
+<td><code>KREVIEW_SCOREBOARD</code></td>
+<td><code>scoreboard.nf</code></td>
+<td>Collected CPU + GPU JSONs</td>
+<td><code>scoreboard_combined__all.parquet</code></td>
+<td><code>outdir/</code></td>
 </tr>
 <tr>
 <td><code>KREVIEW_EVAL_MULTIMODAL</code></td>
@@ -1085,8 +1104,15 @@ After eval, <code>eval multimodal</code> and <code>report</code> also run in <st
 <tr>
 <td><code>KREVIEW_REPORT</code></td>
 <td><code>report.nf</code></td>
-<td>Matrices + model results</td>
+<td>Matrices + JSONs + stats + <abbr title="Quality Control">QC</abbr> + joblib + scoreboard</td>
 <td>HTML dashboards</td>
+<td><code>outdir/reports/</code></td>
+</tr>
+<tr>
+<td><code>KREVIEW_REPORT_MULTIMODAL</code></td>
+<td><code>report_multimodal.nf</code></td>
+<td>Multimodal JSON + super_matrix</td>
+<td>Multimodal dashboard</td>
 <td><code>outdir/reports/</code></td>
 </tr>
 </tbody>
@@ -1114,7 +1140,7 @@ After eval, <code>eval multimodal</code> and <code>report</code> also run in <st
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 24, 2026 05:06:05 UTC"><span class="timeago" datetime="2026-05-24T05:06:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 24, 2026 05:06:05 UTC">2026-05-24</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 1, 2026 20:09:51 UTC"><span class="timeago" datetime="2026-06-01T20:09:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 1, 2026 20:09:51 UTC">2026-06-01</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">

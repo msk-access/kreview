@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1650,6 +1650,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.load_model_results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_model_results
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.load_all_model_results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_all_model_results
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.multimodal_eval" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2000,6 +2022,28 @@
     <span class="md-ellipsis">
       
         gpu_models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.load_model_results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_model_results
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.eval_engine.load_all_model_results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_all_model_results
       
     </span>
   </a>
@@ -3282,6 +3326,185 @@ DCA, feature stability, subgroup analysis).</p>
             <td>
               <div class="doc-md-description">
                 <p>model name to fitted model object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.load_model_results" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_model_results</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">evaluator_name</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load and merge CPU + GPU model results for a single evaluator.</p>
+<p>Looks for <code>{evaluator_name}_model_results.json</code> (CPU) and
+<code>{evaluator_name}_gpu_model_results.json</code> (GPU). If both exist,
+GPU keys are merged into the CPU dict (GPU keys take precedence
+for overlapping model keys, metadata keys like 'evaluator' are
+kept from CPU).</p>
+<p>Used by report templates where the evaluator name is known.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>directory</code>
+            </td>
+            <td>
+                  <code><span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Directory containing the JSON result files.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>evaluator_name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Evaluator name (e.g., <code>"FSCOnTarget"</code>).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Merged dict, or None if no JSON exists for this evaluator.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.load_all_model_results" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_all_model_results</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load and merge all CPU + GPU model results from a directory.</p>
+<p>Scans for <code>*_model_results.json</code> and <code>*_gpu_model_results.json</code>,
+groups by evaluator name, and merges GPU keys into CPU dicts.</p>
+<p>Used by scoreboard and multimodal engine for directory scanning.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>directory</code>
+            </td>
+            <td>
+                  <code><span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Directory containing model result JSON files.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="dict">dict</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dict keyed by evaluator name → merged model results dict.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="dict">dict</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Empty dict if no results found.</p>
               </div>
             </td>
           </tr>
