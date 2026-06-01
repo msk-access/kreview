@@ -21,11 +21,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multimodal Baselines Loading**: `_load_per_evaluator_baselines()` now uses `load_all_model_results()` instead of manual glob+load loop.
 - **FSD Density Calculation**: Added `select_dtypes(include="number")` filter before density computation in `fsd.py` and `fsd_genomewide.py` to prevent TypeError on non-numeric metadata columns.
 - **Multimodal NF Module**: Removed unnecessary staging loop — `--results-dir .` uses Nextflow work dir symlinks directly.
+- **Dockerfile Optimization**: Selective builder `COPY` (only `pyproject.toml`, `kreview/`, `LICENSE`), single `pip install "${WHL}[gpu]"` pass to ensure local wheel resolution, dropped `python3.12-dev` and `wget` from GPU runtime, merged OCI labels into single `LABEL` instruction.
+- **CI Parallelism**: `test.yml` split into parallel `test` (Python) and `docker` (matrix `[cpu, gpu]`) jobs with `fail-fast: false`. GPU build gets `jlumbroso/free-disk-space` cleanup (~20-30 GB freed).
+- **`.dockerignore`**: Expanded to exclude `docs/`, `nextflow/`, `scripts/`, `tests/`, `.github/`, `.agents/` — reduces build context transfer.
 
 ### Fixed
 - **OOF Label Key Search**: `"oof_labels".endswith("_oof_labels")` is `False` — fixed to check both exact match and suffix match. Applied to both `report_template.qmd` and `report_multimodal_template.qmd`.
 - **FSD TypeError**: Non-numeric columns (e.g., `sample_id`, `filename`) caused `TypeError: ufunc 'divide' not supported` in FSD density calculation. Now filtered to numeric columns only.
 - **Multimodal Validation Logging**: Now shows CPU vs GPU JSON counts separately for better debugging.
+- **Docker GPU Build CI Failure**: GPU image build exceeded runner disk space (~14 GB free). Fixed by adding `jlumbroso/free-disk-space` action and optimizing Dockerfile layers.
+
+### Removed
+- **`tabpfn-extensions[interpretability]`** from `[gpu]` extras — unused since v0.0.13 (SHAP computation replaced by `shapiq`). Eliminates `transformers`, `wandb`, `huggingface-hub`, `tokenizers` transitive dependencies (~500 MB).
+- **Deprecated HPC scripts**: `run_hpc_0.8.3.sh`, `run_hpc_v0.0.10.sh`, `run_hpc_v0.0.11.sh`, `runner.sh`, `utils/symlinker.py` — replaced by unified `scripts/run_hpc.sh`.
 
 ### Breaking Changes
 - GPU JSON output renamed: `{eval}_model_results.json` → `{eval}_gpu_model_results.json`
