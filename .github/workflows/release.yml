@@ -42,7 +42,18 @@ jobs:
           print-hash: true
           skip-existing: true
           verbose: true
-          
+
+      # Free disk space before Docker builds — GPU image needs ~10 GB
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
