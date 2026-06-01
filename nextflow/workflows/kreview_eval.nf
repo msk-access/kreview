@@ -16,8 +16,12 @@
 //  (×N)      (1)  (×N)
 //     |       |   |
 //     +---+---+---+---+
-//         |           |
-//    EVAL_MULTIMODAL  REPORT   (multimodal + report run in parallel)
+//     |       |       |
+//  SCOREBOARD |   EVAL_MULTIMODAL   (scoreboard + multimodal in parallel)
+//     |       |       |
+//     +---+---+    REPORT_MULTIMODAL
+//         |
+//       REPORT                 (needs matrices + JSONs + scoreboard + joblib)
 //
 // The pipeline mode is controlled by params.pipeline_mode:
 //   'monolithic' — Original single-process KREVIEW_RUN (backward compat)
@@ -49,6 +53,7 @@ include { KREVIEW_EVAL_GPU_SINGLE } from '../modules/local/kreview/eval_gpu_sing
 // Multistage — collect-only modules (need all evaluator results)
 include { KREVIEW_EVAL_MULTIMODAL   } from '../modules/local/kreview/eval_multimodal'
 include { KREVIEW_REPORT_MULTIMODAL } from '../modules/local/kreview/report_multimodal'
+include { KREVIEW_SCOREBOARD        } from '../modules/local/kreview/scoreboard'
 
 workflow KREVIEW_EVAL {
     take:
@@ -116,6 +121,7 @@ workflow KREVIEW_EVAL {
         // Step 4a: Per-evaluator CPU evaluation (×N, parallel)
         KREVIEW_EVAL_CPU_SINGLE(KREVIEW_SELECT_SINGLE.out.matrix)
         ch_json_stats = KREVIEW_EVAL_CPU_SINGLE.out.json_stats
+        ch_cpu_joblib = KREVIEW_EVAL_CPU_SINGLE.out.joblib_models
 
         // Step 4b: Per-evaluator GPU evaluation (×N, parallel, gpushort) [optional]
         // Runs in parallel with CPU eval — they are independent.
@@ -127,17 +133,26 @@ workflow KREVIEW_EVAL {
         ch_all_selected = KREVIEW_SELECT_SINGLE.out.matrix.collect()
         KREVIEW_FUSE(ch_all_selected)
 
+        // ── Collect all model results (CPU + GPU) ──
+        ch_all_jsons = params.run_gpu_eval
+            ? KREVIEW_EVAL_CPU_SINGLE.out.json_stats
+                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results)
+                .collect()
+            : KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
+
+        ch_all_joblib = params.run_gpu_eval
+            ? ch_cpu_joblib.mix(KREVIEW_EVAL_GPU_SINGLE.out.joblib_models).collect()
+            : ch_cpu_joblib.collect()
+
+        // Step 4d: Build scoreboard (needs all JSONs)
+        KREVIEW_SCOREBOARD(ch_all_jsons)
+
         // Step 5: Multimodal cross-evaluator evaluation (1 job) [optional]
         // Needs: OOF probs from CPU/GPU eval + super_matrix from FUSE
         if (params.run_multimodal_eval) {
-            ch_cpu_jsons = KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
-            ch_results = params.run_gpu_eval
-                ? ch_cpu_jsons.mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results.collect())
-                : ch_cpu_jsons
-
             KREVIEW_EVAL_MULTIMODAL(
                 KREVIEW_FUSE.out.super_matrix,
-                ch_results
+                ch_all_jsons
             )
 
             // Step 5b: Multimodal report — renders stacking dashboard
@@ -150,18 +165,17 @@ workflow KREVIEW_EVAL {
         }
 
         // Step 6: Report generation [optional]
-        // Depends on BOTH selected matrices AND model results JSONs
-        // to render complete dashboards with ROC, SHAP, metrics.
-        // Runs in parallel with FUSE + MULTIMODAL.
+        // Depends on selected matrices, model results, eval_stats,
+        // selection_qc, joblib, and scoreboard.
         if (!params.skip_report) {
-            ch_report_matrices = KREVIEW_SELECT_SINGLE.out.matrix.collect()
-            ch_report_jsons = params.run_gpu_eval
-                ? KREVIEW_EVAL_CPU_SINGLE.out.json_stats
-                    .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results)
-                    .collect()
-                : KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
-
-            KREVIEW_REPORT(ch_report_matrices, ch_report_jsons)
+            KREVIEW_REPORT(
+                KREVIEW_SELECT_SINGLE.out.matrix.collect(),
+                ch_all_jsons,
+                KREVIEW_SELECT_SINGLE.out.eval_stats.collect(),
+                KREVIEW_SELECT_SINGLE.out.selection_qc.collect(),
+                ch_all_joblib,
+                KREVIEW_SCOREBOARD.out.scoreboard,
+            )
             ch_html_reports = KREVIEW_REPORT.out.html_reports
             ch_static_plots = KREVIEW_REPORT.out.static_plots
         }

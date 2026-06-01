@@ -134,12 +134,11 @@ else:
     eval_df = None
     top_col = numeric_cols[0] if numeric_cols else None
 
-# ── Load model results ──
-model_path = Path(matrix_path).parent / f"{feature_name}_model_results.json"
+# ── Load model results (CPU + GPU merge) ──
+from kreview.eval_engine import load_model_results
 _shap_display_n = int(shap_features)
-if model_path.exists():
-    with open(model_path) as f:
-        mres = json.load(f)
+mres = load_model_results(Path(matrix_path).parent, feature_name)
+if mres is not None:
     top_feats = mres.get("stacking_features", mres.get("top_features", numeric_cols))
     
     # Flatten multimodal structure if present
@@ -208,7 +207,7 @@ if mres is not None and top_feats:
     best_m = max(all_aucs, key=all_aucs.get) if all_aucs else None
 
     # ── D-01: Load OOF predictions for ROC & KDE (consistent with official AUC) ──
-    _oof_lbl_key = next((k for k in mres if k.endswith("_oof_labels")), None)
+    _oof_lbl_key = next((k for k in mres if k == "oof_labels" or k.endswith("_oof_labels")), None)
     oof_y = np.array(mres[_oof_lbl_key]) if _oof_lbl_key else None
     
     for _pfx, _nice in DYNAMIC_MODELS:

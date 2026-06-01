@@ -22,8 +22,10 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
     - `eval_cpu_single.nf` — Per-evaluator CPU model evaluation (LR, RF, XGB)
     - `eval_gpu_single.nf` — Per-evaluator GPU model evaluation (TabPFN, TabICL)
     - `fuse.nf` — Super-matrix construction (all evaluators merged)
+    - `scoreboard.nf` — Cross-evaluator scoreboard aggregation (v0.0.15)
     - `eval_multimodal.nf` — Cross-evaluator stacking + ablation
-    - `report.nf` — HTML dashboard generation (needs matrices + model results)
+    - `report.nf` — HTML dashboard generation (6 inputs: matrices, JSONs, stats, QC, joblib, scoreboard)
+    - `report_multimodal.nf` — Multimodal stacking dashboard
 
 The pipeline supports two modes controlled by `params.pipeline_mode`:
 
@@ -38,15 +40,20 @@ graph LR
     C --> D["Eval CPU ×N"]:::step
     C --> E["Eval GPU ×N"]:::step
     C --> F["Fuse (1 job)"]:::step
+    D --> S["Scoreboard"]:::step
+    E --> S
     D --> G["Eval Multimodal"]:::step
     E --> G
     F --> G:::step
-    D --> H["Report"]:::step
+    S --> H["Report"]:::step
+    D --> H
     E --> H
+    D --> I["Report Multimodal"]:::step
+    G --> I
 ```
 
 !!! note "Report runs in parallel with Multimodal"
-    After CPU/GPU eval complete, Report and Multimodal run **concurrently**. Report needs matrices + model results JSONs; Multimodal needs super_matrix + OOF probs.
+    After CPU/GPU eval complete, Scoreboard, Report, and Multimodal run **concurrently**. Report needs matrices + model results + scoreboard; Multimodal needs super_matrix + OOF probs.
 
 For a detailed architecture overview with notebook-to-module mappings, see the [Pipeline Architecture](../developer/pipeline-architecture.md) developer guide.
 
@@ -61,27 +68,31 @@ In multistage mode, all process outputs are published to `params.outdir` via `pu
 ```
 outdir/
 ├── labels/
-│   └── labels.parquet              # 5-tier ctDNA labels
+│   └── labels.parquet                          # 5-tier ctDNA labels
 ├── matrices/
-│   ├── raw/                        # Per-evaluator raw feature matrices
+│   ├── raw/                                    # Per-evaluator raw feature matrices
 │   │   ├── AtacOnTarget_matrix.parquet
 │   │   ├── FSCOnTarget_matrix.parquet
 │   │   └── ...
-│   ├── selected/                   # After mRMR/hybrid selection
+│   ├── selected/                               # After mRMR/hybrid selection
 │   │   ├── AtacOnTarget_matrix.parquet
 │   │   ├── AtacOnTarget_eval_stats.parquet
 │   │   ├── AtacOnTarget_selection_qc.json
 │   │   └── ...
 │   └── fused/
-│       └── super_matrix.parquet    # All evaluators merged
+│       └── super_matrix.parquet                # All evaluators merged
 ├── models/
-│   ├── cpu/                        # Per-evaluator CPU model results
+│   ├── cpu/                                    # Per-evaluator CPU model results
 │   │   ├── AtacOnTarget_model_results.json
+│   │   ├── AtacOnTarget_lr_model.joblib
 │   │   └── ...
-│   ├── gpu/                        # Per-evaluator GPU model results
+│   ├── gpu/                                    # Per-evaluator GPU model results
+│   │   ├── AtacOnTarget_gpu_model_results.json # Note: _gpu_ prefix avoids collision
 │   │   └── ...
 │   └── multimodal/
-│       └── multimodal_results.json # Cross-evaluator stacking
+│       └── multimodal_results.json             # Cross-evaluator stacking
+├── scoreboard_combined__all.parquet            # Cross-evaluator ranking (v0.0.15)
+├── scoreboard_combined__all.csv
 └── reports/
     ├── AtacOnTarget_dashboard.html
     └── ...
@@ -110,7 +121,10 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --gpu_models "tabpfn,tabicl" \
   --run_multimodal_eval true \
   --multimodal_selection boruta_shap \
+  --multimodal_gpu_models "tabpfn,tabicl" \
   --ch_hotspot_maf /path/to/ch_hotspots.maf \
+  --seed 42 \
+  --deterministic true \
   -profile iris
 ```
 

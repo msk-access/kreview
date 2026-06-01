@@ -517,6 +517,31 @@ def eval_gpu(
 
     print("\n=== eval gpu complete ===", flush=True)
 
+    # ── Fail loudly if NO models produced valid results ──
+    any_results = False
+    for mf in matrix_files:
+        evaluator = mf.stem.replace("_matrix", "")
+        out_file = output / f"{evaluator}_model_results.json"
+        if out_file.exists():
+            with open(out_file) as f:
+                d = json.load(f)
+            if any(k.startswith("auc_") and isinstance(d[k], (int, float)) for k in d):
+                any_results = True
+                break
+
+    if not any_results:
+        print(
+            "ERROR: No GPU models produced valid results. "
+            "Check that tabpfn/tabicl are installed in the container.",
+            flush=True,
+        )
+        log.error(
+            "gpu_eval_all_models_failed",
+            n_matrices=len(matrix_files),
+            models=models,
+        )
+        raise typer.Exit(code=1)
+
 
 # ── eval multimodal ───────────────────────────────────────────────────────────
 
@@ -624,10 +649,14 @@ def eval_multimodal(
         raise typer.Exit(code=1)
 
     json_files = sorted(results_dir.glob("*_model_results.json"))
+    cpu_count = sum(1 for f in json_files if "_gpu_model_results.json" not in f.name)
+    gpu_count = len(json_files) - cpu_count
     if not json_files:
         print(f"ERROR: No *_model_results.json files in {results_dir}", flush=True)
         raise typer.Exit(code=1)
-    print(f"  Found {len(json_files)} evaluator result files", flush=True)
+    print(
+        f"  Found {cpu_count} CPU + {gpu_count} GPU evaluator result files", flush=True
+    )
 
     if super_matrix is not None and not super_matrix.exists():
         print(f"ERROR: Super-matrix not found: {super_matrix}", flush=True)

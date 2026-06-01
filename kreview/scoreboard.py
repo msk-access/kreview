@@ -6,7 +6,6 @@ and specificity across all evaluators.
 """
 
 from __future__ import annotations
-import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -30,21 +29,16 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
         DataFrame with one row per evaluator, sorted by ``best_auc``.
         Empty DataFrame if no results are found.
     """
-    records = []
-    json_files = sorted(output_dir.glob("*_model_results.json"))
+    from kreview.eval_engine import load_all_model_results
 
-    if not json_files:
+    records = []
+    all_results = load_all_model_results(output_dir)
+
+    if not all_results:
         log.warning("scoreboard_no_results", dir=str(output_dir))
         return pd.DataFrame()
 
-    for json_path in json_files:
-        evaluator_name = json_path.stem.replace("_model_results", "")
-        try:
-            with open(json_path) as f:
-                data = json.load(f)
-        except Exception as e:
-            log.warning("scoreboard_read_failed", file=str(json_path), error=str(e))
-            continue
+    for evaluator_name, data in all_results.items():
 
         # Extract all AUCs dynamically and find the best model
         # Support both flat keys and nested 'stacking' multimodal keys

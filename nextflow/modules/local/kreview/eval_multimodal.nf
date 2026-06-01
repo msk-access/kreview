@@ -43,14 +43,12 @@ process KREVIEW_EVAL_MULTIMODAL {
 
     mkdir -p multimodal_output
 
-    # Stage JSON results into a flat directory
-    mkdir -p results_flat
-    for f in ${results_dir}/*_model_results.json; do
-        cp "\${f}" results_flat/ 2>/dev/null || true
-    done
+    # All *_model_results.json and *_gpu_model_results.json files are
+    # symlinked in the work directory by Nextflow's collect() operator.
+    # Python load_all_model_results() natively handles both naming patterns.
 
     PYTHONUNBUFFERED=1 kreview eval multimodal \\
-        --results-dir results_flat \\
+        --results-dir . \\
         ${super_flag} \\
         --models ${models_arg} \\
         ${gpu_flag} \\
