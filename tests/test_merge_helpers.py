@@ -12,7 +12,6 @@ import pytest
 
 from kreview.eval_engine import load_model_results, load_all_model_results
 
-
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
 
@@ -88,9 +87,7 @@ class TestLoadModelResults:
     def test_gpu_only(self, tmp_path):
         """GPU-only evaluator (no CPU file) returns GPU data."""
         gpu_data = {"auc_tabpfn": 0.91, "oof_labels": [0, 1]}
-        (tmp_path / "OnlyGPU_gpu_model_results.json").write_text(
-            json.dumps(gpu_data)
-        )
+        (tmp_path / "OnlyGPU_gpu_model_results.json").write_text(json.dumps(gpu_data))
         result = load_model_results(tmp_path, "OnlyGPU")
         assert result is not None
         assert result["auc_tabpfn"] == 0.91
@@ -144,9 +141,7 @@ class TestLoadAllModelResults:
     def test_gpu_only_evaluator_discovered(self, tmp_path):
         """GPU-only file (no matching CPU) is discovered."""
         gpu_data = {"auc_tabpfn": 0.88}
-        (tmp_path / "GpuOnly_gpu_model_results.json").write_text(
-            json.dumps(gpu_data)
-        )
+        (tmp_path / "GpuOnly_gpu_model_results.json").write_text(json.dumps(gpu_data))
         results = load_all_model_results(tmp_path)
         assert "GpuOnly" in results
         assert results["GpuOnly"]["auc_tabpfn"] == 0.88
