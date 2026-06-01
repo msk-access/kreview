@@ -16,8 +16,12 @@
 //  (×N)      (1)  (×N)
 //     |       |   |
 //     +---+---+---+---+
-//         |           |
-//    EVAL_MULTIMODAL  REPORT   (multimodal + report run in parallel)
+//     |       |       |
+//  SCOREBOARD |   EVAL_MULTIMODAL   (scoreboard + multimodal in parallel)
+//     |       |       |
+//     +---+---+    REPORT_MULTIMODAL
+//         |
+//       REPORT                 (needs matrices + JSONs + scoreboard + joblib)
 //
 // The pipeline mode is controlled by params.pipeline_mode:
 //   'monolithic' — Original single-process KREVIEW_RUN (backward compat)
