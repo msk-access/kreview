@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=kreview_0.0.11
+#SBATCH --job-name=kreview_0.0.15
 #SBATCH --partition=cmobic_short
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
@@ -8,23 +8,35 @@
 #SBATCH --error=kreview_%j.err
 
 # ============================================================================
-# kreview Nextflow Pipeline - IRIS SLURM Submission Script (v0.0.11)
+# kreview Nextflow Pipeline - IRIS SLURM Submission Script (v0.0.15)
 # ============================================================================
-# Usage:  sbatch run_hpc_v0.0.11.sh
-# Resume: sbatch run_hpc_v0.0.11.sh --resume
+# Usage:  sbatch run_hpc.sh
+# Resume: sbatch run_hpc.sh --resume
 #
 # Head job: cmobic_short (2.5h) — Nextflow JVM orchestrator only.
 # Child jobs are submitted by Nextflow to cmobic_short with per-process
 # resource specs defined in nextflow.config.
 #
+# What's new in v0.0.15:
+#   - CPU+GPU JSON merge helpers (load_model_results, load_all_model_results)
+#   - KREVIEW_SCOREBOARD process (scoreboard_combined__all.parquet)
+#   - GPU JSON renamed to *_gpu_model_results.json (no filename collision)
+#   - Report wired with 6 inputs: matrices, JSONs, eval_stats, selection_qc,
+#     joblib, and scoreboard
+#   - GPU eval exit code 1 on total failure (no silent empty results)
+#   - FSD numeric dtype fix (no TypeError on non-numeric metadata columns)
+#   - OOF label key fix in report templates
+#   - eval_multimodal uses work dir symlinks directly (no staging)
+#
 # Resource math (Multistage DAG):
 #   - Head process: 2 CPUs + 8GB (Nextflow JVM orchestrator — lightweight)
-#   - Extraction (×N): 4 CPUs + 16GB, max 2.5h (DuckDB streaming)
+#   - Extraction (×N): 4 CPUs + 24GB, max 2.5h (DuckDB streaming)
 #   - Select (×N):     4 CPUs + 16GB, max 2.5h (mRMR selection)
 #   - CPU Eval (×N):   4 CPUs + 32GB, max 2.5h (LR, RF, XGB)
 #   - GPU Eval (×N):   4 CPUs + 32GB + 1 GPU, max 2h (TabPFN on gpushort)
 #   - Fuse:            2 CPUs + 16GB, max 2.5h (pandas join)
-#   - Multimodal:      8 CPUs + 64GB, max 2.5h (Stacking + Ablation)
+#   - Scoreboard:      4 CPUs + 16GB (scoreboard aggregation)
+#   - Multimodal:      8 CPUs + 64GB + 1 GPU, max 2.5h (Stacking + GPU)
 #   - Report:          4 CPUs + 32GB, max 2.5h (Quarto render)
 #   - iris profile auto-tunes: chunk_size=auto, cv_folds=10, shap_samples=5000
 #
@@ -38,7 +50,7 @@ set -euo pipefail
 eval "$(micromamba shell hook --shell bash)"
 micromamba activate nf-env
 
-# Optional: pass -resume if provided as argument
+# Optional: pass -resume if provided as argument (recommended)
 RESUME_FLAG=""
 if [[ "${1:-}" == "--resume" ]]; then
     RESUME_FLAG="-resume"
@@ -46,7 +58,7 @@ if [[ "${1:-}" == "--resume" ]]; then
 fi
 
 # --- Build manifest.txt listing all krewlyzer result directories ---
-MANIFEST="${PWD}/manifest_v0.0.11.txt"
+MANIFEST="${PWD}/manifest_v0.0.15.txt"
 cat > "${MANIFEST}" <<EOF
 /data1/shahr2/share/krewlyzer/0.8.3/access_12_245
 /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs1
@@ -67,15 +79,18 @@ nextflow run "${KREVIEW_REPO}" \
   --healthy_xs2_samplesheet /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs2/samplesheet.csv \
   --cbioportal_dir          /data1/core006/access/production/resources/cbioportal/current/msk_solid_heme \
   --krewlyzer_dir           "${MANIFEST}" \
-  --outdir                  /data1/shahr2/share/kreview/v0.0.11_eval \
+  --outdir                  /data1/shahr2/share/kreview/v0.0.15_eval \
   --pipeline_mode           multistage \
   --run_gpu_eval            true \
   --gpu_models              "tabpfn,tabicl" \
   --run_multimodal_eval     true \
   --multimodal_selection    boruta_shap \
+  --multimodal_gpu_models   "tabpfn,tabicl" \
   --top_percentile          10.0 \
   --ch_hotspot_maf          /data1/core006/cch/production/resources/cmo-ch/versions/v1.0/regions_of_interest/versions/v1.0/hotspot-list-ch-pd-v1.maf \
   --compute_univariate_auc  \
+  --seed                    42 \
+  --deterministic           true \
   -profile iris \
   ${RESUME_FLAG}
 
