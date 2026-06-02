@@ -134,15 +134,24 @@ workflow KREVIEW_EVAL {
         KREVIEW_FUSE(ch_all_selected)
 
         // ── Collect all model results (CPU + GPU) ──
+        // NOTE: GPU tasks use errorStrategy 'ignore', so some may not emit.
+        // Collect CPU and GPU separately to avoid .mix().collect() deadlock
+        // (ignored tasks leave the mixed channel open, blocking collect forever).
+        ch_cpu_jsons = KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
         ch_all_jsons = params.run_gpu_eval
-            ? KREVIEW_EVAL_CPU_SINGLE.out.json_stats
-                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results)
+            ? ch_cpu_jsons
+                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results.collect().ifEmpty([]))
+                .flatten()
                 .collect()
-            : KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
+            : ch_cpu_jsons
 
+        ch_cpu_joblib_collected = ch_cpu_joblib.collect()
         ch_all_joblib = params.run_gpu_eval
-            ? ch_cpu_joblib.mix(KREVIEW_EVAL_GPU_SINGLE.out.joblib_models).collect()
-            : ch_cpu_joblib.collect()
+            ? ch_cpu_joblib_collected
+                .mix(KREVIEW_EVAL_GPU_SINGLE.out.joblib_models.collect().ifEmpty([]))
+                .flatten()
+                .collect()
+            : ch_cpu_joblib_collected
 
         // Step 4d: Build scoreboard (needs all JSONs)
         KREVIEW_SCOREBOARD(ch_all_jsons)
