@@ -49,6 +49,14 @@ process KREVIEW_EVAL_GPU_SINGLE {
     echo "Device: ${device_arg}"
     echo "Models: ${models_arg}"
 
+    # Singularity --no-home makes \$HOME read-only.
+    # Redirect all cache/data dirs to the writable work directory.
+    export TMPDIR=\${PWD}/tmp && mkdir -p \$TMPDIR
+    export XDG_CACHE_HOME=\${PWD}/.cache && mkdir -p \$XDG_CACHE_HOME
+    export HF_HOME=\${XDG_CACHE_HOME}/huggingface
+    export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
+    export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
+
     PYTHONUNBUFFERED=1 kreview eval gpu \\
         --matrices-dir matrices \\
         --models ${models_arg} \\

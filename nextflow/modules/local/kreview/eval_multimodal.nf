@@ -43,6 +43,14 @@ process KREVIEW_EVAL_MULTIMODAL {
 
     mkdir -p multimodal_output
 
+    # Singularity --no-home makes \$HOME read-only.
+    # Redirect all cache/data dirs to the writable work directory.
+    export TMPDIR=\${PWD}/tmp && mkdir -p \$TMPDIR
+    export XDG_CACHE_HOME=\${PWD}/.cache && mkdir -p \$XDG_CACHE_HOME
+    export HF_HOME=\${XDG_CACHE_HOME}/huggingface
+    export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
+    export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
+
     # All *_model_results.json and *_gpu_model_results.json files are
     # symlinked in the work directory by Nextflow's collect() operator.
     # Python load_all_model_results() natively handles both naming patterns.
