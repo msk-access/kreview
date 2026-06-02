@@ -1161,6 +1161,8 @@ def _build_gpu_model(
 
     Versions:
         - TabPFN v8.0.3+: import from ``tabpfn.finetuning`` (was tabpfn_extensions)
+        - TabPFN v8.1+: ``n_epochs`` renamed to ``epochs``; ``random_state`` removed
+          from ``FinetunedTabPFNClassifier`` (reproducibility via ``seed_everything``).
         - TabICL v2.1+: ``FinetunedTabICLClassifier`` (was ``TabICLClassifier(finetune=True)``)
     """
     if name == "tabpfn":
@@ -1172,9 +1174,8 @@ def _build_gpu_model(
 
                 return FinetunedTabPFNClassifier(
                     device=device,
-                    n_epochs=finetune_epochs,
+                    epochs=finetune_epochs,
                     learning_rate=finetune_lr,
-                    random_state=random_state,
                 )
             else:
                 from tabpfn import TabPFNClassifier
