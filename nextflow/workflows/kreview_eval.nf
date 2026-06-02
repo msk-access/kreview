@@ -134,13 +134,13 @@ workflow KREVIEW_EVAL {
         KREVIEW_FUSE(ch_all_selected)
 
         // ── Collect all model results (CPU + GPU) ──
-        // NOTE: GPU tasks use errorStrategy 'ignore', so some may not emit.
-        // Collect CPU and GPU separately to avoid .mix().collect() deadlock
-        // (ignored tasks leave the mixed channel open, blocking collect forever).
+        // GPU tasks always exit 0 and emit a JSON (with error info on failure).
+        // This prevents collect() deadlock — Nextflow only forwards outputs
+        // from exit-0 tasks, so we must never exit 1 from GPU processes.
         ch_cpu_jsons = KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
         ch_all_jsons = params.run_gpu_eval
             ? ch_cpu_jsons
-                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results.collect().ifEmpty([]))
+                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results.collect())
                 .flatten()
                 .collect()
             : ch_cpu_jsons
