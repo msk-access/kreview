@@ -51,10 +51,13 @@ process KREVIEW_EVAL_GPU_SINGLE {
 
     # Singularity --no-home makes \$HOME read-only.
     # Redirect all cache/data dirs to the writable work directory.
+    export HOME=\${PWD}/.home && mkdir -p \$HOME
     export TMPDIR=\${PWD}/tmp && mkdir -p \$TMPDIR
     export XDG_CACHE_HOME=\${PWD}/.cache && mkdir -p \$XDG_CACHE_HOME
     export HF_HOME=\${XDG_CACHE_HOME}/huggingface
     export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
+    export TABPFN_MODEL_CACHE_DIR=\${XDG_CACHE_HOME}/tabpfn
+    export TABPFN_NO_BROWSER=true
     export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
     ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set — TabPFN will be skipped if weights not cached"}
 
