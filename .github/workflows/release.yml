@@ -43,11 +43,13 @@ jobs:
           skip-existing: true
           verbose: true
 
-      # Free disk space before Docker builds — GPU image needs ~10 GB
+      # Free disk space before Docker builds — GPU image needs ~10 GB.
+      # tool-cache must stay false: this job needs the Python tool-cache
+      # for mike (docs deployment) which runs after Docker builds.
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
         with:
-          tool-cache: true
+          tool-cache: false
           android: true
           dotnet: true
           haskell: true
