@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=kreview_0.0.15
-#SBATCH --partition=cmobic_short
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=8G
-#SBATCH --time=2:59:00
+#SBATCH --partition=cmobic_cpu
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=24:00:00
 #SBATCH --output=kreview_%j.log
 #SBATCH --error=kreview_%j.err
 
@@ -13,7 +13,7 @@
 # Usage:  sbatch run_hpc.sh
 # Resume: sbatch run_hpc.sh --resume
 #
-# Head job: cmobic_short (2.5h) — Nextflow JVM orchestrator only.
+# Head job: cmobic_cpu (24h) — Nextflow JVM orchestrator only.
 # Child jobs are submitted by Nextflow to cmobic_short/gpu partitions
 # with per-process resource specs defined in nextflow.config.
 #
@@ -25,7 +25,7 @@
 #   4. Set TABPFN_TOKEN below (or leave blank to skip TabPFN)
 #
 # Resource math (Multistage DAG — all stages run in parallel within DAG):
-#   - Head process: 2 CPUs + 8GB (Nextflow JVM orchestrator — lightweight)
+#   - Head process: 4 CPUs + 16GB (Nextflow JVM orchestrator — lightweight)
 #   - Extraction (×N): 4 CPUs + 24GB×attempt, maxRetries=5 (DuckDB streaming)
 #   - Select (×N):     4 CPUs + 16GB, max 2.5h (mRMR selection)
 #   - CPU Eval (×N):   4 CPUs + 32GB, max 2.5h (LR, RF, XGB)
@@ -36,8 +36,8 @@
 #   - Report:          4 CPUs + 32GB, max 2.5h (Quarto render)
 #   - iris profile auto-tunes: chunk_size=auto, cv_folds=10, shap_samples=5000
 #
-# Typical wall-clock: ~30-45 min (extraction/eval stages scatter in parallel).
-# Head job has 2.5h budget — ample for scheduling delays and retries.
+# Typical wall-clock: ~1-2h (extraction/eval stages scatter in parallel).
+# Head job has 24h budget — ample for GPU queue waits and retries.
 # ============================================================================
 
 set -euo pipefail
@@ -49,6 +49,13 @@ TABPFN_TOKEN="${TABPFN_TOKEN:-}"
 # Activate Nextflow environment
 eval "$(micromamba shell hook --shell bash)"
 micromamba activate nf-env
+
+# ── Singularity Cache ─────────────────────────────────────────────────────────
+# Override defaults ($HOME/.singularity) to avoid quota issues and use fast
+# local storage. CACHEDIR stores pulled .img files; TMPDIR is used during build.
+export SINGULARITY_CACHEDIR="$PWD/.singularity_cache"
+export SINGULARITY_TMPDIR="$PWD/.singularity_tmp"
+mkdir -p "${SINGULARITY_CACHEDIR}" "${SINGULARITY_TMPDIR}"
 
 # Optional: pass -resume if provided as argument (recommended)
 RESUME_FLAG=""
