@@ -50,6 +50,7 @@ process KREVIEW_EVAL_MULTIMODAL {
     export HF_HOME=\${XDG_CACHE_HOME}/huggingface
     export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
     export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
+    ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set"}
 
     # All *_model_results.json and *_gpu_model_results.json files are
     # symlinked in the work directory by Nextflow's collect() operator.

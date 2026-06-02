@@ -56,6 +56,7 @@ process KREVIEW_EVAL_GPU_SINGLE {
     export HF_HOME=\${XDG_CACHE_HOME}/huggingface
     export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
     export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
+    ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set — TabPFN will be skipped if weights not cached"}
 
     PYTHONUNBUFFERED=1 kreview eval gpu \\
         --matrices-dir matrices \\
