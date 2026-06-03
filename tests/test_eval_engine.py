@@ -558,12 +558,14 @@ class TestEvaluateModel:
         return model, X, y, cv
 
     def test_output_has_expected_keys(self, model_and_data):
-        """Result dict should contain auc, oof_probs, CI, threshold keys."""
+        """Result dict should contain auc, oof_probs, CI, threshold,
+        and sensitivity@spec keys (v0.0.16+)."""
         from kreview.eval_engine import evaluate_model
 
         model, X, y, cv = model_and_data
         result, fitted = evaluate_model(model, X, y, cv, name="rf")
 
+        # Core keys
         assert "auc_rf" in result
         assert "rf_oof_probs" in result
         assert "auc_rf_ci_lower" in result
@@ -571,6 +573,14 @@ class TestEvaluateModel:
         assert "rf_optimal_threshold" in result
         assert "rf_classification_report" in result
         assert "rf_confusion_matrix" in result
+
+        # v0.0.16: sensitivity at fixed specificity operating points
+        assert "rf_sensitivity_at_100spec" in result
+        assert "rf_sensitivity_at_99spec" in result
+        assert "rf_sensitivity_at_95spec" in result
+        assert "rf_n_detected_at_100spec" in result
+        assert "rf_n_total_positive" in result
+        assert "rf_threshold_at_100spec" in result
 
     def test_auc_in_valid_range(self, model_and_data):
         """AUC should be between 0 and 1."""
@@ -1018,7 +1028,6 @@ class TestMultimodalEvalParams:
         """multimodal_eval should accept gpu_models parameter without error."""
         from kreview.eval_engine import multimodal_eval
         import json
-        import os
 
         # Create minimal per-evaluator results
         results_dir = tmp_path / "results"
@@ -1149,3 +1158,234 @@ class TestReproducibilitySeed:
         )
         assert len(names) > 0, "Should select at least one feature"
         assert X_sel.shape[1] == len(names)
+
+
+# ── v0.0.16 Tests ────────────────────────────────────────────────────────────────────
+
+
+class TestEvaluateHoldout:
+    """Tests for evaluate_holdout() — unbiased holdout evaluation (v0.0.16).
+
+    Validates:
+      - AUC computation on holdout set
+      - Sensitivity@100spec keys present
+      - Bootstrap CI bounds sane
+      - Single-class error handling
+      - Healthy-normal specificity branch
+      - Classification metrics at optimal threshold
+    """
+
+    @pytest.fixture
+    def holdout_model(self):
+        """Fit a simple RF on synthetic data, return (model, X_test, y_test)."""
+        from sklearn.ensemble import RandomForestClassifier
+
+        np.random.seed(42)
+        n_train, n_test = 80, 20
+        X_train = np.random.randn(n_train, 5)
+        y_train = np.zeros(n_train, dtype=int)
+        y_train[:32] = 1
+        X_train[:32, 0] += 2.0  # Signal
+
+        X_test = np.random.randn(n_test, 5)
+        y_test = np.zeros(n_test, dtype=int)
+        y_test[:8] = 1
+        X_test[:8, 0] += 2.0
+
+        model = RandomForestClassifier(
+            n_estimators=10, random_state=42, class_weight="balanced"
+        )
+        model.fit(X_train, y_train)
+        return model, X_test, y_test
+
+    def test_output_has_holdout_keys(self, holdout_model):
+        """Result dict should contain holdout-prefixed AUC, CI, sensitivity."""
+        from kreview.eval_engine import evaluate_holdout
+
+        model, X_test, y_test = holdout_model
+        result = evaluate_holdout(model, X_test, y_test, name="rf")
+
+        assert "holdout_rf_auc" in result
+        assert "holdout_rf_auc_ci_lower" in result
+        assert "holdout_rf_auc_ci_upper" in result
+        assert "holdout_rf_sensitivity_at_100spec" in result
+        assert "holdout_rf_sensitivity_at_99spec" in result
+        assert "holdout_rf_sensitivity_at_95spec" in result
+        assert "holdout_rf_n_detected_at_100spec" in result
+        assert "holdout_rf_n_total_positive" in result
+        assert "holdout_rf_n_total_negative" in result
+        assert "holdout_rf_optimal_threshold" in result
+        assert "holdout_rf_classification_report" in result
+        assert "holdout_rf_confusion_matrix" in result
+
+    def test_auc_in_valid_range(self, holdout_model):
+        """Holdout AUC should be between 0 and 1."""
+        from kreview.eval_engine import evaluate_holdout
+
+        model, X_test, y_test = holdout_model
+        result = evaluate_holdout(model, X_test, y_test, name="rf")
+
+        assert 0.0 <= result["holdout_rf_auc"] <= 1.0
+
+    def test_ci_bounds_sane(self, holdout_model):
+        """CI lower <= AUC <= CI upper."""
+        from kreview.eval_engine import evaluate_holdout
+
+        model, X_test, y_test = holdout_model
+        result = evaluate_holdout(model, X_test, y_test, name="rf")
+
+        assert result["holdout_rf_auc_ci_lower"] <= result["holdout_rf_auc"]
+        assert result["holdout_rf_auc"] <= result["holdout_rf_auc_ci_upper"]
+
+    def test_sensitivity_at_100spec_range(self, holdout_model):
+        """Sensitivity@100spec should be between 0 and 1."""
+        from kreview.eval_engine import evaluate_holdout
+
+        model, X_test, y_test = holdout_model
+        result = evaluate_holdout(model, X_test, y_test, name="rf")
+
+        assert 0.0 <= result["holdout_rf_sensitivity_at_100spec"] <= 1.0
+        assert 0.0 <= result["holdout_rf_sensitivity_at_99spec"] <= 1.0
+        assert 0.0 <= result["holdout_rf_sensitivity_at_95spec"] <= 1.0
+
+    def test_n_detected_consistent(self, holdout_model):
+        """n_detected_at_100spec should be <= n_total_positive."""
+        from kreview.eval_engine import evaluate_holdout
+
+        model, X_test, y_test = holdout_model
+        result = evaluate_holdout(model, X_test, y_test, name="rf")
+
+        assert (
+            result["holdout_rf_n_detected_at_100spec"]
+            <= result["holdout_rf_n_total_positive"]
+        )
+        assert result["holdout_rf_n_total_positive"] == int(y_test.sum())
+        assert result["holdout_rf_n_total_negative"] == int((y_test == 0).sum())
+
+    def test_single_class_returns_error(self):
+        """Single-class holdout should return error key, not crash."""
+        from kreview.eval_engine import evaluate_holdout
+        from sklearn.ensemble import RandomForestClassifier
+
+        np.random.seed(42)
+        model = RandomForestClassifier(n_estimators=5, random_state=42)
+        model.fit(np.random.randn(50, 3), np.array([0] * 25 + [1] * 25))
+
+        X_test = np.random.randn(10, 3)
+        y_test = np.ones(10, dtype=int)  # All positive
+
+        result = evaluate_holdout(model, X_test, y_test, name="rf")
+
+        assert "holdout_rf_error" in result
+        assert "holdout_rf_auc" not in result
+
+    def test_healthy_normal_specificity(self, holdout_model):
+        """When sample_labels provided with Healthy Normal, compute healthy sens."""
+        from kreview.eval_engine import evaluate_holdout
+
+        model, X_test, y_test = holdout_model
+        sample_labels = np.array(["True ctDNA+"] * 8 + ["Healthy Normal"] * 12)
+
+        result = evaluate_holdout(
+            model, X_test, y_test, name="rf", sample_labels=sample_labels
+        )
+
+        assert "holdout_rf_sensitivity_at_100spec_healthy" in result
+        assert 0.0 <= result["holdout_rf_sensitivity_at_100spec_healthy"] <= 1.0
+
+    def test_no_sample_labels_omits_healthy_key(self, holdout_model):
+        """Without sample_labels, healthy-normal specificity keys are absent."""
+        from kreview.eval_engine import evaluate_holdout
+
+        model, X_test, y_test = holdout_model
+        result = evaluate_holdout(model, X_test, y_test, name="rf")
+
+        assert "holdout_rf_sensitivity_at_100spec_healthy" not in result
+
+
+class TestSensitivityAtSpecificity:
+    """Tests for sensitivity@spec keys in evaluate_model (v0.0.16)."""
+
+    def test_sensitivity_values_in_range(self):
+        """All sensitivity@spec values should be between 0 and 1."""
+        from kreview.eval_engine import evaluate_model
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.model_selection import StratifiedKFold
+
+        np.random.seed(42)
+        n = 100
+        X = np.random.randn(n, 5)
+        y = np.zeros(n, dtype=int)
+        y[:40] = 1
+        X[:40, 0] += 2.0
+
+        model = RandomForestClassifier(n_estimators=10, random_state=42)
+        cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        result, _ = evaluate_model(model, X, y, cv, name="rf")
+
+        for key in [
+            "rf_sensitivity_at_100spec",
+            "rf_sensitivity_at_99spec",
+            "rf_sensitivity_at_95spec",
+        ]:
+            assert 0.0 <= result[key] <= 1.0, f"{key}={result[key]} out of [0,1]"
+
+    def test_n_detected_lte_total_positive(self):
+        """n_detected_at_100spec should never exceed n_total_positive."""
+        from kreview.eval_engine import evaluate_model
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.model_selection import StratifiedKFold
+
+        np.random.seed(42)
+        n = 100
+        X = np.random.randn(n, 5)
+        y = np.zeros(n, dtype=int)
+        y[:40] = 1
+        X[:40, 0] += 2.0
+
+        model = RandomForestClassifier(n_estimators=10, random_state=42)
+        cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        result, _ = evaluate_model(model, X, y, cv, name="rf")
+
+        assert result["rf_n_detected_at_100spec"] <= result["rf_n_total_positive"]
+        assert result["rf_n_total_positive"] == 40
+
+
+class TestGpuFeatureCapping:
+    """Tests for gpu_models() feature capping return values (v0.0.16)."""
+
+    def test_cap_not_applied_when_under_limit(self):
+        """When n_features <= max_gpu_features, no capping occurs."""
+        from kreview.eval_engine import gpu_models
+
+        np.random.seed(42)
+        X = np.random.randn(50, 5)
+        y = np.zeros(50, dtype=int)
+        y[:20] = 1
+
+        result, _ = gpu_models(X, y, models=(), max_gpu_features=150)
+
+        assert result["gpu_feature_cap_applied"] is False
+
+    def test_cap_applied_when_over_limit(self):
+        """When n_features > max_gpu_features, capping is applied."""
+        from kreview.eval_engine import gpu_models
+
+        np.random.seed(42)
+        n = 100
+        X = np.random.randn(n, 200)  # 200 features > limit
+        y = np.zeros(n, dtype=int)
+        y[:40] = 1
+        X[:40, 0] += 3.0
+
+        result, _ = gpu_models(X, y, models=(), max_gpu_features=50)
+
+        assert result["gpu_feature_cap_applied"] is True
+        assert result["gpu_feature_cap_original"] == 200
+        assert result["gpu_feature_cap_final"] == 50
+        assert "gpu_feature_cap_indices" in result
+        assert len(result["gpu_feature_cap_indices"]) == 50
+        # Indices should be sorted (preserve original column order)
+        assert result["gpu_feature_cap_indices"] == sorted(
+            result["gpu_feature_cap_indices"]
+        )

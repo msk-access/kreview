@@ -23,11 +23,12 @@ def get_all_evaluators() -> list[FeatureEvaluator]:
         try:
             mod = importlib.import_module(f"kreview.features.{module_name}")
             for name, obj in inspect.getmembers(mod, inspect.isclass):
-                if issubclass(obj, FeatureEvaluator) and obj != FeatureEvaluator:
-                    if not any(
-                        isinstance(e, obj) for e in evaluators
-                    ):  # prevent duplicates
-                        evaluators.append(obj())
+                if (
+                    issubclass(obj, FeatureEvaluator)
+                    and obj != FeatureEvaluator
+                    and not any(isinstance(e, obj) for e in evaluators)
+                ):
+                    evaluators.append(obj())
         except Exception as e:
             log.warning("evaluator_import_failed", module=module_name, error=str(e))
     return evaluators

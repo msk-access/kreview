@@ -2,7 +2,6 @@
 
 import pandas as pd
 import pytest
-from pathlib import Path
 
 
 class TestFuseMatrices:

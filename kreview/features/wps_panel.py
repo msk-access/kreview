@@ -31,6 +31,15 @@ class WPSPanelEvaluator(FeatureEvaluator):
     source_file = ".WPS.panel.parquet"
     tier = 2
     category = "epigenetics_and_geometry"
+    extract_columns = [
+        "region_type",
+        "wps_nuc",
+        "wps_tf",
+        "prot_frac_nuc",
+        "prot_frac_tf",
+        "local_depth",
+    ]
+    max_chunk_rows = 5_000_000
 
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         extracted = {}

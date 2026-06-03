@@ -125,8 +125,19 @@ workflow KREVIEW_EVAL {
 
         // Step 4b: Per-evaluator GPU evaluation (×N, parallel, gpushort) [optional]
         // Runs in parallel with CPU eval — they are independent.
+        // Pairs each matrix with its eval_stats for intelligent feature capping.
         if (params.run_gpu_eval) {
-            KREVIEW_EVAL_GPU_SINGLE(KREVIEW_SELECT_SINGLE.out.matrix)
+            // Pair matrix + eval_stats by evaluator name (basename matching)
+            ch_gpu_input = KREVIEW_SELECT_SINGLE.out.matrix
+                .map { f -> [f.baseName.replace('_matrix', ''), f] }
+                .combine(
+                    KREVIEW_SELECT_SINGLE.out.eval_stats
+                        .map { f -> [f.baseName.replace('_eval_stats', ''), f] },
+                    by: 0
+                )
+                .map { key, matrix, stats -> [matrix, stats] }
+
+            KREVIEW_EVAL_GPU_SINGLE(ch_gpu_input.map { it[0] }, ch_gpu_input.map { it[1] })
         }
 
         // Step 4c: Fuse selected matrices → super-matrix (1 job, needs all)

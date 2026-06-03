@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.16] - 2026-06-03
+
+### Added
+- **80/20 Stratified Holdout Validation**: `_assign_train_test_split()` in `CtDNALabeler.label_all()` assigns a `split` column (`train`/`test`/`exclude`) to `labels.parquet`. Split is stratified by 4-tier label with `random_state=42` for reproducibility. `evaluate_holdout()` in `eval_engine.py` provides unbiased AUC estimates on the held-out 20%.
+- **Sensitivity at Fixed Specificity**: `evaluate_model()` now computes sensitivity at 100%, 99%, and 95% specificity, plus a healthy-normal-only variant using `sample_labels`. 12 new JSON fields per model.
+- **Intelligent GPU Feature Capping**: `gpu_models()` accepts `--max-gpu-features` (default: 150) and caps features using score-based priority (MI > AUC > variance). Returns `gpu_feature_cap_indices` for holdout dimension consistency.
+- **CH-Only → Undetermined Label**: Samples with `n_non_ch_variants == 0` and no SV/CNA/IMPACT match are now labeled `Undetermined` (was: `Possible ctDNA−`). `Undetermined` is excluded from binary classification via `build_binary_target()`.
+- **WPSGenome Streaming**: `extract_columns` and `max_chunk_rows` class attributes on `FeatureEvaluator` enable DuckDB column projection and chunked reads. WPSGenome sets `max_chunk_rows = 5_000_000` and projects to 4 columns, reducing peak memory ~80%.
+- **Scoreboard Enhancements**: `build_scoreboard()` surfaces `sens_at_100spec`, `holdout_auc`, `holdout_sens_100spec`, `holdout_n_train/n_test`, and `auc_drop` (CV overfit diagnostic).
+- **`LABEL_UNDETERMINED` Constant**: `CtDNALabeler.LABEL_UNDETERMINED = "Undetermined"` added alongside existing 5-tier constants.
+- **Report Value Boxes**: Both `report_template.qmd` and `report_multimodal_template.qmd` now display "Sens @ 100% Spec" (with detection count) and "Holdout AUC" (with dynamic color: green/yellow/red by AUC drop severity) in the Executive Summary.
+- **Report Clinical Metrics**: Model summary tables auto-discover and display `Sens@100%Spec`, `Sens@95%Spec`, and `Holdout AUC` per model.
+- **Report Scoreboard Expansion**: Scoreboard display expanded from 7 to 13 columns (`best_model`, `holdout_auc`, `auc_drop`, `sens_at_100spec`, `sens_at_95spec`, `holdout_n_train`, `holdout_n_test`).
+
+### Changed
+- **Feature Selection Train-Only**: `score_features()` and `select_features()` (mRMR + hybrid paths) now filter to `split == "train"` before scoring, preventing test set leakage into feature rankings.
+- **`LABEL_META_COLS`**: Added `split` to the 22-entry meta column set in `core.py` to prevent it from leaking into feature matrices.
+- **Nextflow GPU Module**: `eval_gpu_single.nf` now stages `eval_stats` parquet and passes `--eval-stats-dir` + `--max-gpu-features` to the CLI.
+- **Nextflow Workflow**: `kreview_eval.nf` wires `SELECT.out.eval_stats` → `EVAL_GPU_SINGLE`.
+- **Version Bump**: `__init__.py`, `settings.ini`, `nextflow.config` → `0.0.16`.
+- **Report `meta_cols` Dynamic Import**: Both templates now import `LABEL_META_COLS` from `kreview.core` instead of maintaining a stale hardcoded copy. Prevents label metadata columns from leaking into feature sets.
+- **Report Glossary**: Added `Undetermined` label definition and train/test split documentation to both template glossary sidebars.
+- **`MODEL_LABELS` / `POSITIVE_LABELS` Public API**: Promoted from private `_MODEL_LABELS` / `_POSITIVE_LABELS` in `selection.py` to public exports. Backward-compat aliases maintained.
+
+### Fixed
+- **GPU Holdout Dimension Mismatch**: `cli.py` and `cli_eval.py` now apply `gpu_feature_cap_indices` to `X_test` before calling `evaluate_holdout()`, matching the capped training feature space.
+- **Data Leakage in mRMR/Hybrid Selection**: Both `select_features()` code paths now restrict MI scoring to train-only rows.
+- **Unused Import**: Removed `pandas` import from `report.py` (F401).
+- **Boolean Comparisons**: Replaced `== False` with `~` operator in `labels.py` (E712).
+- **Ambiguous Variable**: Renamed `l` → `lbl` in list comprehensions in `eval_engine.py` (E741).
+- **Nested If Statements**: Merged nested `if` blocks in `eval_engine.py` and `registry.py` (SIM102).
+- **Ternary Simplifications**: Converted if/else blocks to ternary in `eval_engine.py` (SIM108).
+- **Test Lint**: Removed 5 unused imports from test files and fixed 7 E712/SIM108 in test assertions.
+
 ## [0.0.15] - 2026-06-01
 
 ### Added

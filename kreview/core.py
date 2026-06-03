@@ -403,6 +403,7 @@ def _read_parquet_chunk(
     file_paths: list[str],
     feature_suffix: str,
     chunk_label: str = "",
+    columns: list[str] | None = None,
 ) -> pd.DataFrame:
     """Read a batch of parquet files via DuckDB with retry logic.
 
@@ -411,13 +412,41 @@ def _read_parquet_chunk(
         file_paths: List of absolute parquet file paths to read.
         feature_suffix: Feature name for logging context.
         chunk_label: Human-readable label for log messages.
+        columns: If set, SELECT only these columns instead of ``*``.
+            Reduces memory for wide parquet files (e.g. WPSGenome).
+            The ``sample_id`` column extracted from filename is always
+            included regardless of this list.
 
     Returns:
         DataFrame with all rows from the batch, or empty DataFrame on
         permanent failure after 3 retries.
     """
-    query = """
-        SELECT *,
+    # Build column clause: either specific columns or SELECT *
+    if columns:
+        # Sanitize: only allow alphanumeric, underscore, dot (no SQL injection)
+        safe_cols = [
+            c for c in columns if all(ch.isalnum() or ch in ("_", ".") for ch in c)
+        ]
+        if not safe_cols:
+            log.warning(
+                "column_projection_empty_after_sanitize",
+                feature=feature_suffix,
+                requested=columns,
+            )
+            col_clause = "*"
+        else:
+            col_clause = ", ".join(safe_cols)
+            log.debug(
+                "column_projection_applied",
+                feature=feature_suffix,
+                n_columns=len(safe_cols),
+                columns=safe_cols,
+            )
+    else:
+        col_clause = "*"
+
+    query = f"""
+        SELECT {col_clause},
             regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id
         FROM read_parquet(
             ?,
@@ -501,6 +530,8 @@ def iter_feature_chunks(
     sample_ids: list[str] | set[str] | None = None,
     conn: duckdb.DuckDBPyConnection | None = None,
     chunk_size: int | str = "auto",
+    columns: list[str] | None = None,
+    target_rows: int = 15_000_000,
 ):
     """Stream feature data as chunks without accumulating in memory.
 
@@ -515,7 +546,11 @@ def iter_feature_chunks(
         conn: Optional DuckDB connection (created if not provided).
         chunk_size: Number of files per batch. 'auto' (default) probes the
             first 5 files to estimate rows-per-sample and self-tunes the
-            batch size to target ~15M rows per chunk.
+            batch size to target ``target_rows`` rows per chunk.
+        columns: If set, DuckDB will SELECT only these columns instead
+            of ``*``. Reduces memory for wide parquet files.
+        target_rows: Target rows per chunk for auto-sizing (default 15M).
+            Lower values reduce peak memory for heavy features.
 
     Yields:
         (chunk_df, chunk_idx, n_chunks): A tuple of the DataFrame chunk,
@@ -535,7 +570,9 @@ def iter_feature_chunks(
 
     # Resolve dynamic chunk sizing before entering the streaming loop
     if chunk_size == "auto":
-        chunk_size = _calculate_dynamic_chunk_size(conn, file_paths)
+        chunk_size = _calculate_dynamic_chunk_size(
+            conn, file_paths, target_rows=target_rows
+        )
     assert isinstance(chunk_size, int)
 
     n_chunks = math.ceil(len(file_paths) / chunk_size)
@@ -545,6 +582,8 @@ def iter_feature_chunks(
         n_files=len(file_paths),
         chunk_size=chunk_size,
         n_chunks=n_chunks,
+        column_projection=columns is not None,
+        target_rows=target_rows,
     )
 
     for chunk_idx in range(n_chunks):
@@ -552,7 +591,9 @@ def iter_feature_chunks(
         batch = file_paths[start : start + chunk_size]
         chunk_label = f"{chunk_idx + 1}/{n_chunks}"
 
-        df_chunk = _read_parquet_chunk(conn, batch, feature_suffix, chunk_label)
+        df_chunk = _read_parquet_chunk(
+            conn, batch, feature_suffix, chunk_label, columns=columns
+        )
 
         if df_chunk.empty:
             log.warning(
@@ -801,6 +842,7 @@ LABEL_META_COLS = {
     "SAMPLE_TYPE",
     "GENE_PANEL",
     "label",
+    "split",  # train/test/exclude — assigned by label pipeline (v0.0.16+)
     "has_impact_match",
     "has_snv",
     "has_sv",

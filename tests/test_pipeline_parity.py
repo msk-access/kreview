@@ -127,10 +127,7 @@ class TestPipelineParity:
         assert "method" in qc
 
         # Method-specific count key
-        if qc["method"] == "mrmr":
-            count_key = "n_mrmr_selected"
-        else:
-            count_key = "n_selected_union"
+        count_key = "n_mrmr_selected" if qc["method"] == "mrmr" else "n_selected_union"
 
         assert count_key in qc, f"Missing key '{count_key}' for method '{qc['method']}'"
 

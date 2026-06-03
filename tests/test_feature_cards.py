@@ -7,8 +7,6 @@ Covers:
   - Derived feature detection works
 """
 
-import pytest
-
 from kreview.feature_cards import build_feature_cards, get_card_for_feature, TIER_LABELS
 
 
