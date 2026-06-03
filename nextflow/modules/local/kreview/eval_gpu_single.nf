@@ -24,30 +24,36 @@ process KREVIEW_EVAL_GPU_SINGLE {
     publishDir "${params.outdir}/models/gpu", mode: 'copy'
 
     input:
-    path(matrix)  // Single selected *_matrix.parquet
+    path(matrix)       // Single selected *_matrix.parquet
+    path(eval_stats)   // Matching *_eval_stats.parquet for GPU feature capping
 
     output:
     path "*_gpu_model_results.json", emit: gpu_results
     path "*_model.joblib",           emit: joblib_models, optional: true
 
     script:
-    def evaluator     = matrix.baseName.replace('_matrix', '')
-    def models_arg    = params.gpu_models          ?: 'tabpfn,tabicl'
-    def device_arg    = params.gpu_device          ?: 'cuda'
-    def finetune_flag = params.gpu_no_finetune     ? '--no-finetune' : ''
-    def epochs_arg    = params.gpu_finetune_epochs ?: 30
-    def cv_folds      = params.cv_folds            ?: 5
+    def evaluator        = matrix.baseName.replace('_matrix', '')
+    def models_arg       = params.gpu_models          ?: 'tabpfn,tabicl'
+    def device_arg       = params.gpu_device          ?: 'cuda'
+    def finetune_flag    = params.gpu_no_finetune     ? '--no-finetune' : ''
+    def epochs_arg       = params.gpu_finetune_epochs ?: 30
+    def cv_folds         = params.cv_folds            ?: 5
+    def max_gpu_feat_arg = params.max_gpu_features    ?: 150
     """
     set -euo pipefail
 
-    # Stage single matrix into directory (kreview eval gpu expects --matrices-dir)
+    # Stage matrix and eval_stats into directory (kreview eval gpu expects --matrices-dir)
     mkdir -p matrices
     cp ${matrix} matrices/
+    if [ -f "${eval_stats}" ] && [ "${eval_stats}" != "NO_EVAL_STATS" ]; then
+        cp ${eval_stats} matrices/
+    fi
 
     echo "=== KREVIEW_EVAL_GPU_SINGLE: ${evaluator} ==="
     echo "Input:  ${matrix}"
     echo "Device: ${device_arg}"
     echo "Models: ${models_arg}"
+    echo "GPU Feature Cap: ${max_gpu_feat_arg}"
 
     # Singularity --no-home makes \$HOME read-only.
     # Redirect all cache/data dirs to the writable work directory.
@@ -72,6 +78,7 @@ process KREVIEW_EVAL_GPU_SINGLE {
         --cv-folds ${cv_folds} \\
         --seed ${params.seed ?: 42} \\
         ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
+        --max-gpu-features ${max_gpu_feat_arg} \\
         --output .
     GPU_EXIT=\$?
     set -e

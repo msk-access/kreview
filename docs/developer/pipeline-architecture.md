@@ -54,7 +54,7 @@ Every module in `kreview` is auto-generated from an nbdev notebook in `nbs/`. **
 
 | Module | Source Notebook | Functions | Used By |
 |--------|-----------------|-----------|---------|
-| `selection.py` | `nbs/04_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()` | `kreview run`, `kreview select` |
+| `selection.py` | `nbs/04_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()`, `MODEL_LABELS`, `POSITIVE_LABELS` | `kreview run`, `kreview select`, report templates |
 | `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()`, `load_model_results()`, `load_all_model_results()` | `kreview run`, `kreview eval cpu/gpu`, `selection.py`, `scoreboard.py`, report templates |
 | `scoreboard.py` | Standalone | `build_scoreboard()` | `kreview report`, `KREVIEW_SCOREBOARD` |
 | `core.py` | `nbs/00_core.ipynb` | `LABEL_META_COLS`, `Paths`, `LabelConfig` | All commands |
@@ -83,7 +83,7 @@ When editing these shared functions, always edit the **source notebook** (`nbs/*
 Each stage communicates through **parquet files** on disk:
 
 ```
-Label:    → labels.parquet  (5-tier ctDNA labels)
+Label:    → labels.parquet  (5-tier ctDNA labels + train/test split column)
 Extract:  → {evaluator}_matrix.parquet  (full features)
 Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
           → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
@@ -120,7 +120,7 @@ Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 | `KREVIEW_EXTRACT` | `extract.nf` | Samplesheets + labels.parquet | `*_matrix.parquet` | `outdir/matrices/raw/` |
 | `KREVIEW_SELECT_SINGLE` | `select_single.nf` | Raw matrix | Selected matrix + stats + QC | `outdir/matrices/selected/` |
 | `KREVIEW_EVAL_CPU_SINGLE` | `eval_cpu_single.nf` | Selected matrix | `*_model_results.json` + `*.joblib` | `outdir/models/cpu/` |
-| `KREVIEW_EVAL_GPU_SINGLE` | `eval_gpu_single.nf` | Selected matrix | `*_gpu_model_results.json` + `*.joblib` | `outdir/models/gpu/` |
+| `KREVIEW_EVAL_GPU_SINGLE` | `eval_gpu_single.nf` | Selected matrix + eval_stats | `*_gpu_model_results.json` + `*.joblib` | `outdir/models/gpu/` |
 | `KREVIEW_FUSE` | `fuse.nf` | All selected matrices | `super_matrix.parquet` | `outdir/matrices/fused/` |
 | `KREVIEW_SCOREBOARD` | `scoreboard.nf` | Collected CPU + GPU JSONs | `scoreboard_combined__all.parquet` | `outdir/` |
 | `KREVIEW_EVAL_MULTIMODAL` | `eval_multimodal.nf` | Fuse + eval results | Multimodal results | `outdir/models/multimodal/` |

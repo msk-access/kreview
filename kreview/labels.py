@@ -450,16 +450,17 @@ def compute_cna_summary(
 
 # %% ../nbs/01_labels.ipynb #439dcd7c
 class CtDNALabeler:
-    """Assigns 5-tier ctDNA labels to ACCESS cfDNA samples.
+    """Assigns 6-tier ctDNA labels to ACCESS cfDNA samples.
 
     Tiers: True ctDNA+, Possible ctDNA+, Possible ctDNA−,
-           Healthy Normal, Insufficient Data.
+           Healthy Normal, Undetermined, Insufficient Data.
 
     Features:
         - IMPACT tissue rescue for True ctDNA+ confirmation
         - Continuous VAF regression targets (mean_vaf, std_vaf)
-        - Optional CH hotspot filtering with automatic demotion
-          of samples whose only evidence is clonal hematopoiesis
+        - Optional CH hotspot filtering: samples whose only
+          somatic evidence is clonal hematopoiesis are labeled
+          ``Undetermined`` and excluded from binary classification
     """
 
     LABEL_TRUE_POS = "True ctDNA+"
@@ -467,6 +468,7 @@ class CtDNALabeler:
     LABEL_POSS_NEG = "Possible ctDNA−"
     LABEL_HEALTHY = "Healthy Normal"
     LABEL_INSUF_DATA = "Insufficient Data"
+    LABEL_UNDETERMINED = "Undetermined"
 
     def __init__(self, paths: Paths, config: LabelConfig = LabelConfig()):
         self.paths = paths
@@ -595,9 +597,9 @@ class CtDNALabeler:
                 )
                 labels["total_fragments_pf"] = labels[tf_col].fillna(0)
                 insufficient = (
-                    (labels["has_snv"] == False)
-                    & (labels["has_sv"] == False)
-                    & (labels["has_cna"] == False)
+                    (~labels["has_snv"])
+                    & (~labels["has_sv"])
+                    & (~labels["has_cna"])
                     & (labels["total_fragments_pf"] < self.config.min_fragments)
                 )
                 labels.loc[insufficient, "label"] = self.LABEL_INSUF_DATA
@@ -605,9 +607,13 @@ class CtDNALabeler:
             is_possible_pos = labels["has_snv"]
             labels.loc[is_possible_pos, "label"] = self.LABEL_POSS_POS
 
-            # CH-only demotion: if a sample's only evidence is CH mutations
-            # (n_non_ch_variants == 0) and it has no SV/CNA/IMPACT match,
-            # demote it from Possible ctDNA+ back to Possible ctDNA−.
+            # CH-only labeling: if a sample's only somatic evidence is CH
+            # hotspot variants (n_non_ch_variants == 0) and it has no
+            # SV/CNA/IMPACT tissue match, label as Undetermined.
+            # These are biologically ambiguous — mutations were detected
+            # but all are clonal hematopoiesis, not tumor-derived.
+            # "Undetermined" is NOT in _MODEL_LABELS, so these samples
+            # are automatically excluded from binary classification.
             ch_only = (
                 (labels["label"] == self.LABEL_POSS_POS)
                 & (labels["n_non_ch_variants"] == 0)
@@ -615,13 +621,16 @@ class CtDNALabeler:
                 & (~labels["has_sv"])
                 & (~labels["has_cna"])
             )
-            n_demoted = int(ch_only.sum())
-            if n_demoted > 0:
-                labels.loc[ch_only, "label"] = self.LABEL_POSS_NEG
+            n_undetermined = int(ch_only.sum())
+            if n_undetermined > 0:
+                labels.loc[ch_only, "label"] = self.LABEL_UNDETERMINED
                 log.warning(
-                    "ch_only_demotion_applied",
-                    n_demoted=n_demoted,
-                    msg="Samples with only CH variants demoted to Possible ctDNA−",
+                    "ch_only_undetermined",
+                    n_undetermined=n_undetermined,
+                    msg=(
+                        "Samples with only CH variants labeled Undetermined "
+                        "(excluded from binary classification)"
+                    ),
                 )
 
             is_true_pos = (
@@ -671,6 +680,90 @@ class CtDNALabeler:
                 )
         return pd.DataFrame(rows)
 
+    def _assign_train_test_split(
+        self,
+        labels: pd.DataFrame,
+        test_size: float = 0.2,
+        random_state: int = 42,
+    ) -> pd.DataFrame:
+        """Assign train/test split to labels, stratified by label tier.
+
+        Adds a ``split`` column ('train' or 'test') to the DataFrame.
+        The split is deterministic (seeded by ``random_state``) and
+        stratified per label to preserve class proportions in both sets.
+
+        Samples with labels NOT in ``_MODEL_LABELS`` (e.g. 'Undetermined',
+        'Insufficient Data') are excluded from the split (split='exclude').
+
+        Args:
+            labels: DataFrame with a 'label' column.
+            test_size: Fraction of modelable samples for holdout (default 0.2).
+            random_state: Seed for reproducible splits.
+
+        Returns:
+            DataFrame with added 'split' column.
+        """
+        from kreview.selection import _MODEL_LABELS
+        from sklearn.model_selection import StratifiedShuffleSplit
+
+        labels["split"] = "exclude"
+
+        # Only split modelable samples (those with labels used in training)
+        modelable_mask = labels["label"].isin(_MODEL_LABELS)
+        n_modelable = int(modelable_mask.sum())
+
+        if n_modelable < 20:
+            log.warning(
+                "insufficient_samples_for_split",
+                n_modelable=n_modelable,
+                action="all samples assigned to train",
+            )
+            labels.loc[modelable_mask, "split"] = "train"
+            return labels
+
+        modelable_labels = labels.loc[modelable_mask, "label"]
+
+        # Check if any class has fewer than 2 samples
+        min_class_count = modelable_labels.value_counts().min()
+        if min_class_count < 2:
+            log.warning(
+                "class_too_small_for_stratified_split",
+                min_class_count=min_class_count,
+                action="all samples assigned to train",
+            )
+            labels.loc[modelable_mask, "split"] = "train"
+            return labels
+
+        sss = StratifiedShuffleSplit(
+            n_splits=1, test_size=test_size, random_state=random_state
+        )
+        modelable_idx = labels.index[modelable_mask]
+
+        for train_idx, test_idx in sss.split(modelable_idx, modelable_labels):
+            labels.loc[modelable_idx[train_idx], "split"] = "train"
+            labels.loc[modelable_idx[test_idx], "split"] = "test"
+
+        n_train = int((labels["split"] == "train").sum())
+        n_test = int((labels["split"] == "test").sum())
+        n_exclude = int((labels["split"] == "exclude").sum())
+
+        log.info(
+            "train_test_split_assigned",
+            n_train=n_train,
+            n_test=n_test,
+            n_exclude=n_exclude,
+            test_fraction=round(n_test / max(1, n_train + n_test), 3),
+            random_state=random_state,
+            train_label_dist=labels.loc[labels["split"] == "train", "label"]
+            .value_counts()
+            .to_dict(),
+            test_label_dist=labels.loc[labels["split"] == "test", "label"]
+            .value_counts()
+            .to_dict(),
+        )
+
+        return labels
+
     def label_all(self) -> pd.DataFrame:
         try:
             cancer_labels = self._assign_labels(self._snv_df)
@@ -681,6 +774,9 @@ class CtDNALabeler:
                 self.config.min_vaf, self.config.min_variants
             )
             all_labels = pd.concat([cancer_labels, healthy_df], ignore_index=True)
+
+            # Assign train/test split (persisted in labels.parquet)
+            all_labels = self._assign_train_test_split(all_labels)
 
             counts = all_labels["label"].value_counts().to_dict()
             log.info("labeling_complete", distribution=counts)

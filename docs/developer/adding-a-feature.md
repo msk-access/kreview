@@ -34,7 +34,13 @@ class GCEvaluator(FeatureEvaluator):
     tier: int = 2
     category: str = "coverage"
     
-    # 2. Implement the mandatory extraction contract!
+    # 2. Optional: column projection + chunking hints (v0.0.16+)
+    #    extract_columns limits DuckDB to only these columns (saves memory)
+    #    max_chunk_rows sets max rows per DuckDB chunk (default: 10M)
+    extract_columns: list[str] | None = ["gc_ratio", "chrom", "start"]
+    max_chunk_rows: int = 10_000_000
+    
+    # 3. Implement the mandatory extraction contract!
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         """Convert standard DuckDB parquet loads into scalar ML features."""
         

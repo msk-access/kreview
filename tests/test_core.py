@@ -78,7 +78,6 @@ class TestConstants:
 
 # ── make_variant_key tests ───────────────────────────────────────────────────
 
-import numpy as np
 import pandas as pd
 
 from kreview.core import make_variant_key, VARIANT_KEY_COLS, LABEL_META_COLS
@@ -169,6 +168,7 @@ class TestLabelMetaCols:
             "has_snv",
             "has_sv",
             "has_cna",
+            "split",  # v0.0.16: train/test/exclude holdout assignment
         }
         missing = essential - LABEL_META_COLS
         assert not missing, f"LABEL_META_COLS missing essential columns: {missing}"

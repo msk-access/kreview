@@ -4,7 +4,6 @@
 from __future__ import annotations
 from pathlib import Path
 import structlog
-import pandas as pd
 
 log = structlog.get_logger()
 

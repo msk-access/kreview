@@ -38,7 +38,7 @@ flowchart TD
     SV_CNA -->|No| SNV{"Somatic SNVs\n≥ VAF threshold?"}
     SNV -->|Yes| CH{"CH-only\ncheck"}
     CH -->|"Non-CH variants > 0"| POSS_POS["Possible ctDNA+"]:::ppos
-    CH -->|"ALL variants are CH"| DEMOTED["Demoted → Possible ctDNA−"]:::demote
+    CH -->|"ALL variants are CH"| UNDET["Undetermined"]:::demote
     SNV -->|No| DEPTH{"Total fragments\n≥ 2,000?"}
     DEPTH -->|Yes| POSS_NEG["Possible ctDNA−"]:::pneg
     DEPTH -->|No| INSUF["Insufficient Data"]:::insuf
@@ -85,6 +85,12 @@ True negative controls. Drawn entirely from the MSK `XS1` and `XS2` healthy volu
 
     These samples are entirely excluded from the ML algorithms so low-depth noise doesn't corrupt the models.
 
+### 6. Undetermined (v0.0.16+)
+
+Samples whose **only** somatic evidence is clonal hematopoiesis (CH) hotspot variants. They have detected mutations, but all are blood-lineage (not tumor-derived). Because they are neither clearly positive nor clearly negative, they are labeled `Undetermined` and **excluded from all binary classification**.
+
+See [CH Hotspot Filtering](#clonal-hematopoiesis-ch-hotspot-filtering) below for the exact conditions.
+
 ---
 
 ## 🧬 Clonal Hematopoiesis (CH) Hotspot Filtering
@@ -128,13 +134,14 @@ IF label == "Possible ctDNA+"
    AND has_impact_match == False     (no IMPACT tissue confirmation)
    AND has_sv == False               (no structural variants)
    AND has_cna == False              (no copy number alterations)
-THEN → demote to "Possible ctDNA−"
+THEN → label as "Undetermined"
 ```
 
 !!! important "Demotion is conservative"
     - If **any** non-CH variant exists (`n_non_ch_variants > 0`), the sample retains its `Possible ctDNA+` label.
     - If the sample has an IMPACT match, SV, or CNA, it is promoted to `True ctDNA+` regardless of CH status.
-    - Demotion only affects the `Possible ctDNA+` tier — never `True ctDNA+`.
+    - Relabeling only affects the `Possible ctDNA+` tier — never `True ctDNA+`.
+    - `Undetermined` samples are excluded from binary classification (`build_binary_target()` ignores them).
 
 !!! tip "When to use CH filtering"
     CH filtering is **recommended for production cohorts** where elderly patients with CHIP may inflate the positive class. Pass the `--ch-hotspot-maf` flag to `kreview label`, `kreview extract`, or `kreview run`:
@@ -154,12 +161,31 @@ A typical production cohort produces a distribution like:
 |-------|-----------|---------|
 | True ctDNA+ | ~25% | Positive class (highest confidence) |
 | Possible ctDNA+ | ~35% | Positive class (medium confidence) |
-| Possible ctDNA− | ~15% | Excluded or negative class |
+| Possible ctDNA− | ~15% | Negative class |
 | Healthy Normal | ~20% | Negative class (control baseline) |
-| Insufficient Data | ~5% | Excluded from ML |
+| **Undetermined** | ~3% | **Excluded** from ML |
+| Insufficient Data | ~2% | Excluded from ML |
 
 !!! tip "Binary Classification"
-    For the ML pipeline, `True ctDNA+` and `Possible ctDNA+` are merged into a single binary positive class. `Healthy Normal` serves as the negative class. `Possible ctDNA−` and `Insufficient Data` are excluded.
+    For the ML pipeline, `True ctDNA+` and `Possible ctDNA+` are merged into a single binary positive class. `Healthy Normal` and `Possible ctDNA−` serve as the negative class. `Undetermined` and `Insufficient Data` are excluded.
+
+---
+
+## 🔀 Train/Test Split (v0.0.16+)
+
+The labeling engine automatically assigns an 80/20 **stratified holdout split** and persists it in `labels.parquet` as a `split` column:
+
+| Split Value | Meaning | Usage |
+|-------------|---------|-------|
+| `train` | 80% of modelable samples | CV training + feature selection |
+| `test` | 20% of modelable samples | Final holdout evaluation |
+| `exclude` | Non-modelable labels | Not used in any model |
+
+The split is:
+
+- **Stratified** by the 4-tier label (proportional representation per class)
+- **Deterministic** (`random_state=42` by default)
+- **Persistent** across pipeline re-runs (same samples always in same split)
 
 ---
 
