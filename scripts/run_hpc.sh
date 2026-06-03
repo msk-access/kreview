@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=kreview_0.0.15
+#SBATCH --job-name=kreview_0.0.16
 #SBATCH --partition=cmobic_cpu
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
@@ -8,7 +8,7 @@
 #SBATCH --error=kreview_%j.err
 
 # ============================================================================
-# kreview Nextflow Pipeline - IRIS SLURM Submission Script (v0.0.15)
+# kreview Nextflow Pipeline - IRIS SLURM Submission Script (v0.0.16)
 # ============================================================================
 # Usage:  sbatch run_hpc.sh
 # Resume: sbatch run_hpc.sh --resume
@@ -65,7 +65,7 @@ if [[ "${1:-}" == "--resume" ]]; then
 fi
 
 # --- Build manifest.txt listing all krewlyzer result directories ---
-MANIFEST="${PWD}/manifest_v0.0.15.txt"
+MANIFEST="${PWD}/manifest_v0.0.16.txt"
 cat > "${MANIFEST}" <<EOF
 /data1/shahr2/share/krewlyzer/0.8.3/access_12_245
 /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs1
@@ -95,7 +95,7 @@ nextflow run "${KREVIEW_REPO}" \
   --healthy_xs2_samplesheet /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs2/samplesheet.csv \
   --cbioportal_dir          /data1/core006/access/production/resources/cbioportal/current/msk_solid_heme \
   --krewlyzer_dir           "${MANIFEST}" \
-  --outdir                  $PWD/v0.0.15_eval \
+  --outdir                  $PWD/v0.0.16_eval \
   --pipeline_mode           multistage \
   --run_gpu_eval            true \
   --gpu_models              "tabpfn,tabicl" \
