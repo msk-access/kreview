@@ -24,31 +24,51 @@ process KREVIEW_EVAL_GPU_SINGLE {
     publishDir "${params.outdir}/models/gpu", mode: 'copy'
 
     input:
-    path(matrix)  // Single selected *_matrix.parquet
+    path(matrix)       // Single selected *_matrix.parquet
+    path(eval_stats)   // Matching *_eval_stats.parquet for GPU feature capping
 
     output:
     path "*_gpu_model_results.json", emit: gpu_results
     path "*_model.joblib",           emit: joblib_models, optional: true
 
     script:
-    def evaluator     = matrix.baseName.replace('_matrix', '')
-    def models_arg    = params.gpu_models          ?: 'tabpfn,tabicl'
-    def device_arg    = params.gpu_device          ?: 'cuda'
-    def finetune_flag = params.gpu_no_finetune     ? '--no-finetune' : ''
-    def epochs_arg    = params.gpu_finetune_epochs ?: 30
-    def cv_folds      = params.cv_folds            ?: 5
+    def evaluator        = matrix.baseName.replace('_matrix', '')
+    def models_arg       = params.gpu_models          ?: 'tabpfn,tabicl'
+    def device_arg       = params.gpu_device          ?: 'cuda'
+    def finetune_flag    = params.gpu_no_finetune     ? '--no-finetune' : ''
+    def epochs_arg       = params.gpu_finetune_epochs ?: 30
+    def cv_folds         = params.cv_folds            ?: 5
+    def max_gpu_feat_arg = params.max_gpu_features    ?: 150
     """
     set -euo pipefail
 
-    # Stage single matrix into directory (kreview eval gpu expects --matrices-dir)
+    # Stage matrix and eval_stats into directory (kreview eval gpu expects --matrices-dir)
     mkdir -p matrices
     cp ${matrix} matrices/
+    if [ -f "${eval_stats}" ] && [ "${eval_stats}" != "NO_EVAL_STATS" ]; then
+        cp ${eval_stats} matrices/
+    fi
 
     echo "=== KREVIEW_EVAL_GPU_SINGLE: ${evaluator} ==="
     echo "Input:  ${matrix}"
     echo "Device: ${device_arg}"
     echo "Models: ${models_arg}"
+    echo "GPU Feature Cap: ${max_gpu_feat_arg}"
 
+    # Singularity --no-home makes \$HOME read-only.
+    # Redirect all cache/data dirs to the writable work directory.
+    export HOME=\${PWD}/.home && mkdir -p \$HOME
+    export TMPDIR=\${PWD}/tmp && mkdir -p \$TMPDIR
+    export XDG_CACHE_HOME=\${PWD}/.cache && mkdir -p \$XDG_CACHE_HOME
+    export HF_HOME=\${XDG_CACHE_HOME}/huggingface
+    export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
+    export TABPFN_MODEL_CACHE_DIR=\${XDG_CACHE_HOME}/tabpfn
+    export TABPFN_NO_BROWSER=true
+    export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
+    ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set — TabPFN will be skipped if weights not cached"}
+
+    # Run GPU eval — capture exit code instead of failing on error
+    set +e
     PYTHONUNBUFFERED=1 kreview eval gpu \\
         --matrices-dir matrices \\
         --models ${models_arg} \\
@@ -58,7 +78,10 @@ process KREVIEW_EVAL_GPU_SINGLE {
         --cv-folds ${cv_folds} \\
         --seed ${params.seed ?: 42} \\
         ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
+        --max-gpu-features ${max_gpu_feat_arg} \\
         --output .
+    GPU_EXIT=\$?
+    set -e
 
     # Rename to GPU-prefixed filenames (avoid collision with CPU outputs)
     for f in *_model_results.json; do
@@ -67,10 +90,14 @@ process KREVIEW_EVAL_GPU_SINGLE {
         mv "\$f" "\${base}_gpu_model_results.json"
     done
 
-    # Verify output exists (fail loudly, not silently)
+    # Always produce output JSON — even on total failure.
+    # Nextflow collect() only receives outputs from exit-0 tasks.
+    # With errorStrategy 'ignore' + exit 1, the output channel never
+    # closes and downstream SCOREBOARD/MULTIMODAL hang forever.
     if ! ls *_gpu_model_results.json 1>/dev/null 2>&1; then
-        echo "ERROR: No GPU model results produced for ${evaluator}" >&2
-        exit 1
+        echo "WARNING: GPU eval failed for ${evaluator} (exit=\$GPU_EXIT), emitting error JSON" >&2
+        echo '{"evaluator": "${evaluator}", "error": "all_gpu_models_failed", "exit_code": '\$GPU_EXIT'}' \\
+            > "${evaluator}_gpu_model_results.json"
     fi
 
     echo "Output: \$(ls *_gpu_model_results.json)"

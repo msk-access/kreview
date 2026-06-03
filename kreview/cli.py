@@ -213,6 +213,8 @@ def _extract_evaluator(
             paths.krewlyzer_dirs,
             set(all_sample_ids),
             chunk_size=chunk_size,
+            columns=getattr(evaluator, "extract_columns", None),
+            target_rows=getattr(evaluator, "max_chunk_rows", 15_000_000),
         ):
             sid_col = "sample_id" if "sample_id" in chunk_df.columns else "SAMPLE_ID"
             chunk_sample_ids = chunk_df[sid_col].unique()
@@ -545,13 +547,22 @@ def run(
         "--deterministic/--no-deterministic",
         help="Enable PyTorch deterministic mode (slower but reproducible). Default: True.",
     ),
+    max_gpu_features: int = typer.Option(
+        150,
+        "--max-gpu-features",
+        help=(
+            "Maximum features for GPU models. If feature count exceeds this, "
+            "the top N are selected by mutual information from eval_stats. "
+            "Set to 0 to disable capping."
+        ),
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
     from kreview.core import Paths, LabelConfig
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
 
-    from kreview.eval_engine import evaluate_feature, cpu_models
+    from kreview.eval_engine import cpu_models
     from kreview.reproducibility import seed_everything
     import glob
     import json
@@ -851,7 +862,51 @@ def run(
 
         _echo(f"  Imputation: {impute_strategy}")
 
-        X = _impute(model_df[top_feats], impute_strategy).values
+        # ── Train/test split (v0.0.16+: persisted in labels.parquet) ──
+        has_split = "split" in model_df.columns
+        if has_split:
+            train_mask = model_df["split"] == "train"
+            test_mask = model_df["split"] == "test"
+            n_train = int(train_mask.sum())
+            n_test = int(test_mask.sum())
+            _echo(f"  Holdout split: {n_train} train / {n_test} test")
+            if n_train < 20 or n_test < 5:
+                log.warning(
+                    "holdout_split_too_small",
+                    evaluator=e.name,
+                    n_train=n_train,
+                    n_test=n_test,
+                    action="falling back to full CV",
+                )
+                has_split = False
+
+        if has_split:
+            X_train = _impute(
+                model_df.loc[train_mask, top_feats], impute_strategy
+            ).values
+            y_train = y[train_mask.values]
+            X_test = _impute(model_df.loc[test_mask, top_feats], impute_strategy).values
+            y_test = y[test_mask.values]
+            train_labels = (
+                model_df.loc[train_mask, "label"].values
+                if "label" in model_df.columns
+                else None
+            )
+            test_labels = (
+                model_df.loc[test_mask, "label"].values
+                if "label" in model_df.columns
+                else None
+            )
+        else:
+            X_train = _impute(model_df[top_feats], impute_strategy).values
+            y_train = y
+            X_test = None
+            y_test = None
+            train_labels = (
+                model_df["label"].values if "label" in model_df.columns else None
+            )
+            test_labels = None
+
         c_types = model_df.get("CANCER_TYPE", None)
         if c_types is not None:
             c_types = c_types.values
@@ -872,18 +927,54 @@ def run(
             lr_model, rf_model, xgb_model = None, None, None
         else:
             model_res, lr_model, rf_model, xgb_model = cpu_models(
-                X,
-                y,
+                X_train,
+                y_train,
                 feature_names=top_feats,
-                cancer_types=c_types,
-                assays=a_types,
+                cancer_types=(
+                    c_types[train_mask.values]
+                    if has_split and c_types is not None
+                    else c_types
+                ),
+                assays=(
+                    a_types[train_mask.values]
+                    if has_split and a_types is not None
+                    else a_types
+                ),
                 n_folds=cv_folds,
                 random_state=seed,
+                sample_labels=train_labels,
             )
+
+            # ── Holdout evaluation for CPU models (v0.0.16+) ──
+            if has_split and X_test is not None and len(y_test) > 0:
+                from kreview.eval_engine import evaluate_holdout
+
+                for model_name, fitted_model in [
+                    ("lr", lr_model),
+                    ("rf", rf_model),
+                    ("xgb", xgb_model),
+                ]:
+                    if fitted_model is not None:
+                        holdout_res = evaluate_holdout(
+                            fitted_model,
+                            X_test,
+                            y_test,
+                            model_name,
+                            sample_labels=test_labels,
+                        )
+                        model_res.update(holdout_res)
+
+                model_res["holdout_n_train"] = n_train
+                model_res["holdout_n_test"] = n_test
+
+            holdout_info = ""
+            if has_split:
+                holdout_auc = model_res.get("holdout_rf_auc")
+                holdout_info = f" | Holdout_RF={_fmt(holdout_auc)}"
             _echo(
                 f"  CPU: AUC_LR={_fmt(model_res.get('auc_lr'))}, "
                 f"AUC_RF={_fmt(model_res.get('auc_rf'))}, "
-                f"AUC_XGB={_fmt(model_res.get('auc_xgb'))}"
+                f"AUC_XGB={_fmt(model_res.get('auc_xgb'))}{holdout_info}"
             )
 
         # ── GPU models (tabpfn, tabicl) ──
@@ -901,11 +992,19 @@ def run(
                     from kreview.eval_engine import gpu_models
 
                     gpu_res, gpu_fitted = gpu_models(
-                        X,
-                        y,
+                        X_train,
+                        y_train,
                         feature_names=top_feats,
-                        cancer_types=c_types,
-                        assays=a_types,
+                        cancer_types=(
+                            c_types[train_mask.values]
+                            if has_split and c_types is not None
+                            else c_types
+                        ),
+                        assays=(
+                            a_types[train_mask.values]
+                            if has_split and a_types is not None
+                            else a_types
+                        ),
                         n_folds=cv_folds,
                         random_state=seed,
                         models=tuple(gpu_remaining),
@@ -914,10 +1013,45 @@ def run(
                         finetune_epochs=finetune_epochs,
                         finetune_lr=finetune_lr,
                         compute_shap=False,
+                        sample_labels=train_labels,
+                        max_gpu_features=(
+                            max_gpu_features if max_gpu_features > 0 else None
+                        ),
+                        eval_stats=eval_df,
                     )
+
+                    # ── Holdout evaluation for GPU models (v0.0.16+) ──
+                    if has_split and X_test is not None and len(y_test) > 0:
+                        from kreview.eval_engine import (
+                            evaluate_holdout as _eval_holdout_gpu,
+                        )
+
+                        # Apply same GPU feature cap to X_test (dimension must match)
+                        cap_idx = gpu_res.get("gpu_feature_cap_indices")
+                        X_test_gpu = (
+                            X_test[:, cap_idx] if cap_idx is not None else X_test
+                        )
+
+                        for model_name, fitted_model in gpu_fitted.items():
+                            if fitted_model is not None:
+                                holdout_res = _eval_holdout_gpu(
+                                    fitted_model,
+                                    X_test_gpu,
+                                    y_test,
+                                    model_name,
+                                    sample_labels=test_labels,
+                                )
+                                gpu_res.update(holdout_res)
+
                     model_res.update(gpu_res)
                     for mn in gpu_remaining:
-                        _echo(f"  GPU/{mn}: AUC={_fmt(model_res.get(f'auc_{mn}'))}")
+                        holdout_val = model_res.get(f"holdout_{mn}_auc")
+                        holdout_str = (
+                            f" | Holdout={holdout_val:.3f}" if holdout_val else ""
+                        )
+                        _echo(
+                            f"  GPU/{mn}: AUC={_fmt(model_res.get(f'auc_{mn}'))}{holdout_str}"
+                        )
                     log.info(
                         "gpu_models_complete",
                         evaluator=e.name,

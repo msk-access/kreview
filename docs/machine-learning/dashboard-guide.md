@@ -28,14 +28,18 @@ This mirrors clinical decision-making: start with a verdict, then inspect the ev
 | Cohort Size | Matrix row count | Establishes sample power |
 | Positive Rate | Label distribution | Shows class balance and clinical prevalence |
 | Best AUC [95% CI] | `auc_rf`, `auc_rf_ci_lower/upper` | Key discriminative metric with uncertainty |
-| Sensitivity @ Optimal | `rf_classification_report["1"]["recall"]` | True positive detection rate at optimal cutoff |
-| Specificity @ Optimal | `rf_classification_report["0"]["recall"]` | True negative rejection rate at optimal cutoff |
+| Sensitivity @ Optimal | `{best_m}_classification_report["1"]["recall"]` | True positive detection rate at optimal cutoff |
+| Specificity @ Optimal | `{best_m}_classification_report["0"]["recall"]` | True negative rejection rate at optimal cutoff |
+| Sens @ 100% Spec | `{best_m}_sensitivity_at_100spec` | Sensitivity at zero false-positive rate (v0.0.16+) |
+| Holdout AUC | `holdout_{best_m}_auc` | AUC on unseen 20% test set with CV–holdout delta (v0.0.16+) |
 | Verdict | AUC threshold logic | Quick interpretation (Strong ≥0.80, Moderate ≥0.70, Weak <0.70) |
 
 ### Why these metrics
 
 - **AUC with CI** prevents over-interpreting point estimates. A single AUC of 0.85 tells you nothing about whether 0.78–0.92 or 0.84–0.86 — the confidence interval reveals this.
 - **Sensitivity and specificity** are shown at the Youden's J optimal threshold because raw AUC doesn't tell clinicians what happens at a specific decision boundary.
+- **Sens @ 100% Spec** is the most clinically relevant metric for ctDNA screening: how many cancers are detected when zero healthy controls are called positive? The detection count is shown alongside sensitivity.
+- **Holdout AUC** reveals generalization: if the CV AUC is 0.90 but holdout is 0.75, the model is overfitting. The value box color dynamically adapts to the AUC drop severity (green < 0.05, yellow < 0.10, red ≥ 0.10).
 - **Verdict** uses conservative thresholds — an AUC below 0.70 has limited clinical utility for binary classification.
 
 ### ROC Sparkline + Calibration
@@ -44,7 +48,7 @@ The mini-ROC curve provides a visual sanity check. The calibration reliability d
 
 ### Scoreboard
 
-If multiple evaluators have been run, the scoreboard table surfaces the top performers for cross-evaluator comparison.
+If multiple evaluators have been run, the scoreboard table surfaces the top performers for cross-evaluator comparison. Columns include `best_model`, `best_auc`, `holdout_auc`, `auc_drop`, `sensitivity`, `specificity`, `sens_at_100spec`, `sens_at_95spec`, `selection_method`, `n_features`, `n_samples`, `holdout_n_train`, and `holdout_n_test`. Columns that are absent from the scoreboard DataFrame (e.g., pre-v0.0.16 results) are automatically hidden.
 
 ---
 
@@ -55,8 +59,9 @@ Nine tabs, each answering a specific validation question:
 ### Performance Metrics
 **Question**: How do the three models compare on clinical metrics?
 
-- Grouped bar chart comparing Precision, Sensitivity, Specificity, F1, and Accuracy across LR, RF, and XGBoost
-- Also shows AUC deltas (RF−LR, XGB−RF) and training times
+- Grouped bar chart comparing Precision, Sensitivity, Specificity, F1, and Accuracy across LR, RF, and XGBoost (plus GPU models when available)
+- Model summary table with AUC, Youden J threshold, training time, plus v0.0.16 clinical metrics: Sens@100%Spec, Sens@95%Spec, and Holdout AUC (auto-discovered per model)
+- AUC deltas (pairwise differences) and training times
 
 ### ROC Curves with CI
 **Question**: Is the discriminative power robust?
@@ -215,7 +220,7 @@ A model with AUC=0.95 is meaningless if 30% of features are missing or if label 
 
 ## Sidebar: Glossary
 
-Concise definitions of the four ctDNA labels used in analysis. Kept minimal to avoid cognitive overload.
+Concise definitions of the five ctDNA labels used in analysis, plus the `Undetermined` label (excluded from ML). Also documents the 80/20 train/test split for holdout evaluation. Kept minimal to avoid cognitive overload.
 
 ---
 

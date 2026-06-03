@@ -68,7 +68,7 @@ In multistage mode, all process outputs are published to `params.outdir` via `pu
 ```
 outdir/
 ├── labels/
-│   └── labels.parquet                          # 5-tier ctDNA labels
+│   └── labels.parquet                          # 5-tier ctDNA labels + split column
 ├── matrices/
 │   ├── raw/                                    # Per-evaluator raw feature matrices
 │   │   ├── AtacOnTarget_matrix.parquet
@@ -123,6 +123,7 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --multimodal_selection boruta_shap \
   --multimodal_gpu_models "tabpfn,tabicl" \
   --ch_hotspot_maf /path/to/ch_hotspots.maf \
+  --max_gpu_features 150 \
   --seed 42 \
   --deterministic true \
   -profile iris

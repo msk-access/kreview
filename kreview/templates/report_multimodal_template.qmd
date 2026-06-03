@@ -109,13 +109,10 @@ LAYOUT_DEFAULTS = dict(
 
 df = pd.read_parquet(matrix_path)
 
-meta_cols = {"SAMPLE_ID", "PATIENT_ID", "CANCER_TYPE", "CANCER_TYPE_DETAILED",
-             "ONCOTREE_CODE", "SAMPLE_TYPE", "GENE_PANEL", "access_version",
-             "has_impact_match", "n_impact_confirmed", "has_paired_impact",
-             "has_snv", "n_somatic_snvs", "n_total_somatic_snvs", "max_vaf",
-             "has_sv", "n_somatic_svs", "has_cna", "n_cna_events", "label",
-             "min_vaf_used", "min_variants_used", "min_fragments_used",
-             "sample_id", "filename"}
+# Import canonical metadata columns — single source of truth, stays in sync
+# with kreview.core automatically (includes split, n_ch_variants, etc.)
+from kreview.core import LABEL_META_COLS
+meta_cols = LABEL_META_COLS
 numeric_cols = [c for c in df.select_dtypes(include=np.number).columns if c not in meta_cols]
 
 eval_path = Path(matrix_path).parent / f"{feature_name}_eval_stats.parquet"
@@ -245,6 +242,10 @@ if mres is not None and top_feats:
             except Exception as e:
                 import structlog as _stlog; _stlog.get_logger().warning(f"{best_m}_kde_prediction_failed", error=str(e))
 
+    # Filter to model-eligible labels only.
+    # Undetermined samples (CH-only variants) are excluded by omission —
+    # they are not in the inclusion list below, matching the exclusion
+    # logic in build_binary_target() and _assign_train_test_split().
     model_label = df["label"].isin([
         "True ctDNA+", "Possible ctDNA+",
         "Healthy Normal", "Possible ctDNA-", "Possible ctDNA−"
@@ -315,6 +316,14 @@ if scoreboard_path.exists():
 - **`Healthy Normal`**: Healthy volunteer plasma.
 - **`Possible ctDNA−`**: Cancer patient with no detectable tumor DNA in plasma.
 
+**Excluded from Training**:
+
+- **`Undetermined`**: Somatic SNVs detected but all are clonal hematopoiesis hotspots with no SV/CNA evidence. Cannot be confidently classified.
+
+---
+
+**Train/Test Split**: Samples are deterministically assigned to train (80%) or test (20%) splits via stratified sampling with a fixed seed. Holdout AUC evaluates generalization on the test split only.
+
 ---
 
 *Distinct fragmentation patterns from tumor-derived cfDNA may be detectable in plasma via size, motif, and nucleosome positioning signatures.*
@@ -371,6 +380,41 @@ if mres and best_m and f"{best_m}_classification_report" in mres:
     if "0" in rep:
         spec = f"{rep['0']['recall']:.2f}"
 dict(value=spec, color="info", icon="shield-check")
+```
+
+```{python}
+#| content: valuebox
+#| title: "Sens @ 100% Spec"
+_s100 = "N/A"
+if mres and best_m:
+    # Dynamic: uses best_m (discovered from max AUC), not a hardcoded model
+    _s100_val = mres.get(f"{best_m}_sensitivity_at_100spec")
+    if _s100_val is not None:
+        _n_det = mres.get(f"{best_m}_n_detected_at_100spec", "?")
+        _s100 = f"{_s100_val:.2f} ({_n_det} det)"
+dict(value=_s100, color="danger", icon="crosshair")
+```
+
+```{python}
+#| content: valuebox
+#| title: "Holdout AUC"
+_ho = "N/A"
+_ho_color = "info"
+if mres and best_m:
+    _ho_val = mres.get(f"holdout_{best_m}_auc")
+    if _ho_val is not None:
+        _cv_auc = mres.get(f"auc_{best_m}", 0)
+        _drop = _cv_auc - _ho_val if _cv_auc else None
+        _drop_str = f" (Δ{_drop:+.3f})" if _drop is not None else ""
+        _ho = f"{_ho_val:.3f}{_drop_str}"
+        # Dynamic color based on AUC drop severity
+        if _drop is not None and _drop < 0.05:
+            _ho_color = "success"
+        elif _drop is not None and _drop < 0.10:
+            _ho_color = "warning"
+        else:
+            _ho_color = "danger"
+dict(value=_ho, color=_ho_color, icon="arrow-left-right")
 ```
 
 ```{python}
@@ -489,7 +533,14 @@ if not has_cal:
 ```{python}
 #| title: "Evaluator Scoreboard"
 if scoreboard_df is not None:
-    display_cols = ["evaluator", "best_auc", "sensitivity", "specificity", "selection_method", "n_features", "n_samples"]
+    display_cols = [
+        "evaluator", "best_model", "best_auc",
+        "holdout_auc", "auc_drop",
+        "sensitivity", "specificity",
+        "sens_at_100spec", "sens_at_95spec",
+        "selection_method", "n_features", "n_samples",
+        "holdout_n_train", "holdout_n_test",
+    ]
     avail = [c for c in display_cols if c in scoreboard_df.columns]
     itables.show(
         scoreboard_df[avail].round(3),
@@ -600,6 +651,16 @@ if mres is not None:
                 "Threshold (Youden J)": f"{threshold:.3f}" if threshold else "N/A",
                 "Training Time (s)": f"{t_sec:.2f}" if t_sec else "N/A",
             })
+            # Dynamic clinical metrics — auto-discover from mres keys
+            _s100 = mres.get(f"{prefix}_sensitivity_at_100spec")
+            if _s100 is not None:
+                summary_rows[-1]["Sens@100%Spec"] = f"{_s100:.3f}"
+            _s95 = mres.get(f"{prefix}_sensitivity_at_95spec")
+            if _s95 is not None:
+                summary_rows[-1]["Sens@95%Spec"] = f"{_s95:.3f}"
+            _ho_auc = mres.get(f"holdout_{prefix}_auc")
+            if _ho_auc is not None:
+                summary_rows[-1]["Holdout AUC"] = f"{_ho_auc:.3f}"
     if summary_rows:
         # Dynamic AUC deltas: show pairwise differences from mres
         delta_parts = []

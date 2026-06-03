@@ -54,7 +54,7 @@ mkdocs build --strict
 
 ### 3. Bump Version
 
-Update the version in two places:
+Update the version in three places:
 
 === "settings.ini"
 
@@ -66,6 +66,12 @@ Update the version in two places:
 
     ```python
     __version__ = "0.1.0"
+    ```
+
+=== "nextflow/nextflow.config"
+
+    ```groovy
+    kreview_version = '0.1.0'
     ```
 
 ### 4. Commit and Merge

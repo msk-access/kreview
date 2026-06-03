@@ -213,8 +213,9 @@ kreview select --matrices-dir output/ --top-percentile 50 --strategy mrmr --outp
 # Steps 3a/3b/3c can run in PARALLEL
 # 3a: CPU model evaluation
 kreview eval cpu --matrices-dir selected/ --output results/
-# 3b: GPU model evaluation (optional)
-kreview eval gpu --matrices-dir selected/ --output results/
+# 3b: GPU model evaluation (optional, uses eval_stats for feature capping)
+kreview eval gpu --matrices-dir selected/ --output results/ \
+    --eval-stats-dir selected/ --max-gpu-features 150
 # 3c: Fuse selected matrices → super-matrix
 kreview fuse --output-dir selected/
 
@@ -262,7 +263,7 @@ kreview label \
   --output labels.parquet
 ```
 
-This produces a single Parquet file with sample IDs, clinical metadata, and the assigned 5-tier labels.
+This produces a single Parquet file with sample IDs, clinical metadata, the assigned 5-tier labels, and a `split` column (`train`/`test`/`exclude`) for holdout validation.
 
 ---
 

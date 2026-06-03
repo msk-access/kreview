@@ -61,12 +61,25 @@ class FeatureEvaluator:
     Subclasses must implement ``extract()`` for per-sample Python extraction.
     Optionally, override ``extract_sql()`` to return a DuckDB SQL query that
     performs full-cohort extraction in a single pass (no Python loop).
+
+    Class Attributes:
+        name: Evaluator identifier (used in file names, logging).
+        source_file: Parquet suffix (e.g. '.WPS.parquet').
+        tier: Feature importance tier (1=core, 2=supplementary).
+        category: Feature category for grouping (e.g. 'epigenetics').
+        extract_columns: If set, DuckDB will SELECT only these columns
+            instead of ``*``. Reduces memory for wide parquet files.
+            Must include 'sample_id' (or it will be auto-appended).
+        max_chunk_rows: Target rows per DuckDB chunk (default 15M).
+            Lower values reduce peak memory for heavy features.
     """
 
     name: str = "base"
     source_file: str = ".dummy.parquet"
     tier: int = 1
     category: str = "general"
+    extract_columns: list[str] | None = None
+    max_chunk_rows: int = 15_000_000
 
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         """Transform the loaded raw dataframe into meaningful scalar metrics.
@@ -740,6 +753,7 @@ def evaluate_model(
     compute_shap: bool = False,
     shap_samples: int = 500,
     random_state: int = 42,
+    sample_labels: np.ndarray | None = None,
 ) -> tuple[dict, object | None]:
     """Evaluate any sklearn-compatible model via stratified cross-validation.
 
@@ -756,14 +770,43 @@ def evaluate_model(
         refit: If True, refit model on full data after CV.
         compute_shap: If True, compute SHAP values (requires refit=True).
         shap_samples: Max samples for SHAP computation.
+        random_state: Random seed for bootstrap CI.
+        sample_labels: Original 4-tier labels (e.g. "Healthy Normal",
+            "Possible ctDNA+") for computing sensitivity@100%spec on
+            healthy normals only. Shape (n_samples,). Optional.
 
     Returns:
         (result_dict, fitted_model_or_None). result_dict keys are prefixed
-        with ``name`` (e.g. ``auc_rf``, ``rf_oof_probs``, ``rf_fold_aucs``).
+        with ``name`` (e.g. ``auc_rf``, ``rf_oof_probs``, ``rf_fold_aucs``,
+        ``rf_sensitivity_at_100spec``).
     """
     import time
 
     result = {}
+
+    # 0. Ensure sklearn-compatible classes_ attribute.
+    # TabPFN's FinetunedTabPFNClassifier and TabICL wrappers don't expose
+    # classes_ on the outer object, causing cross_val_predict to fail with
+    # AttributeError. Setting it here is safe for all models — LR/RF/XGB
+    # already have classes_ after fit() (hasattr check is a no-op).
+    # Note: sklearn Pipeline exposes classes_ as a read-only @property, so
+    # hasattr() returns False when unfitted but assignment still raises
+    # AttributeError. We use try/except to handle both cases.
+    if not hasattr(model, "classes_"):
+        try:
+            model.classes_ = np.unique(y)
+            log.debug(
+                "classes_attribute_set",
+                model=name,
+                classes=model.classes_.tolist(),
+                reason="model lacks classes_ attribute (TabPFN/TabICL wrapper)",
+            )
+        except AttributeError:
+            log.debug(
+                "classes_attribute_skipped",
+                model=name,
+                reason="read-only property (e.g. sklearn Pipeline)",
+            )
 
     # 1. Out-of-fold predictions via cross-validation
     oof_probs = cross_val_predict(model, X, y, cv=cv, method="predict_proba")[:, 1]
@@ -777,6 +820,70 @@ def evaluate_model(
     ci_lo, ci_hi = _bootstrap_auc(y, oof_probs, seed=random_state)
     result[f"auc_{name}_ci_lower"] = ci_lo
     result[f"auc_{name}_ci_upper"] = ci_hi
+
+    # 3b. Sensitivity at fixed specificity operating points.
+    # Clinically: "at the threshold where no healthy person is called
+    # positive, how many cancers do we detect?"
+    fpr, tpr, thresholds = roc_curve(y, oof_probs)
+
+    # Primary: sensitivity @ 100% specificity (FPR = 0)
+    zero_fpr_mask = fpr == 0.0
+    if zero_fpr_mask.any():
+        sens_100 = float(tpr[zero_fpr_mask][-1])
+        thresh_100 = float(thresholds[zero_fpr_mask][-1])
+    else:
+        sens_100 = 0.0
+        thresh_100 = float("inf")
+
+    result[f"{name}_sensitivity_at_100spec"] = sens_100
+    result[f"{name}_threshold_at_100spec"] = thresh_100
+    result[f"{name}_n_detected_at_100spec"] = int(round(sens_100 * y.sum()))
+    result[f"{name}_n_total_positive"] = int(y.sum())
+
+    # Secondary: sensitivity @ 99% and 95% specificity
+    for target_spec, spec_label in [(0.99, "99spec"), (0.95, "95spec")]:
+        target_fpr = 1.0 - target_spec
+        valid_mask = fpr <= target_fpr
+        if valid_mask.any():
+            result[f"{name}_sensitivity_at_{spec_label}"] = float(tpr[valid_mask][-1])
+        else:
+            result[f"{name}_sensitivity_at_{spec_label}"] = 0.0
+
+    # Healthy-normal-only specificity: threshold set by the max predicted
+    # probability among Healthy Normal samples (strictest clinical bar).
+    if sample_labels is not None:
+        healthy_mask = np.array([lbl == "Healthy Normal" for lbl in sample_labels])
+        if healthy_mask.any():
+            healthy_probs = oof_probs[healthy_mask]
+            max_healthy_prob = float(healthy_probs.max())
+            positive_mask = y == 1
+            n_pos = int(positive_mask.sum())
+            if n_pos > 0:
+                detected = int((oof_probs[positive_mask] > max_healthy_prob).sum())
+                sens_healthy = detected / n_pos
+            else:
+                detected = 0
+                sens_healthy = 0.0
+            result[f"{name}_sensitivity_at_100spec_healthy"] = float(sens_healthy)
+            result[f"{name}_threshold_at_100spec_healthy"] = max_healthy_prob
+            result[f"{name}_n_detected_at_100spec_healthy"] = detected
+            log.info(
+                "clinical_sensitivity_computed",
+                model=name,
+                sens_100spec=f"{sens_100:.3f}",
+                sens_100spec_healthy=f"{sens_healthy:.3f}",
+                n_detected_healthy=detected,
+                n_total_positive=n_pos,
+                n_healthy=int(healthy_mask.sum()),
+            )
+        else:
+            log.debug("no_healthy_normals_in_sample_labels", model=name)
+    else:
+        log.debug(
+            "sample_labels_not_provided",
+            model=name,
+            impact="sensitivity_at_100spec_healthy not computed",
+        )
 
     # 4. Optimal threshold + classification metrics
     threshold = _optimal_threshold(y, oof_probs)
@@ -828,6 +935,108 @@ def evaluate_model(
     return result, fitted
 
 
+def evaluate_holdout(
+    fitted_model,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    name: str,
+    sample_labels: np.ndarray | None = None,
+) -> dict:
+    """Evaluate a fitted model on the holdout test set.
+
+    This is called AFTER ``evaluate_model()`` has refitted the model on
+    the full training set. The holdout set was never seen during CV or
+    feature selection, providing an unbiased estimate of generalization.
+
+    Args:
+        fitted_model: Model already fitted on training data.
+        X_test: Holdout feature matrix.
+        y_test: Holdout binary labels.
+        name: Model name prefix for result keys.
+        sample_labels: Original label strings for the holdout set
+            (for healthy-normal specificity).
+
+    Returns:
+        Dict with holdout metrics, all prefixed with ``holdout_{name}_``.
+    """
+    result = {}
+    prefix = f"holdout_{name}"
+
+    if len(np.unique(y_test)) < 2:
+        log.warning(
+            "holdout_single_class",
+            model=name,
+            n_test=len(y_test),
+            y_unique=np.unique(y_test).tolist(),
+        )
+        result[f"{prefix}_error"] = "single_class_in_holdout"
+        return result
+
+    try:
+        probs = fitted_model.predict_proba(X_test)[:, 1]
+    except Exception as e:
+        log.error("holdout_predict_failed", model=name, error=str(e))
+        result[f"{prefix}_error"] = str(e)
+        return result
+
+    # AUC
+    auc_val = roc_auc_score(y_test, probs)
+    result[f"{prefix}_auc"] = auc_val
+
+    # Bootstrap CI
+    ci_lo, ci_hi = _bootstrap_auc(y_test, probs, seed=42)
+    result[f"{prefix}_auc_ci_lower"] = ci_lo
+    result[f"{prefix}_auc_ci_upper"] = ci_hi
+
+    # Sensitivity @ fixed specificity
+    fpr, tpr, thresholds = roc_curve(y_test, probs)
+    zero_fpr_mask = fpr == 0.0
+    sens_100 = float(tpr[zero_fpr_mask][-1]) if zero_fpr_mask.any() else 0.0
+    result[f"{prefix}_sensitivity_at_100spec"] = sens_100
+    result[f"{prefix}_n_detected_at_100spec"] = int(round(sens_100 * y_test.sum()))
+    result[f"{prefix}_n_total_positive"] = int(y_test.sum())
+    result[f"{prefix}_n_total_negative"] = int((y_test == 0).sum())
+
+    for target_spec, spec_label in [(0.99, "99spec"), (0.95, "95spec")]:
+        target_fpr = 1.0 - target_spec
+        valid_mask = fpr <= target_fpr
+        if valid_mask.any():
+            result[f"{prefix}_sensitivity_at_{spec_label}"] = float(tpr[valid_mask][-1])
+        else:
+            result[f"{prefix}_sensitivity_at_{spec_label}"] = 0.0
+
+    # Healthy-normal specificity on holdout
+    if sample_labels is not None:
+        healthy_mask = np.array([lbl == "Healthy Normal" for lbl in sample_labels])
+        if healthy_mask.any():
+            max_healthy_prob = float(probs[healthy_mask].max())
+            positive_mask = y_test == 1
+            n_pos = int(positive_mask.sum())
+            if n_pos > 0:
+                detected = int((probs[positive_mask] > max_healthy_prob).sum())
+                result[f"{prefix}_sensitivity_at_100spec_healthy"] = detected / n_pos
+            else:
+                result[f"{prefix}_sensitivity_at_100spec_healthy"] = 0.0
+
+    # Classification metrics at optimal threshold
+    threshold = _optimal_threshold(y_test, probs)
+    result[f"{prefix}_optimal_threshold"] = threshold
+    cls_rep, cm = _classification_metrics(y_test, probs, threshold=threshold)
+    result[f"{prefix}_classification_report"] = cls_rep
+    result[f"{prefix}_confusion_matrix"] = cm
+
+    log.info(
+        "holdout_evaluation_complete",
+        model=name,
+        holdout_auc=f"{auc_val:.3f}",
+        holdout_sens_100spec=f"{sens_100:.3f}",
+        n_test=len(y_test),
+        n_positive=int(y_test.sum()),
+    )
+
+    return result
+
+
 def _extract_importances(
     fitted_model, feature_names: list[str], model_name: str
 ) -> dict | list | None:
@@ -875,12 +1084,17 @@ def cpu_models(
     random_state: int = 42,
     compute_shap: bool = False,
     shap_samples: int = 500,
+    sample_labels: np.ndarray | None = None,
 ) -> tuple[dict, object, object, object]:
     """Train LR, RF, and XGB on a feature matrix with stratified CV.
 
     Delegates per-model evaluation to ``evaluate_model()``, then adds
     cross-model diagnostics (AUC deltas, top features, threshold sweep,
     DCA, feature stability, subgroup analysis).
+
+    Args:
+        sample_labels: Original 4-tier labels for computing healthy-normal
+            specificity. Passed to ``evaluate_model()``.
 
     Returns (results_dict, lr_pipeline, rf_model, xgb_model).
 
@@ -941,6 +1155,7 @@ def cpu_models(
             "lr",
             feature_names=feature_names,
             random_state=random_state,
+            sample_labels=sample_labels,
         )
         results.update(lr_res)
         results["lr_coef_direction"] = (
@@ -963,6 +1178,7 @@ def cpu_models(
             "rf",
             feature_names=feature_names,
             random_state=random_state,
+            sample_labels=sample_labels,
         )
         results.update(rf_res)
 
@@ -987,6 +1203,7 @@ def cpu_models(
                     "xgb",
                     feature_names=feature_names,
                     random_state=random_state,
+                    sample_labels=sample_labels,
                 )
                 results.update(xgb_res)
             except Exception as e:
@@ -1334,6 +1551,9 @@ def gpu_models(
     finetune_lr: float = 1e-5,
     compute_shap: bool = False,
     shap_samples: int = 500,
+    sample_labels: np.ndarray | None = None,
+    max_gpu_features: int | None = None,
+    eval_stats: pd.DataFrame | None = None,
 ) -> tuple[dict, dict[str, object]]:
     """Train GPU foundation models (TabPFN, TabICL) on a feature matrix.
 
@@ -1355,6 +1575,14 @@ def gpu_models(
         finetune_lr: Learning rate for fine-tuning.
         compute_shap: If True, compute SHAP values.
         shap_samples: Max samples for SHAP computation.
+        sample_labels: Original 4-tier labels for computing healthy-normal
+            specificity. Passed to ``evaluate_model()``.
+        max_gpu_features: If set and n_features > max_gpu_features,
+            cap to the top N features using eval_stats scores.
+            Default None (no cap). CLI default is 150.
+        eval_stats: DataFrame from ``score_features()`` containing
+            feature scoring columns. Used for intelligent feature
+            capping when max_gpu_features is set.
 
     Returns:
         (results_dict, fitted_models_dict). fitted_models_dict maps
@@ -1362,6 +1590,57 @@ def gpu_models(
     """
     results = {}
     fitted_models = {}
+
+    # ── GPU feature capping (v0.0.16+) ──
+    # TabPFN has practical limits on feature count (~150-200).
+    # If max_gpu_features is set and we exceed it, select the top N
+    # features by score (mutual_info > univariate_auc > variance).
+    n_orig_features = X.shape[1]
+    if max_gpu_features is not None and n_orig_features > max_gpu_features:
+        if eval_stats is not None and feature_names is not None:
+            # Score-based selection from eval_stats
+            score_col = None
+            for candidate in ["mutual_info", "univariate_auc"]:
+                if candidate in eval_stats.columns:
+                    score_col = candidate
+                    break
+
+            if score_col and "feature_column" in eval_stats.columns:
+                # Match eval_stats features to current feature_names
+                scored = eval_stats[
+                    eval_stats["feature_column"].isin(feature_names)
+                ].nlargest(max_gpu_features, score_col)
+                selected = scored["feature_column"].tolist()
+                keep_idx = [i for i, f in enumerate(feature_names) if f in selected]
+            else:
+                # Fallback: variance-based selection
+                log.warning("gpu_cap_no_score_column", fallback="variance")
+                variances = np.var(X, axis=0)
+                keep_idx = np.argsort(variances)[-max_gpu_features:].tolist()
+        else:
+            # No eval_stats: variance-based fallback
+            log.warning("gpu_cap_no_eval_stats", fallback="variance")
+            variances = np.var(X, axis=0)
+            keep_idx = np.argsort(variances)[-max_gpu_features:].tolist()
+
+        keep_idx.sort()  # Preserve original column order
+        X = X[:, keep_idx]
+        if feature_names is not None:
+            feature_names = [feature_names[i] for i in keep_idx]
+
+        log.info(
+            "gpu_features_capped",
+            original=n_orig_features,
+            capped_to=X.shape[1],
+            max_gpu_features=max_gpu_features,
+            method="score_based" if eval_stats is not None else "variance",
+        )
+        results["gpu_feature_cap_applied"] = True
+        results["gpu_feature_cap_original"] = n_orig_features
+        results["gpu_feature_cap_final"] = X.shape[1]
+        results["gpu_feature_cap_indices"] = keep_idx  # Callers use to cap X_test
+    else:
+        results["gpu_feature_cap_applied"] = False
 
     try:
         y = y.astype(int)
@@ -1409,6 +1688,7 @@ def gpu_models(
                     compute_shap=compute_shap,
                     shap_samples=shap_samples,
                     random_state=random_state,
+                    sample_labels=sample_labels,
                 )
                 results.update(model_res)
                 fitted_models[model_name] = fitted
@@ -1640,10 +1920,14 @@ def _load_per_evaluator_baselines(
                 mn = k.replace("_oof_probs", "")
                 model_names.append(mn)
                 oof_probs[mn] = v
-            if k.startswith("auc_") and isinstance(v, (int, float)):
+            if (
+                k.startswith("auc_")
+                and isinstance(v, (int, float))
+                and not k.endswith("_ci_lower")
+                and not k.endswith("_ci_upper")
+            ):
                 # Exclude CI bounds
-                if not k.endswith("_ci_lower") and not k.endswith("_ci_upper"):
-                    aucs[k.replace("auc_", "")] = v
+                aucs[k.replace("auc_", "")] = v
 
         if not model_names:
             log.warning(

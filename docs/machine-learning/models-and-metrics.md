@@ -53,7 +53,7 @@ The number of folds is dynamically bounded by the minimum class size to prevent 
 
 ---
 
-## Metric Categories (9 total)
+## Metric Categories (10 total)
 
 ### 1. ROC-AUC & Bootstrap CIs
 
@@ -94,7 +94,22 @@ Stored as `rf_dca` and `xgb_dca`.
 
 To assess model stability, kreview runs `cross_val_score` separately and stores per-fold AUC for all three models. A high standard deviation (>0.05) suggests the model is data-sensitive. Stored as `{prefix}_fold_aucs` and `{prefix}_auc_std`.
 
-### 8. SHAP Explainability
+### 8. Sensitivity at Fixed Specificity (v0.0.16+)
+
+In clinical ctDNA detection, **zero false positives on healthy controls** is paramount. kreview computes sensitivity at multiple specificity thresholds:
+
+| Metric | Key | Clinical Meaning |
+|--------|-----|------------------|
+| Sensitivity @ 100% spec | `{name}_sensitivity_at_100spec` | At zero FPR: how many cancers detected? |
+| Sensitivity @ 99% spec | `{name}_sensitivity_at_99spec` | At 1% FPR |
+| Sensitivity @ 95% spec | `{name}_sensitivity_at_95spec` | At 5% FPR |
+| Healthy-normal specificity | `{name}_sensitivity_at_100spec_healthy` | At threshold where no Healthy Normal is FP |
+| Threshold @ 100% spec | `{name}_threshold_at_100spec` | Decision boundary for zero FPR |
+| Detected @ 100% spec | `{name}_n_detected_at_100spec` | Number of true positives at zero FPR |
+
+The healthy-normal variant uses the max predicted probability among `Healthy Normal` samples as the threshold — clinically this means "no healthy person is called positive."
+
+### 9. SHAP Explainability
 
 For RF and XGBoost, kreview generates **SHAP (SHapley Additive exPlanations)** values using `TreeExplainer`:
 
@@ -105,7 +120,7 @@ For RF and XGBoost, kreview generates **SHAP (SHapley Additive exPlanations)** v
 !!! warning "Interpretation"
     SHAP explains how the model decides, not biological causality. A feature with high SHAP impact may reflect a data artifact rather than a biological mechanism.
 
-### 9. Subgroup Analysis (Out-Of-Fold)
+### 10. Subgroup Analysis (Out-Of-Fold)
 
 After training, the pipeline evaluates model sensitivity across biological subgroups using **out-of-fold predictions** (preventing optimistic bias):
 
@@ -164,6 +179,39 @@ interaction_values = explainer.explain(X_explain)
 
 By default, fitted GPU models are saved as `.joblib` files (like CPU models) for downstream SHAP rendering in reports. Since these files can be large (>200MB), use `--skip-gpu-joblib` to opt out. When joblib is skipped, reports will render mean |SHAP| bar charts from pre-computed values in the JSON instead of interactive beeswarm plots.
 
+### GPU Feature Capping (v0.0.16+)
+
+TabPFN has practical VRAM limits (~150-200 features). When `--max-gpu-features` is set (default: 150 in Nextflow), kreview caps features using a priority hierarchy:
+
+1. **Score-based** (from `eval_stats`): Top features by `mutual_info` or `univariate_auc`
+2. **Variance fallback**: If no scores available, top features by variance
+
+The same cap indices are applied to both training and holdout data to ensure dimension consistency.
+
+---
+
+## 80/20 Holdout Evaluation (v0.0.16+)
+
+In addition to cross-validation, kreview performs **holdout evaluation** on the 20% test set that was never seen during feature selection or CV:
+
+```
+Full Data → 80/20 split (stratified by label)
+  80% TRAIN → feature selection → 10-fold CV → development AUC
+  20% TEST  → never touched → holdout AUC (honest estimate)
+```
+
+After CV completes, the best model is refit on the full training set and evaluated on the holdout:
+
+| Metric | Key | Description |
+|--------|-----|-------------|
+| Holdout AUC | `holdout_{name}_auc` | AUC on unseen test data |
+| Holdout AUC CI | `holdout_{name}_auc_ci_lower/upper` | Bootstrap 95% CI |
+| Holdout Sensitivity | `holdout_{name}_sensitivity_at_100spec` | Sensitivity at zero FPR on test |
+| AUC Drop | `auc_drop` (scoreboard) | CV AUC − Holdout AUC (overfit diagnostic) |
+
+!!! warning "Interpreting AUC Drop"
+    A positive `auc_drop` indicates the CV AUC was optimistic (overfitting). A negative value means the holdout actually performed better than CV (common with small test sets).
+
 ---
 
 ## QC Metrics
@@ -195,13 +243,16 @@ To assess whether the same features are consistently ranked as important across 
 
 ## JSON Output Schema Summary
 
-`single_feature_model()` produces **45 JSON fields** per feature set:
+`cpu_models()` + `evaluate_holdout()` produce **60+ JSON fields** per feature set:
 
 | Category | Fields | Count |
 |----------|--------|-------|
 | AUC & CI | `auc_{lr,rf,xgb}`, `auc_*_ci_lower`, `auc_*_ci_upper` | 9 |
 | Classification | `*_classification_report`, `*_confusion_matrix` | 6 |
 | Thresholds | `*_optimal_threshold` | 3 |
+| Sensitivity @ Spec | `*_sensitivity_at_{100,99,95}spec`, `*_threshold_at_100spec`, `*_n_detected_at_100spec`, `*_n_total_positive` | 18 |
+| Healthy-Normal Spec | `*_sensitivity_at_100spec_healthy`, `*_threshold_at_100spec_healthy` | 6 |
+| Holdout Metrics | `holdout_*_auc`, `holdout_*_sensitivity_at_100spec`, `holdout_n_train/test` | 12+ |
 | PR Curves | `*_pr_curve`, `*_avg_precision` | 6 |
 | DCA | `rf_dca`, `xgb_dca` | 2 |
 | Fold AUCs | `*_fold_aucs`, `*_auc_std` | 6 |

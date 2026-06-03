@@ -110,6 +110,22 @@ class TestBuildBinaryTarget:
         with pytest.raises(ValueError, match="Only one class"):
             build_binary_target(df)
 
+    def test_filters_undetermined_labels(self):
+        """Undetermined (CH-only, v0.0.16+) must be excluded from binary target."""
+        df = pd.DataFrame(
+            {
+                "label": ["True ctDNA+"] * 15
+                + ["Healthy Normal"] * 15
+                + ["Undetermined"] * 5,
+                "feat": np.ones(35),
+            }
+        )
+        model_df, y = build_binary_target(df)
+        assert (
+            len(model_df) == 30
+        ), f"Undetermined samples should be excluded, got {len(model_df)}"
+        assert "Undetermined" not in model_df["label"].values
+
 
 # ---------------------------------------------------------------------------
 # _impute

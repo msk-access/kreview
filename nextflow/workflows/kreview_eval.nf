@@ -125,8 +125,19 @@ workflow KREVIEW_EVAL {
 
         // Step 4b: Per-evaluator GPU evaluation (×N, parallel, gpushort) [optional]
         // Runs in parallel with CPU eval — they are independent.
+        // Pairs each matrix with its eval_stats for intelligent feature capping.
         if (params.run_gpu_eval) {
-            KREVIEW_EVAL_GPU_SINGLE(KREVIEW_SELECT_SINGLE.out.matrix)
+            // Pair matrix + eval_stats by evaluator name (basename matching)
+            ch_gpu_input = KREVIEW_SELECT_SINGLE.out.matrix
+                .map { f -> [f.baseName.replace('_matrix', ''), f] }
+                .combine(
+                    KREVIEW_SELECT_SINGLE.out.eval_stats
+                        .map { f -> [f.baseName.replace('_eval_stats', ''), f] },
+                    by: 0
+                )
+                .map { key, matrix, stats -> [matrix, stats] }
+
+            KREVIEW_EVAL_GPU_SINGLE(ch_gpu_input.map { it[0] }, ch_gpu_input.map { it[1] })
         }
 
         // Step 4c: Fuse selected matrices → super-matrix (1 job, needs all)
@@ -134,15 +145,24 @@ workflow KREVIEW_EVAL {
         KREVIEW_FUSE(ch_all_selected)
 
         // ── Collect all model results (CPU + GPU) ──
+        // GPU tasks always exit 0 and emit a JSON (with error info on failure).
+        // This prevents collect() deadlock — Nextflow only forwards outputs
+        // from exit-0 tasks, so we must never exit 1 from GPU processes.
+        ch_cpu_jsons = KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
         ch_all_jsons = params.run_gpu_eval
-            ? KREVIEW_EVAL_CPU_SINGLE.out.json_stats
-                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results)
+            ? ch_cpu_jsons
+                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results.collect())
+                .flatten()
                 .collect()
-            : KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
+            : ch_cpu_jsons
 
+        ch_cpu_joblib_collected = ch_cpu_joblib.collect()
         ch_all_joblib = params.run_gpu_eval
-            ? ch_cpu_joblib.mix(KREVIEW_EVAL_GPU_SINGLE.out.joblib_models).collect()
-            : ch_cpu_joblib.collect()
+            ? ch_cpu_joblib_collected
+                .mix(KREVIEW_EVAL_GPU_SINGLE.out.joblib_models.collect().ifEmpty([]))
+                .flatten()
+                .collect()
+            : ch_cpu_joblib_collected
 
         // Step 4d: Build scoreboard (needs all JSONs)
         KREVIEW_SCOREBOARD(ch_all_jsons)

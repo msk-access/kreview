@@ -285,19 +285,90 @@ def eval_cpu(
 
         try:
             model_df, y, feature_cols, c_types, a_types = _load_matrix_and_labels(mf)
-            X = model_df[
-                feature_cols
-            ].values  # Already imputed by _load_matrix_and_labels
+
+            # ── Train/test split (v0.0.16+: persisted in labels.parquet) ──
+            has_split = "split" in model_df.columns
+            if has_split:
+                train_mask = model_df["split"] == "train"
+                test_mask = model_df["split"] == "test"
+                n_train = int(train_mask.sum())
+                n_test = int(test_mask.sum())
+                print(
+                    f"  Holdout split: {n_train} train / {n_test} test",
+                    flush=True,
+                )
+
+                if n_train < 20 or n_test < 5:
+                    log.warning(
+                        "holdout_split_too_small",
+                        evaluator=evaluator,
+                        n_train=n_train,
+                        n_test=n_test,
+                        action="falling back to full CV",
+                    )
+                    has_split = False
+
+            if has_split:
+                X_train = model_df.loc[train_mask, feature_cols].values
+                y_train = y[train_mask.values]
+                X_test = model_df.loc[test_mask, feature_cols].values
+                y_test = y[test_mask.values]
+                train_labels = (
+                    model_df.loc[train_mask, "label"].values
+                    if "label" in model_df.columns
+                    else None
+                )
+                test_labels = (
+                    model_df.loc[test_mask, "label"].values
+                    if "label" in model_df.columns
+                    else None
+                )
+            else:
+                X_train = model_df[feature_cols].values
+                y_train = y
+                X_test = None
+                y_test = None
+                train_labels = (
+                    model_df["label"].values if "label" in model_df.columns else None
+                )
+                test_labels = None
 
             results, lr, rf, xgb = cpu_models(
-                X,
-                y,
+                X_train,
+                y_train,
                 feature_names=feature_cols,
-                cancer_types=c_types,
-                assays=a_types,
+                cancer_types=(
+                    c_types[train_mask.values]
+                    if has_split and c_types is not None
+                    else c_types
+                ),
+                assays=(
+                    a_types[train_mask.values]
+                    if has_split and a_types is not None
+                    else a_types
+                ),
                 n_folds=cv_folds,
                 random_state=seed,
+                sample_labels=train_labels,
             )
+
+            # ── Holdout evaluation (v0.0.16+) ──
+            if has_split and X_test is not None and len(y_test) > 0:
+                from kreview.eval_engine import evaluate_holdout
+
+                for model_name, fitted_model in [("lr", lr), ("rf", rf), ("xgb", xgb)]:
+                    if fitted_model is not None:
+                        holdout_res = evaluate_holdout(
+                            fitted_model,
+                            X_test,
+                            y_test,
+                            model_name,
+                            sample_labels=test_labels,
+                        )
+                        results.update(holdout_res)
+
+                results["holdout_n_train"] = int(train_mask.sum())
+                results["holdout_n_test"] = int(test_mask.sum())
 
             # Add sample IDs for multimodal alignment (check both cases)
             if "sample_id" in model_df.columns:
@@ -326,10 +397,15 @@ def eval_cpu(
                 return "N/A" if v is None else f"{v:.3f}"
 
             elapsed = _time.time() - t0
+            holdout_info = ""
+            if has_split:
+                holdout_auc = results.get("holdout_rf_auc")
+                holdout_info = f" | Holdout_RF={_fmt(holdout_auc)}"
             print(
                 f"  {evaluator}: AUC_LR={_fmt(results.get('auc_lr'))}, "
                 f"AUC_RF={_fmt(results.get('auc_rf'))}, "
-                f"AUC_XGB={_fmt(results.get('auc_xgb'))} "
+                f"AUC_XGB={_fmt(results.get('auc_xgb'))}"
+                f"{holdout_info} "
                 f"in {elapsed:.1f}s",
                 flush=True,
             )
@@ -391,6 +467,15 @@ def eval_gpu(
         True,
         "--deterministic/--no-deterministic",
         help="Enable PyTorch deterministic mode (slower but reproducible).",
+    ),
+    max_gpu_features: int = typer.Option(
+        150,
+        "--max-gpu-features",
+        help=(
+            "Maximum features for GPU models. If feature count exceeds this, "
+            "the top N are selected by mutual information from eval_stats. "
+            "Set to 0 to disable capping."
+        ),
     ),
 ):
     """Per-evaluator evaluation using TabPFN, TabICL (GPU).
@@ -457,16 +542,84 @@ def eval_gpu(
 
         try:
             model_df, y, feature_cols, c_types, a_types = _load_matrix_and_labels(mf)
-            X = model_df[
-                feature_cols
-            ].values  # Already imputed by _load_matrix_and_labels
+
+            # ── Train/test split (v0.0.16+) ──
+            has_split = "split" in model_df.columns
+            if has_split:
+                train_mask = model_df["split"] == "train"
+                test_mask = model_df["split"] == "test"
+                n_train = int(train_mask.sum())
+                n_test = int(test_mask.sum())
+                print(f"  Holdout split: {n_train} train / {n_test} test", flush=True)
+                if n_train < 20 or n_test < 5:
+                    log.warning(
+                        "holdout_split_too_small",
+                        evaluator=evaluator,
+                        n_train=n_train,
+                        n_test=n_test,
+                        action="falling back to full CV",
+                    )
+                    has_split = False
+
+            if has_split:
+                X_train = model_df.loc[train_mask, feature_cols].values
+                y_train = y[train_mask.values]
+                X_test = model_df.loc[test_mask, feature_cols].values
+                y_test = y[test_mask.values]
+                train_labels = (
+                    model_df.loc[train_mask, "label"].values
+                    if "label" in model_df.columns
+                    else None
+                )
+                test_labels = (
+                    model_df.loc[test_mask, "label"].values
+                    if "label" in model_df.columns
+                    else None
+                )
+            else:
+                X_train = model_df[feature_cols].values
+                y_train = y
+                X_test = None
+                y_test = None
+                train_labels = (
+                    model_df["label"].values if "label" in model_df.columns else None
+                )
+                test_labels = None
+
+            # ── Load eval_stats for intelligent GPU feature capping ──
+            gpu_cap = max_gpu_features if max_gpu_features > 0 else None
+            _eval_stats = None
+            if gpu_cap is not None:
+                stats_file = matrices_dir / f"{evaluator}_eval_stats.parquet"
+                if stats_file.exists():
+                    try:
+                        _eval_stats = pd.read_parquet(stats_file)
+                        log.info(
+                            "eval_stats_loaded_for_gpu_cap",
+                            evaluator=evaluator,
+                            n_features=len(_eval_stats),
+                        )
+                    except Exception as exc:
+                        log.warning(
+                            "eval_stats_load_failed",
+                            evaluator=evaluator,
+                            error=str(exc),
+                        )
 
             results, fitted = gpu_models(
-                X,
-                y,
+                X_train,
+                y_train,
                 feature_names=feature_cols,
-                cancer_types=c_types,
-                assays=a_types,
+                cancer_types=(
+                    c_types[train_mask.values]
+                    if has_split and c_types is not None
+                    else c_types
+                ),
+                assays=(
+                    a_types[train_mask.values]
+                    if has_split and a_types is not None
+                    else a_types
+                ),
                 n_folds=cv_folds,
                 random_state=seed,
                 models=models_list_run,
@@ -476,7 +629,32 @@ def eval_gpu(
                 finetune_lr=finetune_lr,
                 compute_shap=compute_shap,
                 shap_samples=shap_samples,
+                sample_labels=train_labels,
+                max_gpu_features=gpu_cap,
+                eval_stats=_eval_stats,
             )
+
+            # ── Holdout evaluation (v0.0.16+) ──
+            if has_split and X_test is not None and len(y_test) > 0:
+                from kreview.eval_engine import evaluate_holdout
+
+                # Apply same GPU feature cap to X_test (dimension must match)
+                cap_idx = results.get("gpu_feature_cap_indices")
+                X_test_gpu = X_test[:, cap_idx] if cap_idx is not None else X_test
+
+                for model_name, fitted_model in fitted.items():
+                    if fitted_model is not None:
+                        holdout_res = evaluate_holdout(
+                            fitted_model,
+                            X_test_gpu,
+                            y_test,
+                            model_name,
+                            sample_labels=test_labels,
+                        )
+                        results.update(holdout_res)
+
+                results["holdout_n_train"] = n_train
+                results["holdout_n_test"] = n_test
 
             # Add sample IDs for multimodal alignment (check both cases)
             if "sample_id" in model_df.columns:
@@ -504,8 +682,13 @@ def eval_gpu(
             elapsed = _time.time() - t0
             for mn in models_list_run:
                 auc_val = results.get(f"auc_{mn}")
+                holdout_val = results.get(f"holdout_{mn}_auc")
                 if auc_val is not None:
-                    print(f"  {evaluator}/{mn}: AUC={auc_val:.3f}", flush=True)
+                    holdout_str = f" | Holdout={holdout_val:.3f}" if holdout_val else ""
+                    print(
+                        f"  {evaluator}/{mn}: AUC={auc_val:.3f}{holdout_str}",
+                        flush=True,
+                    )
             print(f"  Completed in {elapsed:.1f}s", flush=True)
 
         except SystemExit:

@@ -7,7 +7,6 @@ Covers:
   - 5-tier docstring accuracy
 """
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -15,10 +14,10 @@ from kreview.labels import CtDNALabeler
 
 
 class TestLabelTierConstants:
-    """Verify label constants match the 5-tier system."""
+    """Verify label constants match the 5-tier + Undetermined system."""
 
-    def test_five_tiers_defined(self):
-        """CtDNALabeler should define exactly 5 label tiers."""
+    def test_five_core_tiers_defined(self):
+        """CtDNALabeler should define exactly 5 core label tiers."""
         tiers = [
             CtDNALabeler.LABEL_TRUE_POS,
             CtDNALabeler.LABEL_POSS_POS,
@@ -26,7 +25,24 @@ class TestLabelTierConstants:
             CtDNALabeler.LABEL_HEALTHY,
             CtDNALabeler.LABEL_INSUF_DATA,
         ]
-        assert len(set(tiers)) == 5, "Should have exactly 5 distinct label tiers"
+        assert len(set(tiers)) == 5, "Should have exactly 5 distinct core label tiers"
+
+    def test_undetermined_tier_defined(self):
+        """LABEL_UNDETERMINED should be defined as a 6th tier (v0.0.16+)."""
+        assert hasattr(
+            CtDNALabeler, "LABEL_UNDETERMINED"
+        ), "CtDNALabeler missing LABEL_UNDETERMINED constant"
+        # Must be distinct from all 5 core tiers
+        core = {
+            CtDNALabeler.LABEL_TRUE_POS,
+            CtDNALabeler.LABEL_POSS_POS,
+            CtDNALabeler.LABEL_POSS_NEG,
+            CtDNALabeler.LABEL_HEALTHY,
+            CtDNALabeler.LABEL_INSUF_DATA,
+        }
+        assert (
+            CtDNALabeler.LABEL_UNDETERMINED not in core
+        ), "LABEL_UNDETERMINED must not collide with core tiers"
 
     def test_label_values(self):
         """Verify the exact string values of each tier."""
@@ -35,13 +51,14 @@ class TestLabelTierConstants:
         assert CtDNALabeler.LABEL_POSS_NEG == "Possible ctDNA−"
         assert CtDNALabeler.LABEL_HEALTHY == "Healthy Normal"
         assert CtDNALabeler.LABEL_INSUF_DATA == "Insufficient Data"
+        assert CtDNALabeler.LABEL_UNDETERMINED == "Undetermined"
 
-    def test_docstring_says_five_tier(self):
-        """Docstring should reference 5-tier, not 4-tier (M-05)."""
+    def test_docstring_says_six_tier(self):
+        """Docstring should reference 6-tier (5 core + Undetermined, v0.0.16+)."""
         doc = CtDNALabeler.__doc__
         assert (
-            "5-tier" in doc or "five" in doc.lower()
-        ), f"Docstring should mention 5-tier: got '{doc}'"
+            "6-tier" in doc or "six" in doc.lower()
+        ), f"Docstring should mention 6-tier: got '{doc}'"
 
 
 class TestVAFRegressionStats:
@@ -113,7 +130,7 @@ class TestVAFRegressionStats:
 
         assert row["mean_vaf"] == 0.0
         assert row["std_vaf"] == 0.0
-        assert row["has_snv"] is False or row["has_snv"] == False
+        assert not row["has_snv"]
 
     def test_no_somatic_variants_fallback(self):
         """mean_vaf and std_vaf should be 0.0 when MAF has no somatic variants."""
@@ -216,7 +233,7 @@ class TestCHHotspotFiltering:
 
         assert row["n_ch_variants"] == 1
         assert row["n_non_ch_variants"] == 1
-        assert row["has_snv"] == True  # Still has passing variants
+        assert row["has_snv"]  # Still has passing variants
 
     def test_no_ch_set_passthrough(self, maf_ch_only):
         """Without ch_variants, all variants are counted as non-CH (n_ch=0)."""
@@ -331,7 +348,7 @@ class TestComputeImpactMatch:
         )
         s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
 
-        assert s1["has_impact_match"] == True
+        assert s1["has_impact_match"]
         assert s1["n_impact_confirmed"] >= 1
 
     def test_no_shared_variant_no_match(self, clinical, maf_no_match):
@@ -341,7 +358,7 @@ class TestComputeImpactMatch:
         result = compute_impact_match({"ACCESS_S1"}, maf_no_match, clinical)
         s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
 
-        assert s1["has_impact_match"] == False
+        assert not s1["has_impact_match"]
         assert s1["n_impact_confirmed"] == 0
 
     def test_has_paired_impact_flag(self, clinical, maf_with_match):
@@ -356,8 +373,8 @@ class TestComputeImpactMatch:
         s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
         s2 = result.set_index("SAMPLE_ID").loc["ACCESS_S2"]
 
-        assert s1["has_paired_impact"] == True
-        assert s2["has_paired_impact"] == False
+        assert s1["has_paired_impact"]
+        assert not s2["has_paired_impact"]
 
     def test_output_columns(self, clinical, maf_with_match):
         """Output DataFrame should have expected columns."""
@@ -394,5 +411,110 @@ class TestComputeImpactMatch:
 
         assert len(result) == 1
         s1 = result.set_index("SAMPLE_ID").loc["ACCESS_S1"]
-        assert s1["has_impact_match"] == False
+        assert not s1["has_impact_match"]
         assert s1["n_impact_confirmed"] == 0
+
+
+# ── Train/Test Split tests (v0.0.16+) ────────────────────────────────────────
+
+
+class TestAssignTrainTestSplit:
+    """Tests for _assign_train_test_split() — stratified holdout assignment.
+
+    Validates:
+      - Modelable labels get 'train'/'test', non-modelable get 'exclude'
+      - Proportions approximate 80/20
+      - Deterministic with same random_state
+      - Undetermined and Insufficient Data are excluded
+      - Too-few-samples fallback assigns all to 'train'
+    """
+
+    @pytest.fixture()
+    def labeler(self):
+        """Bare CtDNALabeler instance for split testing (bypasses data loading)."""
+        from kreview.core import LabelConfig
+
+        # Use object.__new__ to avoid __init__ which requires Paths + loads data
+        instance = object.__new__(CtDNALabeler)
+        instance.config = LabelConfig()
+        return instance
+
+    @pytest.fixture()
+    def label_df(self):
+        """DataFrame with 100 modelable + 10 non-modelable samples."""
+        labels = (
+            ["True ctDNA+"] * 30
+            + ["Possible ctDNA+"] * 25
+            + ["Healthy Normal"] * 25
+            + ["Possible ctDNA\u2212"] * 20
+            + ["Undetermined"] * 5
+            + ["Insufficient Data"] * 5
+        )
+        return pd.DataFrame(
+            {
+                "SAMPLE_ID": [f"S{i:03d}" for i in range(110)],
+                "label": labels,
+            }
+        )
+
+    def test_modelable_get_train_or_test(self, labeler, label_df):
+        """Modelable samples should have split == 'train' or 'test'."""
+        result = labeler._assign_train_test_split(label_df.copy())
+        modelable = result[~result["label"].isin(["Undetermined", "Insufficient Data"])]
+        assert set(modelable["split"].unique()) == {"train", "test"}
+
+    def test_non_modelable_excluded(self, labeler, label_df):
+        """Undetermined and Insufficient Data samples get split='exclude'."""
+        result = labeler._assign_train_test_split(label_df.copy())
+        excluded = result[result["label"].isin(["Undetermined", "Insufficient Data"])]
+        assert (excluded["split"] == "exclude").all(), (
+            f"Non-modelable samples should be 'exclude', got: "
+            f"{excluded['split'].value_counts().to_dict()}"
+        )
+
+    def test_proportions_approximate_80_20(self, labeler, label_df):
+        """Train/test split should be approximately 80/20."""
+        result = labeler._assign_train_test_split(label_df.copy())
+        n_train = (result["split"] == "train").sum()
+        n_test = (result["split"] == "test").sum()
+        test_fraction = n_test / (n_train + n_test)
+        assert (
+            0.15 <= test_fraction <= 0.25
+        ), f"Expected test fraction ~0.20, got {test_fraction:.3f}"
+
+    def test_deterministic_same_seed(self, labeler, label_df):
+        """Same random_state should produce identical splits."""
+        r1 = labeler._assign_train_test_split(label_df.copy(), random_state=42)
+        r2 = labeler._assign_train_test_split(label_df.copy(), random_state=42)
+        pd.testing.assert_series_equal(
+            r1["split"].reset_index(drop=True),
+            r2["split"].reset_index(drop=True),
+        )
+
+    def test_different_seed_different_split(self, labeler, label_df):
+        """Different random_state should produce different splits."""
+        r1 = labeler._assign_train_test_split(label_df.copy(), random_state=42)
+        r2 = labeler._assign_train_test_split(label_df.copy(), random_state=99)
+        # At least some samples should swap train/test
+        diff = (r1["split"].values != r2["split"].values).sum()
+        assert diff > 0, "Different seeds should produce different splits"
+
+    def test_too_few_samples_fallback(self, labeler):
+        """With < 20 modelable samples, all should get split='train'."""
+        small = pd.DataFrame(
+            {
+                "SAMPLE_ID": [f"S{i}" for i in range(15)],
+                "label": ["True ctDNA+"] * 8 + ["Healthy Normal"] * 7,
+            }
+        )
+        result = labeler._assign_train_test_split(small)
+        assert (
+            result["split"] == "train"
+        ).all(), "All samples should be 'train' when n_modelable < 20"
+
+    def test_split_column_exists(self, labeler, label_df):
+        """Output DataFrame must have a 'split' column."""
+        result = labeler._assign_train_test_split(label_df.copy())
+        assert "split" in result.columns
+        # Only valid values
+        assert set(result["split"].unique()).issubset({"train", "test", "exclude"})

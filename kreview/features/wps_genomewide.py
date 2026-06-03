@@ -30,6 +30,17 @@ class WPSGenomeEvaluator(FeatureEvaluator):
     source_file = ".WPS.parquet"
     tier = 2
     category = "epigenetics_and_geometry"
+    # Column projection: only read the 5 columns used by extract().
+    # WPS parquets have many additional columns — loading all of them
+    # caused OOM on genome-wide runs (~30K rows x 50+ cols per sample).
+    extract_columns = [
+        "region_type",
+        "wps_nuc",
+        "wps_tf",
+        "prot_frac_nuc",
+        "prot_frac_tf",
+    ]
+    max_chunk_rows = 5_000_000  # Lower than default 15M for memory safety
 
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         extracted = {}

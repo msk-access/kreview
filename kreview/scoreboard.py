@@ -120,6 +120,40 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
             "selection_overlap_pct": round(n_overlap / max(1, n_sel) * 100, 1),
         }
 
+        # Clinical sensitivity metrics (from evaluate_model, v0.0.16+)
+        if best_model:
+            # Look up in flat dict first, then stacking dict
+            def _get_metric(key):
+                val = data.get(key)
+                if val is None and "stacking" in data:
+                    val = data["stacking"].get(key)
+                return val if val is not None else np.nan
+
+            rec["sens_at_100spec"] = _get_metric(f"{best_model}_sensitivity_at_100spec")
+            rec["sens_at_100spec_healthy"] = _get_metric(
+                f"{best_model}_sensitivity_at_100spec_healthy"
+            )
+            rec["n_detected_at_100spec"] = _get_metric(
+                f"{best_model}_n_detected_at_100spec"
+            )
+            rec["sens_at_95spec"] = _get_metric(f"{best_model}_sensitivity_at_95spec")
+
+            # Holdout metrics (v0.0.16+: only present when split column existed)
+            rec["holdout_auc"] = _get_metric(f"holdout_{best_model}_auc")
+            rec["holdout_sens_100spec"] = _get_metric(
+                f"holdout_{best_model}_sensitivity_at_100spec"
+            )
+
+        # Holdout split sizes (not model-specific)
+        rec["holdout_n_train"] = data.get("holdout_n_train", np.nan)
+        rec["holdout_n_test"] = data.get("holdout_n_test", np.nan)
+
+        # AUC drop: CV overfit diagnostic (positive = drop, negative = improvement)
+        if not np.isnan(rec.get("holdout_auc", np.nan)) and not np.isnan(best_auc):
+            rec["auc_drop"] = best_auc - rec["holdout_auc"]
+        else:
+            rec["auc_drop"] = np.nan
+
         # Add all individual AUCs
         for m_id, auc_val in all_aucs.items():
             rec[f"auc_{m_id}"] = auc_val
