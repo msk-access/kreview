@@ -1628,6 +1628,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.evaluate_holdout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        evaluate_holdout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.cpu_models" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2007,6 +2018,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.eval_engine.evaluate_holdout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        evaluate_holdout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.eval_engine.cpu_models" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2199,6 +2221,19 @@ Defines the extraction contract that transforms raw DuckDB queries into 1D array
 Optionally, override <code>extract_sql()</code> to return a DuckDB SQL query that
 performs full-cohort extraction in a single pass (no Python loop).</p>
 
+
+<details class="class-attributes" open="">
+  <summary>Class Attributes</summary>
+  <p>name: Evaluator identifier (used in file names, logging).
+source_file: Parquet suffix (e.g. '.<abbr title="Window Protection Score">WPS</abbr>.parquet').
+tier: Feature importance tier (1=core, 2=supplementary).
+category: Feature category for grouping (e.g. 'epigenetics').
+extract_columns: If set, DuckDB will SELECT only these columns
+    instead of <code>*</code>. Reduces memory for wide parquet files.
+    Must include 'sample_id' (or it will be auto-appended).
+max_chunk_rows: Target rows per DuckDB chunk (default 15M).
+    Lower values reduce peak memory for heavy features.</p>
+</details>
 
 
 
@@ -2806,7 +2841,7 @@ Defaults to <code>np.linspace(0.01, 0.99, 99)</code>.</p>
 
 
 <h3 id="kreview.eval_engine.evaluate_model" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">evaluate_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">cv</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">refit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">evaluate_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">cv</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">refit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">sample_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h3>
 
@@ -2972,6 +3007,40 @@ The model must implement fit() and predict_proba().</p>
                   <code>500</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>random_state</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Random seed for bootstrap <abbr title="Continuous Integration">CI</abbr>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>42</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_labels</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Original 4-tier labels (e.g. "Healthy Normal",
+"Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>+") for computing sensitivity@100%spec on
+healthy normals only. Shape (n_samples,). Optional.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -3001,7 +3070,156 @@ The model must implement fit() and predict_proba().</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>with <code>name</code> (e.g. <code>auc_rf</code>, <code>rf_oof_probs</code>, <code>rf_fold_aucs</code>).</p>
+                <p>with <code>name</code> (e.g. <code>auc_rf</code>, <code>rf_oof_probs</code>, <code>rf_fold_aucs</code>,</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="dict">dict</span>, <span title="object">object</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>rf_sensitivity_at_100spec</code>).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.eval_engine.evaluate_holdout" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">evaluate_holdout</span><span class="p">(</span><span class="n">fitted_model</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">y_test</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">sample_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Evaluate a fitted model on the holdout test set.</p>
+<p>This is called AFTER <code>evaluate_model()</code> has refitted the model on
+the full training set. The holdout set was never seen during <abbr title="Cross-Validation">CV</abbr> or
+feature selection, providing an unbiased estimate of generalization.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>fitted_model</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Model already fitted on training data.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>X_test</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Holdout feature matrix.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y_test</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Holdout binary labels.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Model name prefix for result keys.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_labels</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Original label strings for the holdout set
+(for healthy-normal specificity).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dict with holdout metrics, all prefixed with <code>holdout_{name}_</code>.</p>
               </div>
             </td>
           </tr>
@@ -3017,7 +3235,7 @@ The model must implement fit() and predict_proba().</p>
 
 
 <h3 id="kreview.eval_engine.cpu_models" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">cpu_models</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cancer_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">cpu_models</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cancer_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">sample_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h3>
 
@@ -3028,7 +3246,39 @@ The model must implement fit() and predict_proba().</p>
 <p>Delegates per-model evaluation to <code>evaluate_model()</code>, then adds
 cross-model diagnostics (<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> deltas, top features, threshold sweep,
 DCA, feature stability, subgroup analysis).</p>
-<p>Returns (results_dict, lr_pipeline, rf_model, xgb_model).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_labels</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Original 4-tier labels for computing healthy-normal
+specificity. Passed to <code>evaluate_model()</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+        <p>Returns (results_dict, lr_pipeline, rf_model, xgb_model).</p>
 
 
 <details class="audit-fixes-preserved" open="">
@@ -3049,7 +3299,7 @@ DCA, feature stability, subgroup analysis).</p>
 
 
 <h3 id="kreview.eval_engine.gpu_models" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">gpu_models</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cancer_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'tabpfn'</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="s1">'cuda'</span><span class="p">,</span> <span class="n">finetune</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">finetune_epochs</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">finetune_lr</span><span class="o">=</span><span class="mf">1e-05</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">gpu_models</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cancer_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'tabpfn'</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="s1">'cuda'</span><span class="p">,</span> <span class="n">finetune</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">finetune_epochs</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">finetune_lr</span><span class="o">=</span><span class="mf">1e-05</span><span class="p">,</span> <span class="n">compute_shap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">shap_samples</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">sample_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_gpu_features</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eval_stats</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h3>
 
@@ -3294,6 +3544,59 @@ DCA, feature stability, subgroup analysis).</p>
             </td>
             <td>
                   <code>500</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_labels</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Original 4-tier labels for computing healthy-normal
+specificity. Passed to <code>evaluate_model()</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_gpu_features</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If set and n_features &gt; max_gpu_features,
+cap to the top N features using eval_stats scores.
+Default None (no cap). CLI default is 150.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>eval_stats</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>DataFrame from <code>score_features()</code> containing
+feature scoring columns. Used for intelligent feature
+capping when max_gpu_features is set.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>

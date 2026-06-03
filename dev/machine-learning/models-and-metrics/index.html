@@ -763,15 +763,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#metric-categories-9-total" class="md-nav__link">
+  <a href="#metric-categories-10-total" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Metric Categories (9 total)
+        Metric Categories (10 total)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Metric Categories (9 total)">
+    <nav class="md-nav" aria-label="Metric Categories (10 total)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -852,10 +852,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#8-shap-explainability" class="md-nav__link">
+  <a href="#8-sensitivity-at-fixed-specificity-v0016" class="md-nav__link">
     <span class="md-ellipsis">
       
-        8. SHAP Explainability
+        8. Sensitivity at Fixed Specificity (v0.0.16+)
       
     </span>
   </a>
@@ -863,10 +863,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#9-subgroup-analysis-out-of-fold" class="md-nav__link">
+  <a href="#9-shap-explainability" class="md-nav__link">
     <span class="md-ellipsis">
       
-        9. Subgroup Analysis (Out-Of-Fold)
+        9. SHAP Explainability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-subgroup-analysis-out-of-fold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Subgroup Analysis (Out-Of-Fold)
       
     </span>
   </a>
@@ -934,8 +945,30 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#gpu-feature-capping-v0016" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPU Feature Capping (v0.0.16+)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8020-holdout-evaluation-v0016" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        80/20 Holdout Evaluation (v0.0.16+)
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1897,15 +1930,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#metric-categories-9-total" class="md-nav__link">
+  <a href="#metric-categories-10-total" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Metric Categories (9 total)
+        Metric Categories (10 total)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Metric Categories (9 total)">
+    <nav class="md-nav" aria-label="Metric Categories (10 total)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1986,10 +2019,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#8-shap-explainability" class="md-nav__link">
+  <a href="#8-sensitivity-at-fixed-specificity-v0016" class="md-nav__link">
     <span class="md-ellipsis">
       
-        8. SHAP Explainability
+        8. Sensitivity at Fixed Specificity (v0.0.16+)
       
     </span>
   </a>
@@ -1997,10 +2030,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#9-subgroup-analysis-out-of-fold" class="md-nav__link">
+  <a href="#9-shap-explainability" class="md-nav__link">
     <span class="md-ellipsis">
       
-        9. Subgroup Analysis (Out-Of-Fold)
+        9. SHAP Explainability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-subgroup-analysis-out-of-fold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Subgroup Analysis (Out-Of-Fold)
       
     </span>
   </a>
@@ -2068,8 +2112,30 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#gpu-feature-capping-v0016" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPU Feature Capping (v0.0.16+)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8020-holdout-evaluation-v0016" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        80/20 Holdout Evaluation (v0.0.16+)
+      
+    </span>
+  </a>
   
 </li>
       
@@ -2288,7 +2354,7 @@
 </code></pre></div>
 <p>The number of folds is dynamically bounded by the minimum class size to prevent <code>n_splits</code> errors. All downstream metrics use <strong>out-of-fold predictions</strong> — the model never evaluates samples it trained on.</p>
 <hr>
-<h2 id="metric-categories-9-total">Metric Categories (9 total)</h2>
+<h2 id="metric-categories-10-total">Metric Categories (10 total)</h2>
 <h3 id="1-roc-auc-bootstrap-cis">1. <abbr title="Receiver Operating Characteristic">ROC</abbr>-<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> &amp; Bootstrap CIs</h3>
 <p>The primary scoring metric. To quantify uncertainty, kreview computes <strong>bootstrap 95% confidence intervals</strong> (<code>n_resamples=1000</code>) for every <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> score. Results are stored as <code>auc_rf</code>, <code>auc_rf_ci_lower</code>, <code>auc_rf_ci_upper</code>.</p>
 <h3 id="2-precision-recall-pr-curves">2. Precision-Recall (PR) Curves</h3>
@@ -2309,7 +2375,51 @@
 <p>Stored as <code>rf_dca</code> and <code>xgb_dca</code>.</p>
 <h3 id="7-fold-level-auc-tracking">7. Fold-Level <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> Tracking</h3>
 <p>To assess model stability, kreview runs <code>cross_val_score</code> separately and stores per-fold <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> for all three models. A high standard deviation (&gt;0.05) suggests the model is data-sensitive. Stored as <code>{prefix}_fold_aucs</code> and <code>{prefix}_auc_std</code>.</p>
-<h3 id="8-shap-explainability">8. <abbr title="SHapley Additive exPlanations">SHAP</abbr> Explainability</h3>
+<h3 id="8-sensitivity-at-fixed-specificity-v0016">8. Sensitivity at Fixed Specificity (v0.0.16+)</h3>
+<p>In clinical <abbr title="Circulating Tumor DNA">ctDNA</abbr> detection, <strong>zero false positives on healthy controls</strong> is paramount. kreview computes sensitivity at multiple specificity thresholds:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Key</th>
+<th>Clinical Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sensitivity @ 100% spec</td>
+<td><code>{name}_sensitivity_at_100spec</code></td>
+<td>At zero FPR: how many cancers detected?</td>
+</tr>
+<tr>
+<td>Sensitivity @ 99% spec</td>
+<td><code>{name}_sensitivity_at_99spec</code></td>
+<td>At 1% FPR</td>
+</tr>
+<tr>
+<td>Sensitivity @ 95% spec</td>
+<td><code>{name}_sensitivity_at_95spec</code></td>
+<td>At 5% FPR</td>
+</tr>
+<tr>
+<td>Healthy-normal specificity</td>
+<td><code>{name}_sensitivity_at_100spec_healthy</code></td>
+<td>At threshold where no Healthy Normal is FP</td>
+</tr>
+<tr>
+<td>Threshold @ 100% spec</td>
+<td><code>{name}_threshold_at_100spec</code></td>
+<td>Decision boundary for zero FPR</td>
+</tr>
+<tr>
+<td>Detected @ 100% spec</td>
+<td><code>{name}_n_detected_at_100spec</code></td>
+<td>Number of true positives at zero FPR</td>
+</tr>
+</tbody>
+</table>
+<p>The healthy-normal variant uses the max predicted probability among <code>Healthy Normal</code> samples as the threshold — clinically this means "no healthy person is called positive."</p>
+<h3 id="9-shap-explainability">9. <abbr title="SHapley Additive exPlanations">SHAP</abbr> Explainability</h3>
 <p>For <abbr title="Random Forest">RF</abbr> and XGBoost, kreview generates <strong><abbr title="SHapley Additive exPlanations">SHAP</abbr> (SHapley Additive exPlanations)</strong> values using <code>TreeExplainer</code>:</p>
 <ul>
 <li><strong>Beeswarm Plot:</strong> Global feature importance ranked by mean |<abbr title="SHapley Additive exPlanations">SHAP</abbr>|, colored by feature value</li>
@@ -2320,7 +2430,7 @@
 <p class="admonition-title">Interpretation</p>
 <p><abbr title="SHapley Additive exPlanations">SHAP</abbr> explains how the model decides, not biological causality. A feature with high <abbr title="SHapley Additive exPlanations">SHAP</abbr> impact may reflect a data artifact rather than a biological mechanism.</p>
 </div>
-<h3 id="9-subgroup-analysis-out-of-fold">9. Subgroup Analysis (Out-Of-Fold)</h3>
+<h3 id="10-subgroup-analysis-out-of-fold">10. Subgroup Analysis (Out-Of-Fold)</h3>
 <p>After training, the pipeline evaluates model sensitivity across biological subgroups using <strong>out-of-fold predictions</strong> (preventing optimistic bias):</p>
 <ul>
 <li><strong>Cancer Type Stats:</strong> Sensitivity per cancer type (top 10 by sample count)</li>
@@ -2361,6 +2471,56 @@
 </div>
 <h3 id="gpu-model-persistence">GPU Model Persistence</h3>
 <p>By default, fitted GPU models are saved as <code>.joblib</code> files (like CPU models) for downstream <abbr title="SHapley Additive exPlanations">SHAP</abbr> rendering in reports. Since these files can be large (&gt;200MB), use <code>--skip-gpu-joblib</code> to opt out. When joblib is skipped, reports will render mean |<abbr title="SHapley Additive exPlanations">SHAP</abbr>| bar charts from pre-computed values in the JSON instead of interactive beeswarm plots.</p>
+<h3 id="gpu-feature-capping-v0016">GPU Feature Capping (v0.0.16+)</h3>
+<p>TabPFN has practical VRAM limits (~150-200 features). When <code>--max-gpu-features</code> is set (default: 150 in Nextflow), kreview caps features using a priority hierarchy:</p>
+<ol>
+<li><strong>Score-based</strong> (from <code>eval_stats</code>): Top features by <code>mutual_info</code> or <code>univariate_auc</code></li>
+<li><strong>Variance fallback</strong>: If no scores available, top features by variance</li>
+</ol>
+<p>The same cap indices are applied to both training and holdout data to ensure dimension consistency.</p>
+<hr>
+<h2 id="8020-holdout-evaluation-v0016">80/20 Holdout Evaluation (v0.0.16+)</h2>
+<p>In addition to cross-validation, kreview performs <strong>holdout evaluation</strong> on the 20% test set that was never seen during feature selection or <abbr title="Cross-Validation">CV</abbr>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Full Data → 80/20 split (stratified by label)
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  80% TRAIN → feature selection → 10-fold CV → development AUC
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  20% TEST  → never touched → holdout AUC (honest estimate)
+</code></pre></div>
+<p>After <abbr title="Cross-Validation">CV</abbr> completes, the best model is refit on the full training set and evaluated on the holdout:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Holdout <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr></td>
+<td><code>holdout_{name}_auc</code></td>
+<td><abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> on unseen test data</td>
+</tr>
+<tr>
+<td>Holdout <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> <abbr title="Continuous Integration">CI</abbr></td>
+<td><code>holdout_{name}_auc_ci_lower/upper</code></td>
+<td>Bootstrap 95% <abbr title="Continuous Integration">CI</abbr></td>
+</tr>
+<tr>
+<td>Holdout Sensitivity</td>
+<td><code>holdout_{name}_sensitivity_at_100spec</code></td>
+<td>Sensitivity at zero FPR on test</td>
+</tr>
+<tr>
+<td><abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> Drop</td>
+<td><code>auc_drop</code> (scoreboard)</td>
+<td><abbr title="Cross-Validation">CV</abbr> <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> − Holdout <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> (overfit diagnostic)</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Interpreting <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> Drop</p>
+<p>A positive <code>auc_drop</code> indicates the <abbr title="Cross-Validation">CV</abbr> <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> was optimistic (overfitting). A negative value means the holdout actually performed better than <abbr title="Cross-Validation">CV</abbr> (common with small test sets).</p>
+</div>
 <hr>
 <h2 id="qc-metrics"><abbr title="Quality Control">QC</abbr> Metrics</h2>
 <p>For every feature, <code>evaluate_feature()</code> also computes data quality metrics:</p>
@@ -2402,7 +2562,7 @@
 </div>
 <hr>
 <h2 id="json-output-schema-summary">JSON Output Schema Summary</h2>
-<p><code>single_feature_model()</code> produces <strong>45 JSON fields</strong> per feature set:</p>
+<p><code>cpu_models()</code> + <code>evaluate_holdout()</code> produce <strong>60+ JSON fields</strong> per feature set:</p>
 <table>
 <thead>
 <tr>
@@ -2426,6 +2586,21 @@
 <td>Thresholds</td>
 <td><code>*_optimal_threshold</code></td>
 <td>3</td>
+</tr>
+<tr>
+<td>Sensitivity @ Spec</td>
+<td><code>*_sensitivity_at_{100,99,95}spec</code>, <code>*_threshold_at_100spec</code>, <code>*_n_detected_at_100spec</code>, <code>*_n_total_positive</code></td>
+<td>18</td>
+</tr>
+<tr>
+<td>Healthy-Normal Spec</td>
+<td><code>*_sensitivity_at_100spec_healthy</code>, <code>*_threshold_at_100spec_healthy</code></td>
+<td>6</td>
+</tr>
+<tr>
+<td>Holdout Metrics</td>
+<td><code>holdout_*_auc</code>, <code>holdout_*_sensitivity_at_100spec</code>, <code>holdout_n_train/test</code></td>
+<td>12+</td>
 </tr>
 <tr>
 <td>PR Curves</td>
@@ -2488,14 +2663,14 @@
 <h2 id="reproducibility">Reproducibility</h2>
 <p>All randomization points in kreview are parameterized via <code>--seed</code> (default: 42) and <code>--deterministic</code> (default: True).</p>
 <h3 id="cli-flags">CLI Flags</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Default (seed=42, deterministic GPU ops)</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>kreview<span class="w"> </span>run<span class="w"> </span>...<span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--deterministic
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Custom seed, faster GPU (non-deterministic cuDNN)</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>gpu<span class="w"> </span>...<span class="w"> </span>--seed<span class="w"> </span><span class="m">123</span><span class="w"> </span>--no-deterministic
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># Nextflow</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>nextflow<span class="w"> </span>run<span class="w"> </span>main.nf<span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--deterministic<span class="w"> </span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Default (seed=42, deterministic GPU ops)</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>kreview<span class="w"> </span>run<span class="w"> </span>...<span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--deterministic
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Custom seed, faster GPU (non-deterministic cuDNN)</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>gpu<span class="w"> </span>...<span class="w"> </span>--seed<span class="w"> </span><span class="m">123</span><span class="w"> </span>--no-deterministic
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Nextflow</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>nextflow<span class="w"> </span>run<span class="w"> </span>main.nf<span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--deterministic<span class="w"> </span><span class="nb">true</span>
 </code></pre></div>
 <h3 id="what-gets-seeded">What Gets Seeded</h3>
 <table>
@@ -2590,7 +2765,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 25, 2026 20:09:48 UTC"><span class="timeago" datetime="2026-05-25T20:09:48+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 25, 2026 20:09:48 UTC">2026-05-25</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 3, 2026 19:17:42 UTC"><span class="timeago" datetime="2026-06-03T19:17:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 3, 2026 19:17:42 UTC">2026-06-03</span>
   </span>
 
     

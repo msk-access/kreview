@@ -2555,13 +2555,23 @@
 </tr>
 <tr>
 <td>Sensitivity @ Optimal</td>
-<td><code>rf_classification_report["1"]["recall"]</code></td>
+<td><code>{best_m}_classification_report["1"]["recall"]</code></td>
 <td>True positive detection rate at optimal cutoff</td>
 </tr>
 <tr>
 <td>Specificity @ Optimal</td>
-<td><code>rf_classification_report["0"]["recall"]</code></td>
+<td><code>{best_m}_classification_report["0"]["recall"]</code></td>
 <td>True negative rejection rate at optimal cutoff</td>
+</tr>
+<tr>
+<td>Sens @ 100% Spec</td>
+<td><code>{best_m}_sensitivity_at_100spec</code></td>
+<td>Sensitivity at zero false-positive rate (v0.0.16+)</td>
+</tr>
+<tr>
+<td>Holdout <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr></td>
+<td><code>holdout_{best_m}_auc</code></td>
+<td><abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> on unseen 20% test set with <abbr title="Cross-Validation">CV</abbr>–holdout delta (v0.0.16+)</td>
 </tr>
 <tr>
 <td>Verdict</td>
@@ -2574,20 +2584,23 @@
 <ul>
 <li><strong><abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> with <abbr title="Continuous Integration">CI</abbr></strong> prevents over-interpreting point estimates. A single <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> of 0.85 tells you nothing about whether 0.78–0.92 or 0.84–0.86 — the confidence interval reveals this.</li>
 <li><strong>Sensitivity and specificity</strong> are shown at the Youden's J optimal threshold because raw <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> doesn't tell clinicians what happens at a specific decision boundary.</li>
+<li><strong>Sens @ 100% Spec</strong> is the most clinically relevant metric for <abbr title="Circulating Tumor DNA">ctDNA</abbr> screening: how many cancers are detected when zero healthy controls are called positive? The detection count is shown alongside sensitivity.</li>
+<li><strong>Holdout <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr></strong> reveals generalization: if the <abbr title="Cross-Validation">CV</abbr> <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> is 0.90 but holdout is 0.75, the model is overfitting. The value box color dynamically adapts to the <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> drop severity (green &lt; 0.05, yellow &lt; 0.10, red ≥ 0.10).</li>
 <li><strong>Verdict</strong> uses conservative thresholds — an <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> below 0.70 has limited clinical utility for binary classification.</li>
 </ul>
 <h3 id="roc-sparkline-calibration"><abbr title="Receiver Operating Characteristic">ROC</abbr> Sparkline + Calibration</h3>
 <p>The mini-<abbr title="Receiver Operating Characteristic">ROC</abbr> curve provides a visual sanity check. The calibration reliability diagram (<abbr title="Random Forest">RF</abbr>) shows whether predicted probabilities are trustworthy — tree-based models tend to push probabilities toward 0.5.</p>
 <h3 id="scoreboard">Scoreboard</h3>
-<p>If multiple evaluators have been run, the scoreboard table surfaces the top performers for cross-evaluator comparison.</p>
+<p>If multiple evaluators have been run, the scoreboard table surfaces the top performers for cross-evaluator comparison. Columns include <code>best_model</code>, <code>best_auc</code>, <code>holdout_auc</code>, <code>auc_drop</code>, <code>sensitivity</code>, <code>specificity</code>, <code>sens_at_100spec</code>, <code>sens_at_95spec</code>, <code>selection_method</code>, <code>n_features</code>, <code>n_samples</code>, <code>holdout_n_train</code>, and <code>holdout_n_test</code>. Columns that are absent from the scoreboard DataFrame (e.g., pre-v0.0.16 results) are automatically hidden.</p>
 <hr>
 <h2 id="page-2-model-validation">Page 2: Model Validation</h2>
 <p>Nine tabs, each answering a specific validation question:</p>
 <h3 id="performance-metrics">Performance Metrics</h3>
 <p><strong>Question</strong>: How do the three models compare on clinical metrics?</p>
 <ul>
-<li>Grouped bar chart comparing Precision, Sensitivity, Specificity, F1, and Accuracy across <abbr title="Logistic Regression">LR</abbr>, <abbr title="Random Forest">RF</abbr>, and XGBoost</li>
-<li>Also shows <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> deltas (<abbr title="Random Forest">RF</abbr>−<abbr title="Logistic Regression">LR</abbr>, <abbr title="XGBoost">XGB</abbr>−<abbr title="Random Forest">RF</abbr>) and training times</li>
+<li>Grouped bar chart comparing Precision, Sensitivity, Specificity, F1, and Accuracy across <abbr title="Logistic Regression">LR</abbr>, <abbr title="Random Forest">RF</abbr>, and XGBoost (plus GPU models when available)</li>
+<li>Model summary table with <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>, Youden J threshold, training time, plus v0.0.16 clinical metrics: Sens@100%Spec, Sens@95%Spec, and Holdout <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> (auto-discovered per model)</li>
+<li><abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> deltas (pairwise differences) and training times</li>
 </ul>
 <h3 id="roc-curves-with-ci"><abbr title="Receiver Operating Characteristic">ROC</abbr> Curves with <abbr title="Continuous Integration">CI</abbr></h3>
 <p><strong>Question</strong>: Is the discriminative power robust?</p>
@@ -2782,7 +2795,7 @@
 </ol>
 <hr>
 <h2 id="sidebar-glossary">Sidebar: Glossary</h2>
-<p>Concise definitions of the four <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels used in analysis. Kept minimal to avoid cognitive overload.</p>
+<p>Concise definitions of the five <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels used in analysis, plus the <code>Undetermined</code> label (excluded from ML). Also documents the 80/20 train/test split for holdout evaluation. Kept minimal to avoid cognitive overload.</p>
 <hr>
 <h2 id="accessibility">Accessibility</h2>
 <ul>
@@ -2812,7 +2825,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 24, 2026 03:52:19 UTC"><span class="timeago" datetime="2026-05-24T03:52:19+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 24, 2026 03:52:19 UTC">2026-05-24</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 3, 2026 19:17:42 UTC"><span class="timeago" datetime="2026-06-03T19:17:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 3, 2026 19:17:42 UTC">2026-06-03</span>
   </span>
 
     

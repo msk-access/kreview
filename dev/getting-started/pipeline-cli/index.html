@@ -2053,20 +2053,21 @@
 <a id="__codelineno-11-25" name="__codelineno-11-25" href="#__codelineno-11-25"></a><span class="c1"># Steps 3a/3b/3c can run in PARALLEL</span>
 <a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a><span class="c1"># 3a: CPU model evaluation</span>
 <a id="__codelineno-11-27" name="__codelineno-11-27" href="#__codelineno-11-27"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>cpu<span class="w"> </span>--matrices-dir<span class="w"> </span>selected/<span class="w"> </span>--output<span class="w"> </span>results/
-<a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a><span class="c1"># 3b: GPU model evaluation (optional)</span>
-<a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>gpu<span class="w"> </span>--matrices-dir<span class="w"> </span>selected/<span class="w"> </span>--output<span class="w"> </span>results/
-<a id="__codelineno-11-30" name="__codelineno-11-30" href="#__codelineno-11-30"></a><span class="c1"># 3c: Fuse selected matrices → super-matrix</span>
-<a id="__codelineno-11-31" name="__codelineno-11-31" href="#__codelineno-11-31"></a>kreview<span class="w"> </span>fuse<span class="w"> </span>--output-dir<span class="w"> </span>selected/
-<a id="__codelineno-11-32" name="__codelineno-11-32" href="#__codelineno-11-32"></a>
-<a id="__codelineno-11-33" name="__codelineno-11-33" href="#__codelineno-11-33"></a><span class="c1"># Step 4: Multimodal evaluation (needs OOF probs + super_matrix)</span>
-<a id="__codelineno-11-34" name="__codelineno-11-34" href="#__codelineno-11-34"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>multimodal<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-35" name="__codelineno-11-35" href="#__codelineno-11-35"></a><span class="w">    </span>--results-dir<span class="w"> </span>results/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-36" name="__codelineno-11-36" href="#__codelineno-11-36"></a><span class="w">    </span>--super-matrix<span class="w"> </span>selected/super_matrix.parquet<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-37" name="__codelineno-11-37" href="#__codelineno-11-37"></a><span class="w">    </span>--multimodal-selection<span class="w"> </span>boruta_shap<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-38" name="__codelineno-11-38" href="#__codelineno-11-38"></a><span class="w">    </span>--output<span class="w"> </span>results/
-<a id="__codelineno-11-39" name="__codelineno-11-39" href="#__codelineno-11-39"></a>
-<a id="__codelineno-11-40" name="__codelineno-11-40" href="#__codelineno-11-40"></a><span class="c1"># Step 5: Report</span>
-<a id="__codelineno-11-41" name="__codelineno-11-41" href="#__codelineno-11-41"></a>kreview<span class="w"> </span>report<span class="w"> </span>--results-dir<span class="w"> </span>results/
+<a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a><span class="c1"># 3b: GPU model evaluation (optional, uses eval_stats for feature capping)</span>
+<a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>gpu<span class="w"> </span>--matrices-dir<span class="w"> </span>selected/<span class="w"> </span>--output<span class="w"> </span>results/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-30" name="__codelineno-11-30" href="#__codelineno-11-30"></a><span class="w">    </span>--eval-stats-dir<span class="w"> </span>selected/<span class="w"> </span>--max-gpu-features<span class="w"> </span><span class="m">150</span>
+<a id="__codelineno-11-31" name="__codelineno-11-31" href="#__codelineno-11-31"></a><span class="c1"># 3c: Fuse selected matrices → super-matrix</span>
+<a id="__codelineno-11-32" name="__codelineno-11-32" href="#__codelineno-11-32"></a>kreview<span class="w"> </span>fuse<span class="w"> </span>--output-dir<span class="w"> </span>selected/
+<a id="__codelineno-11-33" name="__codelineno-11-33" href="#__codelineno-11-33"></a>
+<a id="__codelineno-11-34" name="__codelineno-11-34" href="#__codelineno-11-34"></a><span class="c1"># Step 4: Multimodal evaluation (needs OOF probs + super_matrix)</span>
+<a id="__codelineno-11-35" name="__codelineno-11-35" href="#__codelineno-11-35"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>multimodal<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-36" name="__codelineno-11-36" href="#__codelineno-11-36"></a><span class="w">    </span>--results-dir<span class="w"> </span>results/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-37" name="__codelineno-11-37" href="#__codelineno-11-37"></a><span class="w">    </span>--super-matrix<span class="w"> </span>selected/super_matrix.parquet<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-38" name="__codelineno-11-38" href="#__codelineno-11-38"></a><span class="w">    </span>--multimodal-selection<span class="w"> </span>boruta_shap<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-39" name="__codelineno-11-39" href="#__codelineno-11-39"></a><span class="w">    </span>--output<span class="w"> </span>results/
+<a id="__codelineno-11-40" name="__codelineno-11-40" href="#__codelineno-11-40"></a>
+<a id="__codelineno-11-41" name="__codelineno-11-41" href="#__codelineno-11-41"></a><span class="c1"># Step 5: Report</span>
+<a id="__codelineno-11-42" name="__codelineno-11-42" href="#__codelineno-11-42"></a>kreview<span class="w"> </span>report<span class="w"> </span>--results-dir<span class="w"> </span>results/
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Inspecting Parquet Outputs</p>
@@ -2134,7 +2135,7 @@
 <a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span>--cbioportal-dir<span class="w"> </span><span class="s2">"/path/to/cBioPortal/"</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">  </span>--output<span class="w"> </span>labels.parquet
 </code></pre></div>
-<p>This produces a single Parquet file with sample IDs, clinical metadata, and the assigned 5-tier labels.</p>
+<p>This produces a single Parquet file with sample IDs, clinical metadata, the assigned 5-tier labels, and a <code>split</code> column (<code>train</code>/<code>test</code>/<code>exclude</code>) for holdout validation.</p>
 <hr>
 <h2 id="data-lake-integration">Data Lake Integration</h2>
 <p>Every time <code>kreview run</code> executes, feature matrices are loaded into memory, evaluated, and then destroyed. If you want a <strong>persistent output</strong> for downstream analysis:</p>
@@ -2173,7 +2174,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 24, 2026 05:06:05 UTC"><span class="timeago" datetime="2026-05-24T05:06:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 24, 2026 05:06:05 UTC">2026-05-24</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 3, 2026 19:17:42 UTC"><span class="timeago" datetime="2026-06-03T19:17:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 3, 2026 19:17:42 UTC">2026-06-03</span>
   </span>
 
     

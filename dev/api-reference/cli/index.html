@@ -1650,6 +1650,10 @@ Iterates over all *_matrix.parquet files and writes results JSONs.</p>
 <a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>  --deterministic / --no-deterministic
 <a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>                                  Enable PyTorch deterministic mode (slower
 <a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>                                  but reproducible).  [default: deterministic]
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>  --max-gpu-features INTEGER      Maximum features for GPU models. If feature
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>                                  count exceeds this, the top N are selected
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>                                  by mutual information from eval_stats. Set
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>                                  to 0 to disable capping.  [default: 150]
 </code></pre></div>
 <h3 id="multimodal">multimodal</h3>
 <p>Cross-evaluator multimodal evaluation with stacking and ablation.</p>
@@ -1870,6 +1874,10 @@ block the remaining dashboards.</p>
 <a id="__codelineno-19-70" name="__codelineno-19-70" href="#__codelineno-19-70"></a>                                  Enable PyTorch deterministic mode (slower
 <a id="__codelineno-19-71" name="__codelineno-19-71" href="#__codelineno-19-71"></a>                                  but reproducible). Default: True.  [default:
 <a id="__codelineno-19-72" name="__codelineno-19-72" href="#__codelineno-19-72"></a>                                  deterministic]
+<a id="__codelineno-19-73" name="__codelineno-19-73" href="#__codelineno-19-73"></a>  --max-gpu-features INTEGER      Maximum features for GPU models. If feature
+<a id="__codelineno-19-74" name="__codelineno-19-74" href="#__codelineno-19-74"></a>                                  count exceeds this, the top N are selected
+<a id="__codelineno-19-75" name="__codelineno-19-75" href="#__codelineno-19-75"></a>                                  by mutual information from eval_stats. Set
+<a id="__codelineno-19-76" name="__codelineno-19-76" href="#__codelineno-19-76"></a>                                  to 0 to disable capping.  [default: 150]
 </code></pre></div>
 <h2 id="select">select</h2>
 <p>Score features and apply feature selection to extracted matrices.</p>

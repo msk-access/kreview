@@ -334,6 +334,15 @@
     </span>
 </a>
 </li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#6-undetermined-v0016">
+<span class="md-ellipsis">
+      
+        6. Undetermined (v0.0.16+)
+      
+    </span>
+</a>
+</li>
 </ul>
 </nav>
 </li>
@@ -395,6 +404,15 @@
 <span class="md-ellipsis">
       
         📊 Label Distribution
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#traintest-split-v0016">
+<span class="md-ellipsis">
+      
+        🔀 Train/Test Split (v0.0.16+)
       
     </span>
 </a>
@@ -872,6 +890,15 @@
     </span>
 </a>
 </li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#6-undetermined-v0016">
+<span class="md-ellipsis">
+      
+        6. Undetermined (v0.0.16+)
+      
+    </span>
+</a>
+</li>
 </ul>
 </nav>
 </li>
@@ -933,6 +960,15 @@
 <span class="md-ellipsis">
       
         📊 Label Distribution
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#traintest-split-v0016">
+<span class="md-ellipsis">
+      
+        🔀 Train/Test Split (v0.0.16+)
       
     </span>
 </a>
@@ -1018,7 +1054,7 @@
     SV_CNA --&gt;|No| SNV{"Somatic SNVs\n≥ VAF threshold?"}
     SNV --&gt;|Yes| CH{"CH-only\ncheck"}
     CH --&gt;|"Non-CH variants &gt; 0"| POSS_POS["Possible ctDNA+"]:::ppos
-    CH --&gt;|"ALL variants are CH"| DEMOTED["Demoted → Possible ctDNA−"]:::demote
+    CH --&gt;|"ALL variants are CH"| UNDET["Undetermined"]:::demote
     SNV --&gt;|No| DEPTH{"Total fragments\n≥ 2,000?"}
     DEPTH --&gt;|Yes| POSS_NEG["Possible ctDNA−"]:::pneg
     DEPTH --&gt;|No| INSUF["Insufficient Data"]:::insuf
@@ -1059,6 +1095,9 @@ Use mouse to pan and zoom
 <p>If a cancer sample shows absolutely <strong>no</strong> positive signal (no SNVs, no SVs, no CNAs), <strong>AND</strong> their sequencing coverage yielded fewer than <code>min_fragments</code> total fragments (default: 2,000), the pipeline assigns them to this bucket instead of <code>Possible ctDNA−</code>.</p>
 <p>These samples are entirely excluded from the ML algorithms so low-depth noise doesn't corrupt the models.</p>
 </div>
+<h3 id="6-undetermined-v0016">6. Undetermined (v0.0.16+)</h3>
+<p>Samples whose <strong>only</strong> somatic evidence is clonal hematopoiesis (CH) hotspot variants. They have detected mutations, but all are blood-lineage (not tumor-derived). Because they are neither clearly positive nor clearly negative, they are labeled <code>Undetermined</code> and <strong>excluded from all binary classification</strong>.</p>
+<p>See <a href="#clonal-hematopoiesis-ch-hotspot-filtering">CH Hotspot Filtering</a> below for the exact conditions.</p>
 <hr>
 <h2 id="clonal-hematopoiesis-ch-hotspot-filtering">🧬 Clonal Hematopoiesis (CH) Hotspot Filtering</h2>
 <p><strong>Clonal hematopoiesis of indeterminate potential (CHIP)</strong> is a common age-related phenomenon where hematopoietic stem cells acquire somatic mutations — particularly in genes like <em>DNMT3A</em>, <em>TET2</em>, and <em>ASXL1</em>. These mutations are detectable in <abbr title="Cell-Free DNA">cfDNA</abbr> but originate from the <strong>blood lineage</strong>, not from a solid tumor.</p>
@@ -1100,14 +1139,15 @@ Use mouse to pan and zoom
 <a href="#__codelineno-3-3" id="__codelineno-3-3" name="__codelineno-3-3"></a>   AND has_impact_match == False     (no IMPACT tissue confirmation)
 <a href="#__codelineno-3-4" id="__codelineno-3-4" name="__codelineno-3-4"></a>   AND has_sv == False               (no structural variants)
 <a href="#__codelineno-3-5" id="__codelineno-3-5" name="__codelineno-3-5"></a>   AND has_cna == False              (no copy number alterations)
-<a href="#__codelineno-3-6" id="__codelineno-3-6" name="__codelineno-3-6"></a>THEN → demote to "Possible ctDNA−"
+<a href="#__codelineno-3-6" id="__codelineno-3-6" name="__codelineno-3-6"></a>THEN → label as "Undetermined"
 </code></pre></div>
 <div class="admonition important">
 <p class="admonition-title">Demotion is conservative</p>
 <ul>
 <li>If <strong>any</strong> non-CH variant exists (<code>n_non_ch_variants &gt; 0</code>), the sample retains its <code>Possible ctDNA+</code> label.</li>
 <li>If the sample has an IMPACT match, <abbr title="Structural Variant">SV</abbr>, or <abbr title="Copy Number Alteration">CNA</abbr>, it is promoted to <code>True ctDNA+</code> regardless of CH status.</li>
-<li>Demotion only affects the <code>Possible ctDNA+</code> tier — never <code>True ctDNA+</code>.</li>
+<li>Relabeling only affects the <code>Possible ctDNA+</code> tier — never <code>True ctDNA+</code>.</li>
+<li><code>Undetermined</code> samples are excluded from binary classification (<code>build_binary_target()</code> ignores them).</li>
 </ul>
 </div>
 <div class="admonition tip">
@@ -1143,7 +1183,7 @@ Use mouse to pan and zoom
 <tr>
 <td>Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>−</td>
 <td>~15%</td>
-<td>Excluded or negative class</td>
+<td>Negative class</td>
 </tr>
 <tr>
 <td>Healthy Normal</td>
@@ -1151,16 +1191,56 @@ Use mouse to pan and zoom
 <td>Negative class (control baseline)</td>
 </tr>
 <tr>
+<td><strong>Undetermined</strong></td>
+<td>~3%</td>
+<td><strong>Excluded</strong> from ML</td>
+</tr>
+<tr>
 <td>Insufficient Data</td>
-<td>~5%</td>
+<td>~2%</td>
 <td>Excluded from ML</td>
 </tr>
 </tbody>
 </table>
 <div class="admonition tip">
 <p class="admonition-title">Binary Classification</p>
-<p>For the ML pipeline, <code>True ctDNA+</code> and <code>Possible ctDNA+</code> are merged into a single binary positive class. <code>Healthy Normal</code> serves as the negative class. <code>Possible ctDNA−</code> and <code>Insufficient Data</code> are excluded.</p>
+<p>For the ML pipeline, <code>True ctDNA+</code> and <code>Possible ctDNA+</code> are merged into a single binary positive class. <code>Healthy Normal</code> and <code>Possible ctDNA−</code> serve as the negative class. <code>Undetermined</code> and <code>Insufficient Data</code> are excluded.</p>
 </div>
+<hr>
+<h2 id="traintest-split-v0016">🔀 Train/Test Split (v0.0.16+)</h2>
+<p>The labeling engine automatically assigns an 80/20 <strong>stratified holdout split</strong> and persists it in <code>labels.parquet</code> as a <code>split</code> column:</p>
+<table>
+<thead>
+<tr>
+<th>Split Value</th>
+<th>Meaning</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>train</code></td>
+<td>80% of modelable samples</td>
+<td><abbr title="Cross-Validation">CV</abbr> training + feature selection</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>20% of modelable samples</td>
+<td>Final holdout evaluation</td>
+</tr>
+<tr>
+<td><code>exclude</code></td>
+<td>Non-modelable labels</td>
+<td>Not used in any model</td>
+</tr>
+</tbody>
+</table>
+<p>The split is:</p>
+<ul>
+<li><strong>Stratified</strong> by the 4-tier label (proportional representation per class)</li>
+<li><strong>Deterministic</strong> (<code>random_state=42</code> by default)</li>
+<li><strong>Persistent</strong> across pipeline re-runs (same samples always in same split)</li>
+</ul>
 <hr>
 <h2 id="continuous-vaf-statistics">📈 Continuous <abbr title="Variant Allele Frequency">VAF</abbr> Statistics</h2>
 <p>In addition to discrete labels, <code>kreview</code> computes continuous <abbr title="Variant Allele Frequency">VAF</abbr> statistics per sample and stores them in <code>labels.parquet</code>:</p>
@@ -1192,7 +1272,7 @@ Use mouse to pan and zoom
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 24, 2026 05:06:05 UTC"><span class="timeago" datetime="2026-05-24T05:06:05+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 24, 2026 05:06:05 UTC">2026-05-24</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 3, 2026 19:17:42 UTC"><span class="timeago" datetime="2026-06-03T19:17:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 3, 2026 19:17:42 UTC">2026-06-03</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">

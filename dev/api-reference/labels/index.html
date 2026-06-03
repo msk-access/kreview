@@ -1844,12 +1844,12 @@
 
 
 
-        <p>Assigns 5-tier <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels to ACCESS <abbr title="Cell-Free DNA">cfDNA</abbr> samples.</p>
+        <p>Assigns 6-tier <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels to ACCESS <abbr title="Cell-Free DNA">cfDNA</abbr> samples.</p>
 
 
 <details class="tiers" open="">
   <summary>True <abbr title="Circulating Tumor DNA">ctDNA</abbr>+, Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>+, Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>−,</summary>
-  <p>Healthy Normal, Insufficient Data.</p>
+  <p>Healthy Normal, Undetermined, Insufficient Data.</p>
 </details>
 
 <details class="features" open="">
@@ -1857,8 +1857,9 @@
   <ul>
 <li>IMPACT tissue rescue for True <abbr title="Circulating Tumor DNA">ctDNA</abbr>+ confirmation</li>
 <li>Continuous <abbr title="Variant Allele Frequency">VAF</abbr> regression targets (mean_vaf, std_vaf)</li>
-<li>Optional CH hotspot filtering with automatic demotion
-  of samples whose only evidence is clonal hematopoiesis</li>
+<li>Optional CH hotspot filtering: samples whose only
+  somatic evidence is clonal hematopoiesis are labeled
+  <code>Undetermined</code> and excluded from binary classification</li>
 </ul>
 </details>
 

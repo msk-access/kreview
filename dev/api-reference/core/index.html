@@ -2571,7 +2571,7 @@ Configured natively for 4 threads and 4GB memory to prevent <abbr title="High-Pe
 
 
 <h3 id="kreview.core.iter_feature_chunks" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">iter_feature_chunks</span><span class="p">(</span><span class="n">feature_suffix</span><span class="p">,</span> <span class="n">results_dirs</span><span class="p">,</span> <span class="n">sample_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="s1">'auto'</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">iter_feature_chunks</span><span class="p">(</span><span class="n">feature_suffix</span><span class="p">,</span> <span class="n">results_dirs</span><span class="p">,</span> <span class="n">sample_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="s1">'auto'</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">target_rows</span><span class="o">=</span><span class="mi">15000000</span><span class="p">)</span></code>
 
 </h3>
 
@@ -2670,11 +2670,45 @@ boundaries never split a sample's data.</p>
               <div class="doc-md-description">
                 <p>Number of files per batch. 'auto' (default) probes the
 first 5 files to estimate rows-per-sample and self-tunes the
-batch size to target ~15M rows per chunk.</p>
+batch size to target <code>target_rows</code> rows per chunk.</p>
               </div>
             </td>
             <td>
                   <code>'auto'</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>columns</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If set, DuckDB will SELECT only these columns instead
+of <code>*</code>. Reduces memory for wide parquet files.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>target_rows</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target rows per chunk for auto-sizing (default 15M).
+Lower values reduce peak memory for heavy features.</p>
+              </div>
+            </td>
+            <td>
+                  <code>15000000</code>
             </td>
           </tr>
       </tbody>
