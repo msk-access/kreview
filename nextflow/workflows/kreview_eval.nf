@@ -144,19 +144,18 @@ workflow KREVIEW_EVAL {
         ch_all_selected = KREVIEW_SELECT_SINGLE.out.matrix.collect()
         KREVIEW_FUSE(ch_all_selected)
 
-        // ── Collect all model results (CPU + GPU) ──
-        // GPU tasks always exit 0 and emit a JSON (with error info on failure).
-        // This prevents collect() deadlock — Nextflow only forwards outputs
-        // from exit-0 tasks, so we must never exit 1 from GPU processes.
-        ch_cpu_jsons = KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect()
+        // Collect all model results (CPU + GPU).
+        // ifEmpty([]) prevents channel deadlock if some evaluators fail
+        // with errorStrategy='ignore' (failed tasks emit no outputs).
+        ch_cpu_jsons = KREVIEW_EVAL_CPU_SINGLE.out.json_stats.collect().ifEmpty([])
         ch_all_jsons = params.run_gpu_eval
             ? ch_cpu_jsons
-                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results.collect())
+                .mix(KREVIEW_EVAL_GPU_SINGLE.out.gpu_results.collect().ifEmpty([]))
                 .flatten()
                 .collect()
             : ch_cpu_jsons
 
-        ch_cpu_joblib_collected = ch_cpu_joblib.collect()
+        ch_cpu_joblib_collected = ch_cpu_joblib.collect().ifEmpty([])
         ch_all_joblib = params.run_gpu_eval
             ? ch_cpu_joblib_collected
                 .mix(KREVIEW_EVAL_GPU_SINGLE.out.joblib_models.collect().ifEmpty([]))
@@ -187,14 +186,17 @@ workflow KREVIEW_EVAL {
         // Step 6: Report generation [optional]
         // Depends on selected matrices, model results, eval_stats,
         // selection_qc, joblib, and scoreboard.
+        // Scoreboard is optional — if it fails, reports still render
+        // (the report template checks for file existence).
         if (!params.skip_report) {
+            ch_scoreboard = KREVIEW_SCOREBOARD.out.scoreboard.ifEmpty(file('NO_SCOREBOARD'))
             KREVIEW_REPORT(
                 KREVIEW_SELECT_SINGLE.out.matrix.collect(),
                 ch_all_jsons,
                 KREVIEW_SELECT_SINGLE.out.eval_stats.collect(),
                 KREVIEW_SELECT_SINGLE.out.selection_qc.collect(),
                 ch_all_joblib,
-                KREVIEW_SCOREBOARD.out.scoreboard,
+                ch_scoreboard,
             )
             ch_html_reports = KREVIEW_REPORT.out.html_reports
             ch_static_plots = KREVIEW_REPORT.out.static_plots

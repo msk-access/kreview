@@ -1718,10 +1718,26 @@ def gpu_models(
                     model=model_name,
                     error=str(e),
                 )
+                # Record the error in results so it's visible in the JSON output.
+                # Without this, GPU failures are silent — no AUC key, no error key.
+                results[f"{model_name}_error"] = str(e)
                 continue
 
         # OOF labels for downstream multimodal alignment
         results["oof_labels"] = y.tolist()
+
+        # Detect when ALL GPU models failed — the results dict will have
+        # oof_labels but no auc_* keys, which is indistinguishable from
+        # success without this explicit check.
+        successful = [m for m in models if f"auc_{m}" in results]
+        if not successful:
+            failed_info = {m: results.get(f"{m}_error", "unknown") for m in models}
+            log.warning(
+                "gpu_no_models_succeeded",
+                requested=list(models),
+                errors=failed_info,
+            )
+            results["error"] = f"All GPU models failed: {list(models)}"
 
         return results, fitted_models
     except Exception as e:
@@ -1790,8 +1806,16 @@ def load_model_results(
         if gpu_data is not None:
             if merged is not None:
                 # Merge: GPU model keys added to CPU dict
-                # Skip metadata that should come from CPU
-                _skip = {"evaluator", "matrix_path", "cv_folds_actual"}
+                # Skip metadata that should come from CPU — CPU is canonical
+                # because it's always present. oof_sample_ids and oof_labels
+                # from GPU may have different lengths due to feature capping.
+                _skip = {
+                    "evaluator",
+                    "matrix_path",
+                    "cv_folds_actual",
+                    "oof_sample_ids",
+                    "oof_labels",
+                }
                 merged.update({k: v for k, v in gpu_data.items() if k not in _skip})
                 log.info(
                     "load_model_results_merged",
@@ -2151,6 +2175,18 @@ def _select_multimodal_features(
 
     # Step 4: Feature ranking
     if strategy == "boruta_shap" and len(df.columns) > 1:
+        # BorutaShap (Ekeany v1.0.17) internally imports scipy.stats.binom_test
+        # at module level. binom_test was deprecated in scipy 1.7 and removed
+        # in scipy ≥1.12. Patch with the official replacement binomtest(),
+        # wrapping .pvalue to match the old return type (bare float).
+        import scipy.stats as _ss
+
+        if not hasattr(_ss, "binom_test"):
+            _ss.binom_test = lambda x, n, p, alternative="two-sided": (
+                _ss.binomtest(x, n, p, alternative).pvalue
+            )
+            log.info("scipy_binom_test_shimmed", scipy_version=_ss.__version__)
+
         from BorutaShap import BorutaShap
         from xgboost import XGBClassifier
 

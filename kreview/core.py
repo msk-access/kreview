@@ -689,7 +689,11 @@ def run_feature_sql(
 
     This is the SQL pushdown alternative to ``iter_feature_chunks`` +
     per-sample ``extract()``. It runs the evaluator's SQL query against
-    all discovered parquet files at once, returning one row per sample.
+    all discovered parquet files at once.
+
+    Most evaluators return one row per sample. Some (e.g. WPSGenome with
+    ``sql_pivot_column``) return a "tall" result with multiple rows per
+    sample; the CLI handles pivoting to wide format.
 
     The query must contain a ``read_parquet(?, ...)`` placeholder that
     accepts the file path list.
@@ -702,7 +706,7 @@ def run_feature_sql(
         conn: Optional DuckDB connection.
 
     Returns:
-        DataFrame with one row per sample, or empty DataFrame on failure.
+        DataFrame with extraction results, or empty DataFrame on failure.
     """
     file_paths = _discover_feature_paths(feature_suffix, results_dirs, sample_ids)
     if not file_paths:
