@@ -186,13 +186,62 @@ def _extract_evaluator(
                 if "sample_id" in sql_df.columns
                 else len(sql_df)
             )
-            _echo(
-                f"  SQL pushdown complete: {n_samples} samples "
-                f"in {extract_sec:.1f}s"
-            )
-            # Normalize sample_id column name for downstream merge
-            if "sample_id" in sql_df.columns and "SAMPLE_ID" not in sql_df.columns:
-                feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
+
+            # Pivot tall → wide when evaluator produces multi-row-per-sample SQL
+            # (e.g. WPSGenome: one row per sample × region_type)
+            pivot_col = getattr(evaluator, "sql_pivot_column", None)
+            if pivot_col and pivot_col in feat_matrix.columns:
+                id_col = (
+                    "sample_id" if "sample_id" in feat_matrix.columns else "SAMPLE_ID"
+                )
+                stat_cols = [
+                    c for c in feat_matrix.columns if c not in (id_col, pivot_col)
+                ]
+                try:
+                    # Use pivot_table (not pivot) to handle duplicate
+                    # (sample_id, region_type) rows gracefully.
+                    pivoted = feat_matrix.pivot_table(
+                        index=id_col,
+                        columns=pivot_col,
+                        values=stat_cols,
+                        aggfunc="first",
+                    )
+                    # Flatten multi-level columns:
+                    # ("wps_nuc_mean", "chr1") → "chr1_wps_nuc_mean"
+                    pivoted.columns = [
+                        f"{region}_{stat}" for stat, region in pivoted.columns
+                    ]
+                    pivoted = pivoted.reset_index()
+                    feat_matrix = pivoted
+                    _echo(
+                        f"  Pivoted {len(sql_df)} rows → "
+                        f"{feat_matrix.shape[0]} samples × "
+                        f"{feat_matrix.shape[1] - 1} features"
+                    )
+                except Exception as exc:
+                    log.error(
+                        "sql_pivot_failed",
+                        evaluator=evaluator.name,
+                        error=str(exc),
+                    )
+                    _echo(
+                        f"  ⚠ Pivot failed for '{evaluator.name}': {exc}, "
+                        f"falling back to chunked extraction..."
+                    )
+                    feat_matrix = None
+                    sql_query = None  # Force fallback to Path B
+
+            if feat_matrix is not None:
+                _echo(
+                    f"  SQL pushdown complete: {n_samples} samples "
+                    f"in {extract_sec:.1f}s"
+                )
+                # Normalize sample_id column name for downstream merge
+                if (
+                    "sample_id" in feat_matrix.columns
+                    and "SAMPLE_ID" not in feat_matrix.columns
+                ):
+                    feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
         else:
             _echo(
                 f"  SQL pushdown returned empty result for '{evaluator.name}', "
@@ -1044,14 +1093,26 @@ def run(
                                 gpu_res.update(holdout_res)
 
                     model_res.update(gpu_res)
+                    any_gpu_auc = False
                     for mn in gpu_remaining:
                         holdout_val = model_res.get(f"holdout_{mn}_auc")
                         holdout_str = (
                             f" | Holdout={holdout_val:.3f}" if holdout_val else ""
                         )
+                        auc_val = model_res.get(f"auc_{mn}")
+                        if auc_val is not None:
+                            any_gpu_auc = True
+                        _echo(f"  GPU/{mn}: AUC={_fmt(auc_val)}{holdout_str}")
+
+                    # Visible warning when all GPU models failed silently
+                    if not any_gpu_auc and gpu_remaining:
                         _echo(
-                            f"  GPU/{mn}: AUC={_fmt(model_res.get(f'auc_{mn}'))}{holdout_str}"
+                            f"  ⚠ WARNING: No GPU models produced AUC for " f"{e.name}"
                         )
+                        for k, v in model_res.items():
+                            if k.endswith("_error"):
+                                _echo(f"    {k}: {v}")
+
                     log.info(
                         "gpu_models_complete",
                         evaluator=e.name,
@@ -1077,10 +1138,19 @@ def run(
             model_res["evaluator"] = e.name
             model_res["top_features"] = top_feats
             model_res["selection_qc"] = selection_qc
-            if "sample_id" in model_df.columns:
-                model_res["oof_sample_ids"] = model_df["sample_id"].tolist()
-            elif "SAMPLE_ID" in model_df.columns:
-                model_res["oof_sample_ids"] = model_df["SAMPLE_ID"].tolist()
+            # Add sample IDs for multimodal alignment.
+            # CRITICAL: must use train-split only — oof_probs from
+            # cross_val_predict covers train rows only, not the full DF.
+            train_id_df = model_df.loc[train_mask] if has_split else model_df
+            id_col = "sample_id" if "sample_id" in train_id_df.columns else "SAMPLE_ID"
+            if id_col in train_id_df.columns:
+                model_res["oof_sample_ids"] = train_id_df[id_col].tolist()
+                log.info(
+                    "oof_sample_ids_set",
+                    evaluator=e.name,
+                    n_ids=len(model_res["oof_sample_ids"]),
+                    source="train_split" if has_split else "full_df",
+                )
             all_aucs = {
                 k: v
                 for k, v in model_res.items()

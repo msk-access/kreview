@@ -370,11 +370,19 @@ def eval_cpu(
                 results["holdout_n_train"] = int(train_mask.sum())
                 results["holdout_n_test"] = int(test_mask.sum())
 
-            # Add sample IDs for multimodal alignment (check both cases)
-            if "sample_id" in model_df.columns:
-                results["oof_sample_ids"] = model_df["sample_id"].tolist()
-            elif "SAMPLE_ID" in model_df.columns:
-                results["oof_sample_ids"] = model_df["SAMPLE_ID"].tolist()
+            # Add sample IDs for multimodal alignment.
+            # CRITICAL: must use train-split only — oof_probs from
+            # cross_val_predict covers train rows only, not the full DF.
+            train_id_df = model_df.loc[train_mask] if has_split else model_df
+            id_col = "sample_id" if "sample_id" in train_id_df.columns else "SAMPLE_ID"
+            if id_col in train_id_df.columns:
+                results["oof_sample_ids"] = train_id_df[id_col].tolist()
+                log.info(
+                    "oof_sample_ids_set",
+                    evaluator=evaluator,
+                    n_ids=len(results["oof_sample_ids"]),
+                    source="train_split" if has_split else "full_df",
+                )
 
             _save_results(
                 results,
@@ -656,11 +664,19 @@ def eval_gpu(
                 results["holdout_n_train"] = n_train
                 results["holdout_n_test"] = n_test
 
-            # Add sample IDs for multimodal alignment (check both cases)
-            if "sample_id" in model_df.columns:
-                results["oof_sample_ids"] = model_df["sample_id"].tolist()
-            elif "SAMPLE_ID" in model_df.columns:
-                results["oof_sample_ids"] = model_df["SAMPLE_ID"].tolist()
+            # Add sample IDs for multimodal alignment.
+            # CRITICAL: must use train-split only — oof_probs from
+            # cross_val_predict covers train rows only, not the full DF.
+            train_id_df = model_df.loc[train_mask] if has_split else model_df
+            id_col = "sample_id" if "sample_id" in train_id_df.columns else "SAMPLE_ID"
+            if id_col in train_id_df.columns:
+                results["oof_sample_ids"] = train_id_df[id_col].tolist()
+                log.info(
+                    "oof_sample_ids_set",
+                    evaluator=evaluator,
+                    n_ids=len(results["oof_sample_ids"]),
+                    source="train_split" if has_split else "full_df",
+                )
 
             # Merge with existing results if resuming
             if existing_results:
@@ -680,15 +696,28 @@ def eval_gpu(
             )
 
             elapsed = _time.time() - t0
+            any_auc = False
             for mn in models_list_run:
                 auc_val = results.get(f"auc_{mn}")
                 holdout_val = results.get(f"holdout_{mn}_auc")
                 if auc_val is not None:
+                    any_auc = True
                     holdout_str = f" | Holdout={holdout_val:.3f}" if holdout_val else ""
                     print(
                         f"  {evaluator}/{mn}: AUC={auc_val:.3f}{holdout_str}",
                         flush=True,
                     )
+
+            # Visible warning when all GPU models failed silently
+            if not any_auc:
+                print(
+                    f"  ⚠ WARNING: No GPU models produced AUC for {evaluator}",
+                    flush=True,
+                )
+                for k, v in results.items():
+                    if k.endswith("_error"):
+                        print(f"    {k}: {v}", flush=True)
+
             print(f"  Completed in {elapsed:.1f}s", flush=True)
 
         except SystemExit:

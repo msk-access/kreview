@@ -39,25 +39,13 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
         return pd.DataFrame()
 
     for evaluator_name, data in all_results.items():
+        try:
+            # Extract all AUCs dynamically and find the best model
+            # Support both flat keys and nested 'stacking' multimodal keys
+            all_aucs = {}
 
-        # Extract all AUCs dynamically and find the best model
-        # Support both flat keys and nested 'stacking' multimodal keys
-        all_aucs = {}
-
-        # Pull flat models
-        for k, v in data.items():
-            if (
-                k.startswith("auc_")
-                and not k.endswith(("_ci_lower", "_ci_upper"))
-                and not k.startswith("auc_delta_")
-            ):
-                m_id = k.replace("auc_", "")
-                if v is not None and not (isinstance(v, float) and np.isnan(v)):
-                    all_aucs[m_id] = v
-
-        # Pull multimodal stacking models if present
-        if "stacking" in data:
-            for k, v in data["stacking"].items():
+            # Pull flat models
+            for k, v in data.items():
                 if (
                     k.startswith("auc_")
                     and not k.endswith(("_ci_lower", "_ci_upper"))
@@ -67,98 +55,121 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
                     if v is not None and not (isinstance(v, float) and np.isnan(v)):
                         all_aucs[m_id] = v
 
-        best_auc = np.nan
-        best_model = None
-        if all_aucs:
-            best_model = max(all_aucs, key=all_aucs.get)
-            best_auc = all_aucs[best_model]
+            # Pull multimodal stacking models if present
+            if "stacking" in data:
+                for k, v in data["stacking"].items():
+                    if (
+                        k.startswith("auc_")
+                        and not k.endswith(("_ci_lower", "_ci_upper"))
+                        and not k.startswith("auc_delta_")
+                    ):
+                        m_id = k.replace("auc_", "")
+                        if v is not None and not (isinstance(v, float) and np.isnan(v)):
+                            all_aucs[m_id] = v
 
-        # Extract sensitivity/specificity for the BEST model
-        cr = {}
-        if best_model:
-            # Check flat dict
-            if f"{best_model}_classification_report" in data:
-                cr = data[f"{best_model}_classification_report"]
-            # Check stacking dict
-            elif (
-                "stacking" in data
-                and f"{best_model}_classification_report" in data["stacking"]
-            ):
-                cr = data["stacking"][f"{best_model}_classification_report"]
+            best_auc = np.nan
+            best_model = None
+            if all_aucs:
+                best_model = max(all_aucs, key=all_aucs.get)
+                best_auc = all_aucs[best_model]
 
-        sensitivity = np.nan
-        specificity = np.nan
-        n_samples = np.nan
-        n_positive = np.nan
+            # Extract sensitivity/specificity for the BEST model
+            cr = {}
+            if best_model:
+                # Check flat dict
+                if f"{best_model}_classification_report" in data:
+                    cr = data[f"{best_model}_classification_report"]
+                # Check stacking dict
+                elif (
+                    "stacking" in data
+                    and f"{best_model}_classification_report" in data["stacking"]
+                ):
+                    cr = data["stacking"][f"{best_model}_classification_report"]
 
-        if isinstance(cr, dict) and cr:
-            pos_class = cr.get("1", cr.get("1.0", {}))
-            neg_class = cr.get("0", cr.get("0.0", {}))
-            sensitivity = pos_class.get("recall", np.nan) if pos_class else np.nan
-            specificity = neg_class.get("recall", np.nan) if neg_class else np.nan
-            weighted = cr.get("weighted avg", {})
-            n_samples = weighted.get("support", np.nan) if weighted else np.nan
-            n_positive = pos_class.get("support", np.nan) if pos_class else np.nan
+            sensitivity = np.nan
+            specificity = np.nan
+            n_samples = np.nan
+            n_positive = np.nan
 
-        # Extract selection QC metadata (added in v0.0.9)
-        sel_qc = data.get("selection_qc", {})
-        n_sel = sel_qc.get("n_selected_union", len(data.get("top_features", [])))
-        n_overlap = sel_qc.get("n_overlap_both", 0)
+            if isinstance(cr, dict) and cr:
+                pos_class = cr.get("1", cr.get("1.0", {}))
+                neg_class = cr.get("0", cr.get("0.0", {}))
+                sensitivity = pos_class.get("recall", np.nan) if pos_class else np.nan
+                specificity = neg_class.get("recall", np.nan) if neg_class else np.nan
+                weighted = cr.get("weighted avg", {})
+                n_samples = weighted.get("support", np.nan) if weighted else np.nan
+                n_positive = pos_class.get("support", np.nan) if pos_class else np.nan
 
-        rec = {
-            "evaluator": evaluator_name,
-            "best_auc": best_auc,
-            "best_model": best_model,
-            "n_features": len(data.get("top_features", [])),
-            "cv_folds": data.get("cv_folds_actual", np.nan),
-            "sensitivity": sensitivity,
-            "specificity": specificity,
-            "n_samples": n_samples,
-            "n_positive": n_positive,
-            "selection_method": sel_qc.get("method", "legacy_cohens_d"),
-            "n_selected_features": n_sel,
-            "selection_overlap_pct": round(n_overlap / max(1, n_sel) * 100, 1),
-        }
+            # Extract selection QC metadata (added in v0.0.9)
+            sel_qc = data.get("selection_qc", {})
+            n_sel = sel_qc.get("n_selected_union", len(data.get("top_features", [])))
+            n_overlap = sel_qc.get("n_overlap_both", 0)
 
-        # Clinical sensitivity metrics (from evaluate_model, v0.0.16+)
-        if best_model:
-            # Look up in flat dict first, then stacking dict
-            def _get_metric(key):
-                val = data.get(key)
-                if val is None and "stacking" in data:
-                    val = data["stacking"].get(key)
-                return val if val is not None else np.nan
+            rec = {
+                "evaluator": evaluator_name,
+                "best_auc": best_auc,
+                "best_model": best_model,
+                "n_features": len(data.get("top_features", [])),
+                "cv_folds": data.get("cv_folds_actual", np.nan),
+                "sensitivity": sensitivity,
+                "specificity": specificity,
+                "n_samples": n_samples,
+                "n_positive": n_positive,
+                "selection_method": sel_qc.get("method", "legacy_cohens_d"),
+                "n_selected_features": n_sel,
+                "selection_overlap_pct": round(n_overlap / max(1, n_sel) * 100, 1),
+            }
 
-            rec["sens_at_100spec"] = _get_metric(f"{best_model}_sensitivity_at_100spec")
-            rec["sens_at_100spec_healthy"] = _get_metric(
-                f"{best_model}_sensitivity_at_100spec_healthy"
+            # Clinical sensitivity metrics (from evaluate_model, v0.0.16+)
+            if best_model:
+                # Look up in flat dict first, then stacking dict
+                def _get_metric(key):
+                    val = data.get(key)
+                    if val is None and "stacking" in data:
+                        val = data["stacking"].get(key)
+                    return val if val is not None else np.nan
+
+                rec["sens_at_100spec"] = _get_metric(
+                    f"{best_model}_sensitivity_at_100spec"
+                )
+                rec["sens_at_100spec_healthy"] = _get_metric(
+                    f"{best_model}_sensitivity_at_100spec_healthy"
+                )
+                rec["n_detected_at_100spec"] = _get_metric(
+                    f"{best_model}_n_detected_at_100spec"
+                )
+                rec["sens_at_95spec"] = _get_metric(
+                    f"{best_model}_sensitivity_at_95spec"
+                )
+
+                # Holdout metrics (v0.0.16+: only present when split column existed)
+                rec["holdout_auc"] = _get_metric(f"holdout_{best_model}_auc")
+                rec["holdout_sens_100spec"] = _get_metric(
+                    f"holdout_{best_model}_sensitivity_at_100spec"
+                )
+
+            # Holdout split sizes (not model-specific)
+            rec["holdout_n_train"] = data.get("holdout_n_train", np.nan)
+            rec["holdout_n_test"] = data.get("holdout_n_test", np.nan)
+
+            # AUC drop: CV overfit diagnostic (positive = drop, negative = improvement)
+            if not np.isnan(rec.get("holdout_auc", np.nan)) and not np.isnan(best_auc):
+                rec["auc_drop"] = best_auc - rec["holdout_auc"]
+            else:
+                rec["auc_drop"] = np.nan
+
+            # Add all individual AUCs
+            for m_id, auc_val in all_aucs.items():
+                rec[f"auc_{m_id}"] = auc_val
+
+            records.append(rec)
+        except Exception as exc:
+            log.warning(
+                "scoreboard_evaluator_parse_failed",
+                evaluator=evaluator_name,
+                error=str(exc),
             )
-            rec["n_detected_at_100spec"] = _get_metric(
-                f"{best_model}_n_detected_at_100spec"
-            )
-            rec["sens_at_95spec"] = _get_metric(f"{best_model}_sensitivity_at_95spec")
-
-            # Holdout metrics (v0.0.16+: only present when split column existed)
-            rec["holdout_auc"] = _get_metric(f"holdout_{best_model}_auc")
-            rec["holdout_sens_100spec"] = _get_metric(
-                f"holdout_{best_model}_sensitivity_at_100spec"
-            )
-
-        # Holdout split sizes (not model-specific)
-        rec["holdout_n_train"] = data.get("holdout_n_train", np.nan)
-        rec["holdout_n_test"] = data.get("holdout_n_test", np.nan)
-
-        # AUC drop: CV overfit diagnostic (positive = drop, negative = improvement)
-        if not np.isnan(rec.get("holdout_auc", np.nan)) and not np.isnan(best_auc):
-            rec["auc_drop"] = best_auc - rec["holdout_auc"]
-        else:
-            rec["auc_drop"] = np.nan
-
-        # Add all individual AUCs
-        for m_id, auc_val in all_aucs.items():
-            rec[f"auc_{m_id}"] = auc_val
-
-        records.append(rec)
+            continue
 
     if not records:
         log.warning("scoreboard_empty_after_parsing", dir=str(output_dir))
