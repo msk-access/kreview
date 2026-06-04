@@ -17,6 +17,7 @@ __all__ = [
 # %% ../nbs/90_cli.ipynb #27a890c5
 import typer
 import sys
+import os
 from pathlib import Path
 from typing import Optional
 import pandas as pd
@@ -681,6 +682,7 @@ def run(
     # All requested models (CPU + GPU) for resume checking
     cpu_model_names = {"lr", "rf", "xgb"}
     all_requested_models = cpu_model_names | set(gpu_model_list)
+
     if gpu_model_list:
         _echo(f"  GPU models requested: {gpu_model_list}")
         log.info(
@@ -689,6 +691,29 @@ def run(
             device=device,
             finetune=not no_finetune,
         )
+        # ── Pre-flight: verify requested GPU models can be imported ──
+        for m in gpu_model_list:
+            pkg = m  # tabpfn or tabicl
+            try:
+                __import__(pkg)
+            except ImportError:
+                _echo(
+                    f"ERROR: GPU model '{m}' was requested but the {pkg} "
+                    f"package is not installed.\n"
+                    f"  Install with: pip install kreview[gpu]\n"
+                    f"  Or remove '{m}' from --gpu-models."
+                )
+                raise typer.Exit(code=1)
+            if m == "tabpfn" and not os.environ.get("TABPFN_TOKEN"):
+                _echo(
+                    "ERROR: GPU model 'tabpfn' requires a TABPFN_TOKEN "
+                    "environment variable.\n"
+                    "  1. Register at https://ux.priorlabs.ai\n"
+                    "  2. Accept the license on the Licenses tab\n"
+                    "  3. export TABPFN_TOKEN='your-token-here'\n"
+                    "  Or remove 'tabpfn' from --gpu-models."
+                )
+                raise typer.Exit(code=1)
 
     # ── Validate --chunk-size ──
     # 'auto' passes through to iter_feature_chunks which probes row density.

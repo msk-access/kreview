@@ -1672,7 +1672,16 @@ def gpu_models(
                 log.warning(
                     "gpu_model_skipped",
                     model=model_name,
-                    reason="build failed",
+                    reason="build failed — package not installed or import error",
+                )
+                results[f"{model_name}_error"] = (
+                    f"{model_name} requested but failed to import. "
+                    f"Install with: pip install kreview[gpu]"
+                )
+                print(
+                    f"⚠ WARNING: GPU model '{model_name}' was requested but "
+                    f"could not be imported. Skipping.",
+                    flush=True,
                 )
                 continue
 

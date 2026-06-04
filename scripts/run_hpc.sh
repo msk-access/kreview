@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=kreview_0.0.16
+#SBATCH --job-name=kreview
 #SBATCH --partition=cmobic_cpu
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
@@ -8,10 +8,12 @@
 #SBATCH --error=kreview_%j.err
 
 # ============================================================================
-# kreview Nextflow Pipeline - IRIS SLURM Submission Script (v0.0.16)
+# kreview Nextflow Pipeline - IRIS SLURM Submission Script
 # ============================================================================
 # Usage:  sbatch run_hpc.sh
 # Resume: sbatch run_hpc.sh --resume
+#
+# Version is auto-detected from nextflow.config — no manual edits needed.
 #
 # Head job: cmobic_cpu (24h) — Nextflow JVM orchestrator only.
 # Child jobs are submitted by Nextflow to cmobic_short/gpu partitions
@@ -42,6 +44,19 @@
 
 set -euo pipefail
 
+# ── Auto-detect version from nextflow.config ─────────────────────────────────
+# Parses: version = '0.0.17'  →  KREVIEW_VERSION=0.0.17
+KREVIEW_REPO="/usersoftware/shahr2/github/kreview/nextflow/main.nf"
+KREVIEW_CONFIG="$(dirname "${KREVIEW_REPO}")/nextflow.config"
+
+if [[ -f "${KREVIEW_CONFIG}" ]]; then
+    KREVIEW_VERSION=$(grep -m1 "version\s*=" "${KREVIEW_CONFIG}" | sed "s/.*= *['\"]//;s/['\"].*//" | tr -d '[:space:]')
+else
+    echo "ERROR: Cannot find ${KREVIEW_CONFIG} — is the local clone path correct?" >&2
+    exit 1
+fi
+echo ">>> kreview version: v${KREVIEW_VERSION}"
+
 # ── TabPFN API Token ──────────────────────────────────────────────────────────
 # Set your token here, or leave empty to run with TabICL only.
 TABPFN_TOKEN="${TABPFN_TOKEN:-}"
@@ -65,7 +80,7 @@ if [[ "${1:-}" == "--resume" ]]; then
 fi
 
 # --- Build manifest.txt listing all krewlyzer result directories ---
-MANIFEST="${PWD}/manifest_v0.0.16.txt"
+MANIFEST="${PWD}/manifest_v${KREVIEW_VERSION}.txt"
 cat > "${MANIFEST}" <<EOF
 /data1/shahr2/share/krewlyzer/0.8.3/access_12_245
 /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs1
@@ -73,19 +88,17 @@ cat > "${MANIFEST}" <<EOF
 EOF
 echo ">>> Manifest written to ${MANIFEST}"
 
-echo ">>> Starting kreview evaluation at $(date)"
+echo ">>> Starting kreview v${KREVIEW_VERSION} evaluation at $(date)"
 echo ">>> Working directory: $PWD"
 
-# Use local clone instead of GitHub remote (-r flag requires internet access
-# on compute nodes, which IRIS SLURM workers do not have).
-KREVIEW_REPO="/usersoftware/shahr2/github/kreview/nextflow/main.nf"
-
-# Build TabPFN token flag (only pass if set)
+# Build TabPFN token flag and GPU model list based on token availability
 TABPFN_FLAG=""
 if [[ -n "${TABPFN_TOKEN}" ]]; then
     TABPFN_FLAG="--tabpfn_token ${TABPFN_TOKEN}"
+    GPU_MODELS="tabpfn,tabicl"
     echo ">>> TabPFN token provided — TabPFN + TabICL models enabled"
 else
+    GPU_MODELS="tabicl"
     echo ">>> No TabPFN token — running TabICL only (set TABPFN_TOKEN to enable)"
 fi
 
@@ -95,13 +108,13 @@ nextflow run "${KREVIEW_REPO}" \
   --healthy_xs2_samplesheet /data1/shahr2/share/krewlyzer/0.8.3/healthy_controls/xs2/samplesheet.csv \
   --cbioportal_dir          /data1/core006/access/production/resources/cbioportal/current/msk_solid_heme \
   --krewlyzer_dir           "${MANIFEST}" \
-  --outdir                  $PWD/v0.0.16_eval \
+  --outdir                  $PWD/v${KREVIEW_VERSION}_eval \
   --pipeline_mode           multistage \
   --run_gpu_eval            true \
-  --gpu_models              "tabpfn,tabicl" \
+  --gpu_models              "${GPU_MODELS}" \
   --run_multimodal_eval     true \
   --multimodal_selection    boruta_shap \
-  --multimodal_gpu_models   "tabpfn,tabicl" \
+  --multimodal_gpu_models   "${GPU_MODELS}" \
   --top_percentile          10.0 \
   --ch_hotspot_maf          /data1/core006/cch/production/resources/cmo-ch/versions/v1.0/regions_of_interest/versions/v1.0/hotspot-list-ch-pd-v1.maf \
   --compute_univariate_auc  \
@@ -111,4 +124,4 @@ nextflow run "${KREVIEW_REPO}" \
   -profile iris \
   ${RESUME_FLAG}
 
-echo ">>> kreview evaluation completed at $(date)"
+echo ">>> kreview v${KREVIEW_VERSION} evaluation completed at $(date)"
