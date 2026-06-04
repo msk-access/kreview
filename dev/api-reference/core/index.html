@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -2864,7 +2864,10 @@ chunk_size=15_000 (single-sweep load) on first probe.</p>
         <p>Execute a full-cohort SQL extraction in a single DuckDB pass.</p>
 <p>This is the SQL pushdown alternative to <code>iter_feature_chunks</code> +
 per-sample <code>extract()</code>. It runs the evaluator's SQL query against
-all discovered parquet files at once, returning one row per sample.</p>
+all discovered parquet files at once.</p>
+<p>Most evaluators return one row per sample. Some (e.g. WPSGenome with
+<code>sql_pivot_column</code>) return a "tall" result with multiple rows per
+sample; the CLI handles pivoting to wide format.</p>
 <p>The query must contain a <code>read_parquet(?, ...)</code> placeholder that
 accepts the file path list.</p>
 
@@ -2979,7 +2982,7 @@ accepts the file path list.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>DataFrame with one row per sample, or empty DataFrame on failure.</p>
+                <p>DataFrame with extraction results, or empty DataFrame on failure.</p>
               </div>
             </td>
           </tr>

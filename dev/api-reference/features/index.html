@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1784,6 +1784,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="WPSGenomeEvaluator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_genomewide.WPSGenomeEvaluator.extract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_sql
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
       </ul>
@@ -2635,6 +2663,34 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="WPSGenomeEvaluator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_genomewide.WPSGenomeEvaluator.extract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_sql
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -4081,12 +4137,16 @@ parsed from <code>region</code> column format <code>chrN:start-end</code>.</p>
 
 
         <p>Extracts genome-wide <abbr title="Window Protection Score">WPS</abbr> metrics with spectral features.</p>
-<p>For each <abbr title="Window Protection Score">WPS</abbr> array, extracts:
-- mean, std (original)
-- peak-to-valley amplitude (nucleosome occupancy proxy)
-- median absolute deviation (robust dispersion)
-- spectral max power and dominant frequency (FFT-based periodicity)</p>
-<p>Handles both numpy array and string columns from krewlyzer parquets.</p>
+<p>For each <abbr title="Window Protection Score">WPS</abbr> array column and region_type, extracts:
+- mean, std (signal level and dispersion)
+- peak-to-valley amplitude (nucleosome occupancy proxy)</p>
+<p>Supports two extraction paths:
+- <strong>SQL pushdown (preferred)</strong>: DuckDB parses string arrays and computes
+  aggregates entirely in C++ — orders of magnitude faster than Python.
+- <strong>Python fallback</strong>: Row-by-row extraction with parse_array() + numpy.
+  Also computes MAD and FFT spectral features (not available in SQL).</p>
+<p>The SQL pushdown produces a "tall" result (one row per sample × region_type)
+that the CLI pivots to wide format via <code>sql_pivot_column</code>.</p>
 
 
 
@@ -4108,6 +4168,52 @@ parsed from <code>region</code> column format <code>chrN:start-end</code>.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="kreview.features.wps_genomewide.WPSGenomeEvaluator.extract" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">extract</span><span class="p">(</span><span class="n">df</span><span class="p">)</span></code>
+
+</h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Python fallback extraction — row-by-row with parse_array().</p>
+<p>Used when SQL pushdown is unavailable or returns empty. Computes
+all features including MAD and FFT spectral features.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">extract_sql</span><span class="p">()</span></code>
+
+</h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>DuckDB SQL pushdown for WPSGenome.</p>
+<p>Parses string-encoded arrays (e.g. <code>"[1.0 2.0 3.0]"</code>) into DuckDB
+lists, then computes per-<code>region_type</code> aggregate statistics entirely
+in DuckDB's C++ engine — eliminating the Python row loop.</p>
+<p>Computes per array column: mean, peak_valley (max - min).
+Skips: std, MAD, FFT spectral features (require numpy; minimal
+incremental <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>; WPSBackground already captures periodicity).</p>
+<p>Returns a tall DataFrame: one row per (sample_id, region_type).
+The CLI pivots this via <code>sql_pivot_column</code> to wide format.</p>
+
+
+    </div>
+
+</div>
 
 
 
