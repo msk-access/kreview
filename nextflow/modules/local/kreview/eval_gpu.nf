@@ -3,7 +3,9 @@
 // ---------------------------------------------------------
 // Runs `kreview eval gpu` on per-evaluator feature matrices
 // using TabPFN and/or TabICL foundation models.
-// Fine-tuning is ON by default. Use gpu_no_finetune to disable.
+// Model names encode their variant:
+//   tabpfn = zero-shot, tabpfn_ft = fine-tuned
+//   tabicl = zero-shot, tabicl_ft = fine-tuned
 //
 // This process is configured with GPU resource labels so SLURM
 // schedules it on GPU-capable nodes.
@@ -25,8 +27,7 @@ process KREVIEW_EVAL_GPU {
     script:
     def models_arg = params.gpu_models ?: 'tabpfn,tabicl'
     def device_arg = params.gpu_device ?: 'cuda'
-    def finetune_flag = params.gpu_no_finetune ? '--no-finetune' : ''
-    def epochs_arg = params.gpu_finetune_epochs ?: 30
+    def epochs_arg = params.gpu_finetune_epochs ?: 50
     def resume_flag = params.resume_eval ? '--resume' : ''
     """
     set -euo pipefail
@@ -37,7 +38,6 @@ process KREVIEW_EVAL_GPU {
         --matrices-dir ${matrices_dir} \\
         --models ${models_arg} \\
         --device ${device_arg} \\
-        ${finetune_flag} \\
         --finetune-epochs ${epochs_arg} \\
         --cv-folds ${params.cv_folds ?: 5} \\
         ${resume_flag} \\

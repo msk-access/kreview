@@ -1,6 +1,6 @@
 # Testing Guide
 
-`kreview` is built to process large Fragmentomics datasets and evaluate complex Machine Learning features. Because the codebase runs cross-validation, hyperparameter sweeping, and ML model training (LR, RF, XGBoost) natively in Python, the test suite can quickly become a massive bottleneck if not managed carefully.
+`kreview` is built to process large Fragmentomics datasets and evaluate complex Machine Learning features. Because the codebase runs cross-validation, hyperparameter sweeping, and ML model training (LR, RF, XGBoost + optional GPU models) natively in Python, the test suite can quickly become a massive bottleneck if not managed carefully.
 
 This guide outlines our testing philosophy, how to run tests, and critical performance optimization strategies.
 
@@ -41,7 +41,7 @@ pytest --durations=10
 
 The most common reason for a slow test suite in `kreview` is repeatedly fitting models inside the test setup. 
 
-For instance, `test_eval_engine.py` contains over 20 test cases that validate the outputs of `single_feature_model()`. If each test calls `single_feature_model(X, y)` independently, it runs 5-fold cross validation for 3 different algorithms *20 times*, adding minutes to the test run.
+For instance, `test_eval_engine.py` contains over 20 test cases that validate the outputs of `single_feature_model()`. If each test calls `single_feature_model(X, y)` independently, it runs 5-fold cross validation for 3+ different algorithms *20 times*, adding minutes to the test run.
 
 **The Solution:**
 We heavily leverage `@pytest.fixture(scope="module")` to cache expensive computations *once per test session*.
@@ -77,3 +77,30 @@ You should edit the files in `tests/*.py` directly using your standard IDE (VS C
 ## 🗃️ Mocking DuckDB
 
 When testing extraction pipelines, prefer writing small synthentic Parquet files using `pandas.DataFrame.to_parquet()` into a Pytest `tmp_path` fixture rather than querying real patient data. This ensures tests remain deterministic, fast, and secure.
+
+## 🧠 Testing GPU Models
+
+GPU model tests are **marked with `@pytest.mark.gpu`** and skipped when CUDA is unavailable. The `GPUModelCVAdapter` wrapper can be tested without a GPU by mocking the inner model:
+
+```python
+# ✅ Test GPUModelCVAdapter without GPU
+@pytest.fixture(scope="module")
+def mock_gpu_adapter():
+    from kreview.eval_engine import GPUModelCVAdapter
+    from sklearn.linear_model import LogisticRegression
+    # Use LR as a stand-in to test adapter delegation
+    adapter = GPUModelCVAdapter(LogisticRegression())
+    return adapter
+
+def test_adapter_sets_classes(mock_gpu_adapter, binary_Xy):
+    X, y = binary_Xy
+    mock_gpu_adapter.fit(X, y)
+    assert hasattr(mock_gpu_adapter, 'classes_')
+    assert list(mock_gpu_adapter.classes_) == [0, 1]
+```
+
+For integration tests that require actual GPU hardware, use the `gpu` mark:
+```bash
+pytest -m gpu  # Run GPU tests only (requires CUDA)
+pytest -m "not gpu"  # Skip GPU tests (CI default)
+```

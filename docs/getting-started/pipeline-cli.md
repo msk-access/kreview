@@ -14,15 +14,22 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 | `kreview extract` | Label + extract feature matrices per evaluator | 2 |
 | `kreview select` | Score features (AUC/MI) + mRMR or hybrid union selection | 3 |
 | `kreview eval cpu` | CPU model evaluation (LR, RF, XGB) | 4a (parallel) |
-| `kreview eval gpu` | GPU model evaluation (TabPFN, TabICL) | 4b (parallel) |
+| `kreview eval gpu` | GPU model evaluation (TabPFN, TabPFN-FT, TabICL, TabICL-FT) | 4b (parallel) |
 | `kreview fuse` | Fuse per-evaluator matrices → super-matrix | 4c (parallel) |
-| `kreview eval multimodal` | Cross-evaluator stacking + ablation | 5 (needs 4a+4b+4c) |
+| `kreview eval multimodal run` | Cross-evaluator stacking + ablation (monolithic) | 5 (needs 4a+4b+4c) |
+| `kreview eval multimodal prep` | Build stacking matrix + feature selection | 5a |
+| `kreview eval multimodal single` | Train single stacking model (parallelizable) | 5b |
+| `kreview eval multimodal ablation` | Feature ablation analysis | 5c |
+| `kreview eval multimodal merge` | Aggregate stacking + ablation results | 5d |
 | `kreview report` | Re-generate HTML dashboards | 6 |
 | `kreview run` | Full pipeline: all of the above in sequence | — |
 | `kreview features-list` | List registered evaluators | — |
 
 !!! note "Steps 4a, 4b, and 4c are independent"
     After feature selection, `eval cpu`, `eval gpu`, and `fuse` can run in **parallel**. They all converge at `eval multimodal`, which needs the OOF predictions from eval + the super-matrix from fuse.
+
+!!! info "Decomposed Multimodal (v0.0.18+)"
+    `kreview eval multimodal run` executes the full multimodal pipeline as a single command. For HPC/Nextflow parallelization, use the decomposed subcommands: `prep` → `single` (×M models) → `ablation` → `merge`.
 
 ---
 
@@ -215,16 +222,46 @@ kreview select --matrices-dir output/ --top-percentile 50 --strategy mrmr --outp
 kreview eval cpu --matrices-dir selected/ --output results/
 # 3b: GPU model evaluation (optional, uses eval_stats for feature capping)
 kreview eval gpu --matrices-dir selected/ --output results/ \
-    --eval-stats-dir selected/ --max-gpu-features 150
+    --eval-stats-dir selected/ --max-gpu-features 150 \
+    --gpu-models "tabpfn,tabpfn_ft,tabicl,tabicl_ft"
 # 3c: Fuse selected matrices → super-matrix
 kreview fuse --output-dir selected/
 
-# Step 4: Multimodal evaluation (needs OOF probs + super_matrix)
-kreview eval multimodal \
+# Step 4: Multimodal evaluation (monolithic — runs all stages in one command)
+kreview eval multimodal run \
     --results-dir results/ \
     --super-matrix selected/super_matrix.parquet \
     --multimodal-selection boruta_shap \
     --output results/
+
+# OR: Decomposed multimodal (HPC-optimized — parallelizable per-model)
+kreview eval multimodal prep \
+    --results-dir results/ \
+    --super-matrix selected/super_matrix.parquet \
+    --output results/multimodal/
+
+# Run per-model stacking in parallel (CPU models)
+kreview eval multimodal single \
+    --stacking-matrix results/multimodal/stacking_matrix.parquet \
+    --model rf --output results/multimodal/
+kreview eval multimodal single \
+    --stacking-matrix results/multimodal/stacking_matrix.parquet \
+    --model xgb --output results/multimodal/
+
+# GPU stacking models (optional)
+kreview eval multimodal single \
+    --stacking-matrix results/multimodal/stacking_matrix.parquet \
+    --model tabpfn_ft --device cuda --output results/multimodal/
+
+kreview eval multimodal ablation \
+    --stacking-matrix results/multimodal/stacking_matrix.parquet \
+    --stacking-results-dir results/multimodal/ \
+    --output results/multimodal/
+
+kreview eval multimodal merge \
+    --stacking-results-dir results/multimodal/ \
+    --prep-metadata results/multimodal/prep_metadata.json \
+    --output results/multimodal/
 
 # Step 5: Report
 kreview report --results-dir results/

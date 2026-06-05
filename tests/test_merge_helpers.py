@@ -145,3 +145,109 @@ class TestLoadAllModelResults:
         results = load_all_model_results(tmp_path)
         assert "GpuOnly" in results
         assert results["GpuOnly"]["auc_tabpfn"] == 0.88
+
+
+# ── Scattered GPU JSON tests (Step 4) ──────────────────────────────────────
+
+
+class TestScatteredGpuJsons:
+    """Tests for per-model scattered GPU JSONs from Nextflow scatter.
+
+    In the new design, each GPU model writes its own JSON:
+      FSCOnTarget_tabpfn_gpu_model_results.json
+      FSCOnTarget_tabpfn_ft_gpu_model_results.json
+    These must be merged into the CPU results.
+    """
+
+    @pytest.fixture
+    def scattered_dir(self, tmp_path):
+        """Directory with CPU + 2 scattered per-model GPU files."""
+        # CPU results
+        cpu = {
+            "evaluator": "FSCOnTarget",
+            "auc_lr": 0.85,
+            "auc_rf": 0.88,
+            "oof_labels": [0, 1, 0, 1],
+            "oof_sample_ids": ["S1", "S2", "S3", "S4"],
+        }
+        (tmp_path / "FSCOnTarget_model_results.json").write_text(json.dumps(cpu))
+
+        # Scattered GPU results — one file per model
+        tabpfn = {
+            "auc_tabpfn": 0.90,
+            "tabpfn_oof_probs": [0.1, 0.9, 0.2, 0.8],
+            "evaluator": "FSCOnTarget",
+            "oof_labels": [0, 1, 0, 1],
+        }
+        (tmp_path / "FSCOnTarget_tabpfn_gpu_model_results.json").write_text(
+            json.dumps(tabpfn)
+        )
+
+        tabicl_ft = {
+            "auc_tabicl_ft": 0.93,
+            "tabicl_ft_oof_probs": [0.05, 0.95, 0.15, 0.85],
+            "evaluator": "FSCOnTarget",
+            "oof_labels": [0, 1, 0, 1],
+        }
+        (tmp_path / "FSCOnTarget_tabicl_ft_gpu_model_results.json").write_text(
+            json.dumps(tabicl_ft)
+        )
+
+        return tmp_path
+
+    def test_scattered_merge_includes_all_models(self, scattered_dir):
+        """All scattered GPU models merge into the CPU result."""
+        result = load_model_results(scattered_dir, "FSCOnTarget")
+        assert result is not None
+        # CPU keys
+        assert result["auc_lr"] == 0.85
+        assert result["auc_rf"] == 0.88
+        # Scattered GPU keys
+        assert result["auc_tabpfn"] == 0.90
+        assert result["auc_tabicl_ft"] == 0.93
+        assert result["tabpfn_oof_probs"] == [0.1, 0.9, 0.2, 0.8]
+
+    def test_scattered_preserves_cpu_metadata(self, scattered_dir):
+        """Metadata (evaluator, oof_labels, oof_sample_ids) comes from CPU."""
+        result = load_model_results(scattered_dir, "FSCOnTarget")
+        assert result["evaluator"] == "FSCOnTarget"
+        assert result["oof_sample_ids"] == ["S1", "S2", "S3", "S4"]
+
+    def test_scattered_gpu_only(self, tmp_path):
+        """Scattered GPU-only evaluators are discovered."""
+        data = {"auc_tabpfn_ft": 0.87}
+        (tmp_path / "NPS_tabpfn_ft_gpu_model_results.json").write_text(
+            json.dumps(data)
+        )
+        result = load_model_results(tmp_path, "NPS")
+        assert result is not None
+        assert result["auc_tabpfn_ft"] == 0.87
+
+    def test_load_all_discovers_scattered(self, scattered_dir):
+        """load_all_model_results discovers evaluators from scattered files."""
+        results = load_all_model_results(scattered_dir)
+        assert "FSCOnTarget" in results
+        fsc = results["FSCOnTarget"]
+        assert fsc["auc_tabpfn"] == 0.90
+        assert fsc["auc_tabicl_ft"] == 0.93
+
+    def test_monolithic_plus_scattered_coexist(self, tmp_path):
+        """Monolithic GPU JSON and scattered GPU JSON merge correctly."""
+        cpu = {"auc_lr": 0.80, "oof_labels": [0, 1]}
+        (tmp_path / "Eval_model_results.json").write_text(json.dumps(cpu))
+
+        # Monolithic GPU
+        mono = {"auc_tabpfn": 0.85}
+        (tmp_path / "Eval_gpu_model_results.json").write_text(json.dumps(mono))
+
+        # Scattered GPU
+        scat = {"auc_tabicl_ft": 0.90}
+        (tmp_path / "Eval_tabicl_ft_gpu_model_results.json").write_text(
+            json.dumps(scat)
+        )
+
+        result = load_model_results(tmp_path, "Eval")
+        assert result["auc_lr"] == 0.80
+        assert result["auc_tabpfn"] == 0.85
+        assert result["auc_tabicl_ft"] == 0.90
+

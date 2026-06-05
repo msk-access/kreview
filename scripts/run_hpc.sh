@@ -31,11 +31,15 @@
 #   - Extraction (×N): 4 CPUs + 24GB×attempt, maxRetries=5 (DuckDB streaming)
 #   - Select (×N):     4 CPUs + 16GB, max 2.5h (mRMR selection)
 #   - CPU Eval (×N):   4 CPUs + 32GB, max 2.5h (LR, RF, XGB)
-#   - GPU Eval (×N):   4 CPUs + 32GB + 1 GPU, max 2h (TabPFN, TabICL)
+#   - GPU Eval (×N):   4 CPUs + 32GB + 1 GPU, max 2h (TabPFN, TabPFN-FT, TabICL, TabICL-FT)
 #   - Fuse:            2 CPUs + 16GB, max 2.5h (pandas join)
 #   - Scoreboard:      4 CPUs + 16GB (scoreboard aggregation)
-#   - Multimodal:      8 CPUs + 64GB + 1 GPU, max 2.5h (Stacking + GPU)
+#   - Multimodal Prep:     4 CPUs + 32GB, max 1h (stacking matrix + feature selection)
+#   - Multimodal Single:   4 CPUs + 32GB (CPU) or +1 GPU (GPU), per-model ×M parallel
+#   - Multimodal Ablation: 4 CPUs + 32GB, max 1h (feature ablation on best model)
+#   - Multimodal Merge:    2 CPUs + 8GB (JSON aggregation — lightweight)
 #   - Report:          4 CPUs + 32GB, max 2.5h (Quarto render)
+#   - Report Multimodal: 4 CPUs + 32GB, max 2.5h (Quarto render)
 #   - iris profile auto-tunes: chunk_size=auto, cv_folds=10, shap_samples=5000
 #
 # Typical wall-clock: ~1-2h (extraction/eval stages scatter in parallel).
@@ -95,11 +99,11 @@ echo ">>> Working directory: $PWD"
 TABPFN_FLAG=""
 if [[ -n "${TABPFN_TOKEN}" ]]; then
     TABPFN_FLAG="--tabpfn_token ${TABPFN_TOKEN}"
-    GPU_MODELS="tabpfn,tabicl"
-    echo ">>> TabPFN token provided — TabPFN + TabICL models enabled"
+    GPU_MODELS="tabpfn,tabpfn_ft,tabicl,tabicl_ft"
+    echo ">>> TabPFN token provided — all 4 GPU model variants enabled (vanilla + fine-tuned)"
 else
-    GPU_MODELS="tabicl"
-    echo ">>> No TabPFN token — running TabICL only (set TABPFN_TOKEN to enable)"
+    GPU_MODELS="tabicl,tabicl_ft"
+    echo ">>> No TabPFN token — running TabICL only (set TABPFN_TOKEN to enable TabPFN)"
 fi
 
 nextflow run "${KREVIEW_REPO}" \

@@ -1,7 +1,7 @@
 // ---------------------------------------------------------
 // KREVIEW_EVAL_MULTIMODAL — Cross-evaluator multimodal evaluation
 // ---------------------------------------------------------
-// Runs `kreview eval multimodal` with per-evaluator model results
+// Runs `kreview eval multimodal run` with per-evaluator model results
 // JSONs for stacking and ablation.  Optionally uses the fused
 // super_matrix.parquet for raw-feature evaluation.
 //
@@ -31,8 +31,7 @@ process KREVIEW_EVAL_MULTIMODAL {
     def mm_sel         = params.multimodal_selection ?: "mi"
     def cv_folds       = params.cv_folds ?: 5
     def device_arg     = params.gpu_device ?: 'cuda'
-    def finetune_flag  = params.gpu_no_finetune ? '--no-finetune' : ''
-    def epochs_arg     = params.gpu_finetune_epochs ?: 30
+    def epochs_arg     = params.gpu_finetune_epochs ?: 50
     def lr_arg         = params.gpu_finetune_lr ?: '1e-5'
     // super_matrix is optional — passed if FUSE produced it
     def super_flag = super_matrix.name != 'NO_SUPER_MATRIX' ? "--super-matrix ${super_matrix}" : ""
@@ -59,13 +58,12 @@ process KREVIEW_EVAL_MULTIMODAL {
     # symlinked in the work directory by Nextflow's collect() operator.
     # Python load_all_model_results() natively handles both naming patterns.
 
-    PYTHONUNBUFFERED=1 kreview eval multimodal \\
+    PYTHONUNBUFFERED=1 kreview eval multimodal run \\
         --results-dir . \\
         ${super_flag} \\
         --models ${models_arg} \\
         ${gpu_flag} \\
         --device ${device_arg} \\
-        ${finetune_flag} \\
         --finetune-epochs ${epochs_arg} \\
         --finetune-lr ${lr_arg} \\
         --top-percentile ${top_pct_arg} \\

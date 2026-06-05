@@ -13,7 +13,7 @@ docker pull ghcr.io/msk-access/kreview:latest
 Or pin to a specific version:
 
 ```bash
-docker pull ghcr.io/msk-access/kreview:latest
+docker pull ghcr.io/msk-access/kreview:v0.0.18
 ```
 
 ---
@@ -31,8 +31,7 @@ docker run --rm \
     --healthy-xs2-samplesheet /app/data/healthy_xs2.csv \
     --cbioportal-dir /app/data/cbioportal/ \
     --krewlyzer-dir /app/data/krewlyzer/ \
-    --output /app/results/ \
-    --workers 4
+    --output /app/results/
 ```
 
 !!! tip "Volume Mounts"
@@ -82,3 +81,10 @@ Every image is annotated with OCI-standard metadata:
 | `org.opencontainers.image.description` | Evaluate cfDNA fragmentomics features for ctDNA detection |
 | `org.opencontainers.image.vendor` | MSK-ACCESS |
 | `org.opencontainers.image.licenses` | AGPL-3.0 |
+
+!!! info "GPU Container"
+    For GPU model evaluation (TabPFN, TabICL and fine-tuned variants), use the GPU-tagged image which includes PyTorch and CUDA support:
+    ```bash
+    docker pull ghcr.io/msk-access/kreview:v0.0.18-gpu
+    ```
+    Run with `--gpus all` to expose CUDA devices inside the container.

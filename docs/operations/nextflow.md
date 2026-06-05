@@ -20,10 +20,14 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
     - `extract.nf` — Per-evaluator feature extraction (accepts `--labels`)
     - `select_single.nf` — Per-evaluator feature scoring + mRMR/hybrid-union selection
     - `eval_cpu_single.nf` — Per-evaluator CPU model evaluation (LR, RF, XGB)
-    - `eval_gpu_single.nf` — Per-evaluator GPU model evaluation (TabPFN, TabICL)
+    - `eval_gpu_single.nf` — Per-evaluator GPU model evaluation (TabPFN, TabPFN-FT, TabICL, TabICL-FT) — all models in one process
     - `fuse.nf` — Super-matrix construction (all evaluators merged)
     - `scoreboard.nf` — Cross-evaluator scoreboard aggregation (v0.0.15)
-    - `eval_multimodal.nf` — Cross-evaluator stacking + ablation
+    - `eval_multimodal.nf` — **[LEGACY]** Monolithic cross-evaluator stacking via `kreview eval multimodal run` (kept for standalone testing)
+    - `multimodal_prep.nf` — Stacking matrix + feature selection (v0.0.18+)
+    - `multimodal_single.nf` — Per-model stacking CV, CPU + GPU variants (v0.0.18+)
+    - `multimodal_ablation.nf` — Feature ablation analysis (v0.0.18+)
+    - `multimodal_merge.nf` — Final results aggregation (v0.0.18+)
     - `report.nf` — HTML dashboard generation (6 inputs: matrices, JSONs, stats, QC, joblib, scoreboard)
     - `report_multimodal.nf` — Multimodal stacking dashboard
 
@@ -42,18 +46,20 @@ graph LR
     C --> F["Fuse (1 job)"]:::step
     D --> S["Scoreboard"]:::step
     E --> S
-    D --> G["Eval Multimodal"]:::step
-    E --> G
-    F --> G:::step
+    D --> MM_PREP["Multimodal Prep"]:::step
+    E --> MM_PREP
+    F --> MM_PREP
+    MM_PREP --> MM_SINGLE["Multimodal Single ×M"]:::step
+    MM_SINGLE --> MM_ABLATION["Multimodal Ablation"]:::step
+    MM_ABLATION --> MM_MERGE["Multimodal Merge"]:::step
     S --> H["Report"]:::step
     D --> H
     E --> H
-    D --> I["Report Multimodal"]:::step
-    G --> I
+    MM_MERGE --> I["Report Multimodal"]:::step
 ```
 
-!!! note "Report runs in parallel with Multimodal"
-    After CPU/GPU eval complete, Scoreboard, Report, and Multimodal run **concurrently**. Report needs matrices + model results + scoreboard; Multimodal needs super_matrix + OOF probs.
+!!! note "Decomposed Multimodal Pipeline (v0.0.18+)"
+    The multimodal pipeline is decomposed into 4 sequential stages: `prep` → `single ×M` → `ablation` → `merge`. The `single` stage is parallelized across models (CPU and GPU variants). This replaces the legacy monolithic `KREVIEW_EVAL_MULTIMODAL` process, which is kept for standalone testing via `kreview eval multimodal run`.
 
 For a detailed architecture overview with notebook-to-module mappings, see the [Pipeline Architecture](../developer/pipeline-architecture.md) developer guide.
 
@@ -87,10 +93,17 @@ outdir/
 │   │   ├── AtacOnTarget_lr_model.joblib
 │   │   └── ...
 │   ├── gpu/                                    # Per-evaluator GPU model results
-│   │   ├── AtacOnTarget_gpu_model_results.json # Note: _gpu_ prefix avoids collision
+│   │   ├── AtacOnTarget_gpu_model_results.json # All 4 GPU models in one JSON
+│   │   ├── FSCOnTarget_gpu_model_results.json
 │   │   └── ...
 │   └── multimodal/
-│       └── multimodal_results.json             # Cross-evaluator stacking
+│       ├── stacking_matrix.parquet             # From prep
+│       ├── prep_metadata.json                  # From prep
+│       ├── stacking_rf_results.json            # From single (per-model)
+│       ├── stacking_xgb_results.json
+│       ├── stacking_tabpfn_ft_results.json
+│       ├── ablation_results.json               # From ablation
+│       └── multimodal_model_results.json       # From merge (final)
 ├── scoreboard_combined__all.parquet            # Cross-evaluator ranking (v0.0.15)
 ├── scoreboard_combined__all.csv
 └── reports/
@@ -118,10 +131,10 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --krewlyzer_dir /data/krewlyzer_parquets/ \
   --pipeline_mode multistage \
   --run_gpu_eval true \
-  --gpu_models "tabpfn,tabicl" \
+  --gpu_models "tabpfn,tabpfn_ft,tabicl,tabicl_ft" \
   --run_multimodal_eval true \
   --multimodal_selection boruta_shap \
-  --multimodal_gpu_models "tabpfn,tabicl" \
+  --multimodal_gpu_models "tabpfn_ft,tabicl_ft" \
   --ch_hotspot_maf /path/to/ch_hotspots.maf \
   --max_gpu_features 150 \
   --seed 42 \
