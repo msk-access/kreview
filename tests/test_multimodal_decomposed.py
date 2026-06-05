@@ -21,7 +21,6 @@ from kreview.eval_engine import (
     multimodal_single,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
@@ -347,9 +346,7 @@ class TestMultimodalAblation:
 class TestMultimodalMerge:
     """Tests for multimodal_merge (Stage 4)."""
 
-    def test_produces_unified_json(
-        self, stacking_results, prep_metadata, tmp_path
-    ):
+    def test_produces_unified_json(self, stacking_results, prep_metadata, tmp_path):
         """Merge should produce multimodal_results.json."""
         out = tmp_path / "merge_out"
         multimodal_merge(
