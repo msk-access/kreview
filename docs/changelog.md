@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.18] - 2026-06-05
+
+### Added
+- **Fine-tuned GPU Model Variants**: `tabpfn_ft` and `tabicl_ft` via `FinetunedTabPFNClassifier` and `FinetunedTabICLClassifier` with configurable `--finetune-epochs` (default: 50) and `--finetune-lr` (default: 1e-5). Total GPU model count: 4 (was 2).
+- **`GPUModelCVAdapter`**: sklearn-compatible wrapper in `eval_engine.py` that resolves `AttributeError: 'FinetunedTabPFNClassifier' has no attribute 'classes_'` during `cross_val_predict`. Exposes `classes_` as a plain attribute set during `fit()`.
+- **`kreview eval multimodal` nested subgroup**: 5 subcommands — `run` (monolithic backward-compat), `prep`, `single`, `ablation`, `merge`.
+- **Decomposed multimodal Nextflow pipeline**: 4 new NF modules (`multimodal_prep.nf`, `multimodal_single.nf`, `multimodal_ablation.nf`, `multimodal_merge.nf`) enabling per-model parallel execution. Legacy `eval_multimodal.nf` kept for standalone testing via `kreview eval multimodal run`.
+- **GPU foundation model expansion**: 4 GPU model variants (`tabpfn`, `tabpfn_ft`, `tabicl`, `tabicl_ft`) evaluated per-evaluator in parallel via `KREVIEW_EVAL_GPU_SINGLE`. Each process runs all requested GPU models and outputs a single `{evaluator}_gpu_model_results.json`.
+- **Intentional 7-color palette**: Vanilla/FT shade families (`#00e5ff`/`#00b0ff` for TabPFN, `#76ff03`/`#64dd17` for TabICL) in report templates.
+- **Stacking feature selection**: MI or Boruta-SHAP on stacking matrix via `--stacking-selection`.
+- **Decomposed NF resource configs**: Per-process `withName` blocks for `KREVIEW_MULTIMODAL_PREP`, `KREVIEW_MULTIMODAL_SINGLE_GPU`, and `KREVIEW_MULTIMODAL_ABLATION`.
+
+### Changed
+- Default `--gpu-models` → `tabpfn,tabpfn_ft,tabicl,tabicl_ft` (4 models, was 2).
+- `kreview eval multimodal` uses nested Typer sub-commands (was flat hyphenated commands).
+- NF config: decomposed process resource configs replace monolithic `withName: 'KREVIEW_EVAL_MULTIMODAL'`.
+- Report `_name_map` includes `TabPFN-FT` and `TabICL-FT` display names.
+- `multimodal_cpu_only` NF param marked as legacy (decomposed pipeline routes CPU/GPU per-process).
+
+### Removed
+- `--no-finetune` CLI flag (use `--gpu-models tabpfn,tabicl` for zero-shot only).
+- Dead `KREVIEW_EVAL_MULTIMODAL` import from `kreview_eval.nf`.
+
+### Fixed
+- TabPFN `AttributeError: 'FinetunedTabPFNClassifier' has no attribute 'classes_'` via `GPUModelCVAdapter` wrapper.
+- Stale `multimodal-prep` (hyphen) references in CLI help strings → `multimodal prep` (space).
+- Stale DAG comments in `eval_cpu_single.nf`, `eval_gpu_single.nf`, `report_multimodal.nf` referencing removed `KREVIEW_EVAL_MULTIMODAL`.
+
 ## [0.0.17] - 2026-06-04
 
 ### Added

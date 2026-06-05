@@ -21,6 +21,8 @@ from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.utils.validation import check_is_fitted
 
 log = structlog.get_logger()
 
@@ -50,7 +52,15 @@ __all__ = [
     "multimodal_eval",
     "load_model_results",
     "load_all_model_results",
+    "GPUModelCVAdapter",
+    "multimodal_prep",
+    "multimodal_single",
+    "multimodal_ablation",
+    "multimodal_merge",
 ]
+
+# GPU model names — single source of truth for dispatch logic
+_GPU_MODEL_NAMES = frozenset({"tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"})
 
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3
@@ -784,29 +794,7 @@ def evaluate_model(
 
     result = {}
 
-    # 0. Ensure sklearn-compatible classes_ attribute.
-    # TabPFN's FinetunedTabPFNClassifier and TabICL wrappers don't expose
-    # classes_ on the outer object, causing cross_val_predict to fail with
-    # AttributeError. Setting it here is safe for all models — LR/RF/XGB
-    # already have classes_ after fit() (hasattr check is a no-op).
-    # Note: sklearn Pipeline exposes classes_ as a read-only @property, so
-    # hasattr() returns False when unfitted but assignment still raises
-    # AttributeError. We use try/except to handle both cases.
-    if not hasattr(model, "classes_"):
-        try:
-            model.classes_ = np.unique(y)
-            log.debug(
-                "classes_attribute_set",
-                model=name,
-                classes=model.classes_.tolist(),
-                reason="model lacks classes_ attribute (TabPFN/TabICL wrapper)",
-            )
-        except AttributeError:
-            log.debug(
-                "classes_attribute_skipped",
-                model=name,
-                reason="read-only property (e.g. sklearn Pipeline)",
-            )
+    # (Dead `classes_` block removed — GPUModelCVAdapter handles this now)
 
     # 1. Out-of-fold predictions via cross-validation
     oof_probs = cross_val_predict(model, X, y, cv=cv, method="predict_proba")[:, 1]
@@ -1356,48 +1344,128 @@ single_feature_model = cpu_models
 # ── GPU Foundation Model Support ──────────────────────────────────────────────
 
 
+class GPUModelCVAdapter(BaseEstimator, ClassifierMixin):
+    """sklearn-compatible wrapper for GPU foundation models.
+
+    Sidesteps two TabPFN sklearn-compatibility issues:
+
+    1. ``classes_`` is a read-only ``@property`` on ``FinetunedTabPFNClassifier``
+       that raises ``AttributeError`` when unfitted.  ``cross_val_predict``
+       tries to read ``classes_`` on the *fitted clone*, but ``sklearn.clone()``
+       copies the unfitted object first and the property breaks. This adapter
+       exposes ``classes_`` as a plain attribute set during ``fit()``.
+
+    2. ``sklearn.base.clone()`` is unreliable for TabPFN
+       (PriorLabs/TabPFN#327).  By accepting a ``model_factory`` callable,
+       each ``fit()`` creates a fresh instance without relying on clone.
+
+    Attributes:
+        model_factory: Zero-argument callable returning a fresh model instance.
+        name: Human-readable model name for logging.
+        model_: The fitted model instance (set after ``fit()``).
+        classes_: Unique sorted class labels (set after ``fit()``).
+    """
+
+    def __init__(self, model_factory: Callable, name: str = "gpu_model"):
+        self.model_factory = model_factory
+        self.name = name
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> "GPUModelCVAdapter":
+        """Create a fresh model via factory and fit it.
+
+        Args:
+            X: Feature matrix (n_samples, n_features).
+            y: Binary label array (n_samples,).
+
+        Returns:
+            self
+        """
+        self.model_ = self.model_factory()
+        self.model_.fit(X, y)
+        self.classes_ = np.unique(y)
+        log.info(
+            "gpu_adapter_fit",
+            model=self.name,
+            n_samples=X.shape[0],
+            n_features=X.shape[1],
+            classes=self.classes_.tolist(),
+        )
+        return self
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """Predict class probabilities.
+
+        Raises:
+            NotFittedError: If ``fit()`` has not been called.
+        """
+        check_is_fitted(self, "model_")
+        return self.model_.predict_proba(X)
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """Predict class labels.
+
+        Raises:
+            NotFittedError: If ``fit()`` has not been called.
+        """
+        check_is_fitted(self, "model_")
+        return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
+
+
 def _build_gpu_model(
     name: str,
     device: str = "cuda",
-    finetune: bool = True,
-    finetune_epochs: int = 30,
+    finetune_epochs: int = 50,
     finetune_lr: float = 1e-5,
     random_state: int = 42,
-) -> object | None:
-    """Factory: instantiate a GPU foundation model.
+) -> GPUModelCVAdapter | None:
+    """Factory: instantiate a GPU foundation model wrapped in GPUModelCVAdapter.
 
-    Fine-tuning is default (matches HPC usage pattern).
-    Returns None with structured log error if import fails.
+    All models are returned inside a :class:`GPUModelCVAdapter` so that
+    ``sklearn.cross_val_predict`` and ``sklearn.clone`` work correctly.
 
     Args:
-        name: "tabpfn" or "tabicl".
-        device: PyTorch device string.
-        finetune: If True, use fine-tuned variant (default).
-        finetune_epochs: Epochs for fine-tuning.
-        finetune_lr: Learning rate for fine-tuning.
+        name: One of ``"tabpfn"`` (zero-shot), ``"tabpfn_ft"`` (fine-tuned),
+            ``"tabicl"`` (zero-shot), or ``"tabicl_ft"`` (fine-tuned).
+        device: PyTorch device string (default ``"cuda"``).
+        finetune_epochs: Training epochs for fine-tuned variants (default 50,
+            matches TabICL default; TabPFN has internal early stopping).
+        finetune_lr: Learning rate for fine-tuned variants.
+        random_state: Random seed for reproducibility (used by zero-shot
+            variants and TabICL fine-tuning).
+
+    Returns:
+        A :class:`GPUModelCVAdapter` wrapping the requested model, or
+        ``None`` if the required library cannot be imported.
 
     Versions:
-        - TabPFN v8.0.3+: import from ``tabpfn.finetuning`` (was tabpfn_extensions)
-        - TabPFN v8.1+: ``n_epochs`` renamed to ``epochs``; ``random_state`` removed
-          from ``FinetunedTabPFNClassifier`` (reproducibility via ``seed_everything``).
-        - TabICL v2.1+: ``FinetunedTabICLClassifier`` (was ``TabICLClassifier(finetune=True)``)
+        - TabPFN v8.0.3+: import from ``tabpfn.finetuning``
+        - TabPFN v8.1+: ``epochs`` param; ``random_state`` removed from
+          ``FinetunedTabPFNClassifier``
+        - TabICL v2.1+: ``FinetunedTabICLClassifier`` class
     """
+    _KNOWN = {"tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"}
+
+    if name not in _KNOWN:
+        log.error(
+            "unknown_gpu_model",
+            model=name,
+            known=sorted(_KNOWN),
+            hint="Check --gpu-models / params.gpu_models spelling",
+        )
+        return None
+
+    # ── TabPFN zero-shot ──
     if name == "tabpfn":
         try:
-            if finetune:
-                # TabPFN v8: finetuning moved from tabpfn_extensions → tabpfn.finetuning
-                # Class renamed: FineTunedTabPFNClassifier → FinetunedTabPFNClassifier
-                from tabpfn.finetuning import FinetunedTabPFNClassifier
+            from tabpfn import TabPFNClassifier
 
-                return FinetunedTabPFNClassifier(
-                    device=device,
-                    epochs=finetune_epochs,
-                    learning_rate=finetune_lr,
-                )
-            else:
-                from tabpfn import TabPFNClassifier
-
-                return TabPFNClassifier(device=device, random_state=random_state)
+            log.info("gpu_model_built", model=name, mode="zero-shot")
+            return GPUModelCVAdapter(
+                model_factory=lambda: TabPFNClassifier(
+                    device=device, random_state=random_state
+                ),
+                name=name,
+            )
         except ImportError as e:
             log.error(
                 "gpu_model_import_failed",
@@ -1407,21 +1475,44 @@ def _build_gpu_model(
             )
             return None
 
-    elif name == "tabicl":
+    # ── TabPFN fine-tuned ──
+    if name == "tabpfn_ft":
         try:
-            if finetune:
-                # TabICL v2.1+: separate class for fine-tuned variant
-                from tabicl import FinetunedTabICLClassifier
+            from tabpfn.finetuning import FinetunedTabPFNClassifier
 
-                return FinetunedTabICLClassifier(
-                    epochs=finetune_epochs,
-                    learning_rate=finetune_lr,
-                    random_state=random_state,
-                )
-            else:
-                from tabicl import TabICLClassifier
+            # Capture args in closure defaults to avoid late-binding issues
+            log.info(
+                "gpu_model_built",
+                model=name,
+                mode="fine-tuned",
+                epochs=finetune_epochs,
+                lr=finetune_lr,
+            )
+            return GPUModelCVAdapter(
+                model_factory=lambda _d=device, _e=finetune_epochs, _lr=finetune_lr: (
+                    FinetunedTabPFNClassifier(device=_d, epochs=_e, learning_rate=_lr)
+                ),
+                name=name,
+            )
+        except ImportError as e:
+            log.error(
+                "gpu_model_import_failed",
+                model=name,
+                error=str(e),
+                hint="Install with: pip install kreview[gpu]  # requires tabpfn>=8.0.3",
+            )
+            return None
 
-                return TabICLClassifier(random_state=random_state)
+    # ── TabICL zero-shot ──
+    if name == "tabicl":
+        try:
+            from tabicl import TabICLClassifier
+
+            log.info("gpu_model_built", model=name, mode="zero-shot")
+            return GPUModelCVAdapter(
+                model_factory=lambda: TabICLClassifier(random_state=random_state),
+                name=name,
+            )
         except ImportError as e:
             log.error(
                 "gpu_model_import_failed",
@@ -1431,9 +1522,37 @@ def _build_gpu_model(
             )
             return None
 
-    else:
-        log.error("unknown_gpu_model", model=name, known=["tabpfn", "tabicl"])
-        return None
+    # ── TabICL fine-tuned ──
+    if name == "tabicl_ft":
+        try:
+            from tabicl import FinetunedTabICLClassifier
+
+            log.info(
+                "gpu_model_built",
+                model=name,
+                mode="fine-tuned",
+                epochs=finetune_epochs,
+                lr=finetune_lr,
+            )
+            return GPUModelCVAdapter(
+                model_factory=lambda _e=finetune_epochs, _lr=finetune_lr, _rs=random_state: (
+                    FinetunedTabICLClassifier(
+                        epochs=_e, learning_rate=_lr, random_state=_rs
+                    )
+                ),
+                name=name,
+            )
+        except ImportError as e:
+            log.error(
+                "gpu_model_import_failed",
+                model=name,
+                error=str(e),
+                hint="Install with: pip install kreview[gpu]  # requires tabicl>=2.1",
+            )
+            return None
+
+    # Unreachable — _KNOWN check above covers all cases
+    return None  # pragma: no cover
 
 
 def _compute_shap(
@@ -1457,7 +1576,8 @@ def _compute_shap(
 
     try:
         # GPU foundation models: use shapiq (remove-and-recontextualize strategy)
-        if name in ("tabpfn", "tabicl"):
+        _gpu_base_names = {"tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"}
+        if name in _gpu_base_names:
             try:
                 import shapiq
 
@@ -1546,8 +1666,7 @@ def gpu_models(
     random_state: int = 42,
     models: tuple[str, ...] = ("tabpfn",),
     device: str = "cuda",
-    finetune: bool = True,
-    finetune_epochs: int = 30,
+    finetune_epochs: int = 50,
     finetune_lr: float = 1e-5,
     compute_shap: bool = False,
     shap_samples: int = 500,
@@ -1555,10 +1674,11 @@ def gpu_models(
     max_gpu_features: int | None = None,
     eval_stats: pd.DataFrame | None = None,
 ) -> tuple[dict, dict[str, object]]:
-    """Train GPU foundation models (TabPFN, TabICL) on a feature matrix.
+    """Train GPU foundation models on a feature matrix.
 
-    Same output schema as cpu_models() for each model, using the shared
-    ``evaluate_model()`` primitive. Fine-tuning is ON by default.
+    Same output schema as ``cpu_models()`` for each model, using the shared
+    ``evaluate_model()`` primitive.  Each model name encodes its variant:
+    ``"tabpfn"`` = zero-shot, ``"tabpfn_ft"`` = fine-tuned, etc.
 
     Args:
         X: Feature matrix, shape (n_samples, n_features).
@@ -1568,11 +1688,12 @@ def gpu_models(
         assays: Optional assay array for subgroup analysis.
         n_folds: Number of CV folds.
         random_state: Random seed.
-        models: Tuple of GPU model names ("tabpfn", "tabicl").
-        device: PyTorch device ("cuda", "cpu").
-        finetune: If True (default), use fine-tuned variants.
-        finetune_epochs: Epochs for fine-tuning.
-        finetune_lr: Learning rate for fine-tuning.
+        models: Tuple of GPU model names. Valid values:
+            ``"tabpfn"`` (zero-shot), ``"tabpfn_ft"`` (fine-tuned),
+            ``"tabicl"`` (zero-shot), ``"tabicl_ft"`` (fine-tuned).
+        device: PyTorch device (``"cuda"``, ``"cpu"``).
+        finetune_epochs: Epochs for fine-tuned variants (default 50).
+        finetune_lr: Learning rate for fine-tuned variants.
         compute_shap: If True, compute SHAP values.
         shap_samples: Max samples for SHAP computation.
         sample_labels: Original 4-tier labels for computing healthy-normal
@@ -1663,7 +1784,6 @@ def gpu_models(
             model = _build_gpu_model(
                 model_name,
                 device=device,
-                finetune=finetune,
                 finetune_epochs=finetune_epochs,
                 finetune_lr=finetune_lr,
                 random_state=random_state,
@@ -1719,7 +1839,6 @@ def gpu_models(
                     "gpu_model_evaluated",
                     model=model_name,
                     auc=results.get(f"auc_{model_name}"),
-                    finetune=finetune,
                 )
             except Exception as e:
                 log.error(
@@ -1765,11 +1884,16 @@ def load_model_results(
 ) -> dict | None:
     """Load and merge CPU + GPU model results for a single evaluator.
 
-    Looks for ``{evaluator_name}_model_results.json`` (CPU) and
-    ``{evaluator_name}_gpu_model_results.json`` (GPU). If both exist,
-    GPU keys are merged into the CPU dict (GPU keys take precedence
-    for overlapping model keys, metadata keys like 'evaluator' are
-    kept from CPU).
+    Looks for:
+
+    - ``{evaluator_name}_model_results.json`` (CPU results)
+    - ``{evaluator_name}_gpu_model_results.json`` (merged GPU results)
+    - ``{evaluator_name}_*_gpu_model_results.json`` (scattered per-model
+      GPU results from NF scattering, e.g. ``FSC_tabpfn_gpu_model_results.json``)
+
+    All found GPU files are merged into the CPU dict.  GPU keys take
+    precedence for overlapping model keys; CPU metadata keys
+    (``evaluator``, ``matrix_path``, etc.) are preserved.
 
     Used by report templates where the evaluator name is known.
 
@@ -1782,10 +1906,22 @@ def load_model_results(
     """
     directory = Path(directory)
     cpu_path = directory / f"{evaluator_name}_model_results.json"
-    gpu_path = directory / f"{evaluator_name}_gpu_model_results.json"
+
+    # Metadata keys that should come from CPU (canonical source).
+    # GPU JSONs from different models may have different feature counts
+    # (due to feature capping), so oof_sample_ids and oof_labels from
+    # GPU are skipped to avoid length mismatches.
+    _skip = {
+        "evaluator",
+        "matrix_path",
+        "cv_folds_actual",
+        "oof_sample_ids",
+        "oof_labels",
+    }
 
     merged = None
-    # Load CPU results
+
+    # ── Load CPU results ──
     if cpu_path.exists():
         try:
             with open(cpu_path) as f:
@@ -1798,8 +1934,24 @@ def load_model_results(
                 error=str(exc),
             )
 
-    # Load and merge GPU results
-    if gpu_path.exists():
+    # ── Discover all GPU JSON files ──
+    # 1. Merged GPU JSON (from NF merge step or single GPU task)
+    gpu_merged_path = directory / f"{evaluator_name}_gpu_model_results.json"
+    # 2. Per-model scattered GPU JSONs (from NF scattering)
+    per_model_gpu_paths = sorted(
+        p
+        for p in directory.glob(f"{evaluator_name}_*_gpu_model_results.json")
+        if p != gpu_merged_path  # Avoid double-counting the merged file
+    )
+
+    all_gpu_paths = []
+    if gpu_merged_path.exists():
+        all_gpu_paths.append(gpu_merged_path)
+    all_gpu_paths.extend(per_model_gpu_paths)
+
+    # ── Merge GPU results into CPU dict ──
+    gpu_files_loaded = 0
+    for gpu_path in all_gpu_paths:
         try:
             with open(gpu_path) as f:
                 gpu_data = json.load(f)
@@ -1810,31 +1962,23 @@ def load_model_results(
                 path=str(gpu_path),
                 error=str(exc),
             )
-            gpu_data = None
+            continue
 
-        if gpu_data is not None:
-            if merged is not None:
-                # Merge: GPU model keys added to CPU dict
-                # Skip metadata that should come from CPU — CPU is canonical
-                # because it's always present. oof_sample_ids and oof_labels
-                # from GPU may have different lengths due to feature capping.
-                _skip = {
-                    "evaluator",
-                    "matrix_path",
-                    "cv_folds_actual",
-                    "oof_sample_ids",
-                    "oof_labels",
-                }
-                merged.update({k: v for k, v in gpu_data.items() if k not in _skip})
-                log.info(
-                    "load_model_results_merged",
-                    evaluator=evaluator_name,
-                    cpu_keys=len(merged),
-                    gpu_keys=len(gpu_data),
-                )
-            else:
-                # GPU-only (no CPU results) — use GPU data directly
-                merged = gpu_data
+        gpu_files_loaded += 1
+        if merged is not None:
+            merged.update({k: v for k, v in gpu_data.items() if k not in _skip})
+        else:
+            # GPU-only (no CPU results) — use GPU data as base
+            merged = gpu_data
+
+    if gpu_files_loaded > 0:
+        log.info(
+            "load_model_results_gpu_merged",
+            evaluator=evaluator_name,
+            gpu_files=gpu_files_loaded,
+            per_model_files=len(per_model_gpu_paths),
+            total_keys=len(merged) if merged else 0,
+        )
 
     return merged
 
@@ -2295,8 +2439,7 @@ def multimodal_eval(
     models: tuple[str, ...] = ("rf", "xgb"),
     gpu_models: tuple[str, ...] = (),
     device: str = "cuda",
-    finetune: bool = True,
-    finetune_epochs: int = 30,
+    finetune_epochs: int = 50,
     finetune_lr: float = 1e-5,
     n_folds: int = 5,
     top_percentile: float = 10.0,
@@ -2323,11 +2466,10 @@ def multimodal_eval(
         results_dir: Directory with ``*_model_results.json`` files.
         super_matrix_path: Optional path to ``super_matrix.parquet``.
         models: CPU model names to use (``rf``, ``xgb``, ``lr``).
-        gpu_models: GPU model names (``tabpfn``, ``tabicl``). Empty = CPU only.
+        gpu_models: GPU model names (``tabpfn_ft``, ``tabicl_ft``). Empty = CPU only.
         device: PyTorch device string for GPU models.
-        finetune: If True, use fine-tuned GPU variants.
-        finetune_epochs: Epochs for GPU model fine-tuning.
-        finetune_lr: Learning rate for GPU model fine-tuning.
+        finetune_epochs: Epochs for fine-tuned GPU variants (default 50).
+        finetune_lr: Learning rate for fine-tuned GPU variants.
         n_folds: Cross-validation folds.
         top_percentile: Top N% features for feature selection.
         random_state: Reproducibility seed.
@@ -2341,7 +2483,6 @@ def multimodal_eval(
     # GPU kwargs for _build_model dispatch
     gpu_kwargs = dict(
         device=device,
-        finetune=finetune,
         finetune_epochs=finetune_epochs,
         finetune_lr=finetune_lr,
         random_state=random_state,
@@ -2395,7 +2536,7 @@ def multimodal_eval(
         stacking_results = {}
         for model_name in all_models:
             try:
-                is_gpu = model_name in ("tabpfn", "tabicl")
+                is_gpu = model_name in _GPU_MODEL_NAMES
                 model = _build_model(
                     model_name, random_state, **(gpu_kwargs if is_gpu else {})
                 )
@@ -2492,7 +2633,7 @@ def multimodal_eval(
             raw_results = {}
             for model_name in all_models:
                 try:
-                    is_gpu = model_name in ("tabpfn", "tabicl")
+                    is_gpu = model_name in _GPU_MODEL_NAMES
                     model = _build_model(
                         model_name, random_state, **(gpu_kwargs if is_gpu else {})
                     )
@@ -2618,6 +2759,638 @@ def multimodal_eval(
     return results
 
 
+# ── Decomposed Multimodal Pipeline ────────────────────────────────────────────
+#
+# These functions implement the same logic as `multimodal_eval()` but as
+# independent stages that can be run in parallel or sequentially.  The
+# monolithic `multimodal_eval()` above is preserved for backward compat
+# and for local runs that don't need NF-level scattering.
+#
+# Pipeline:  prep → single × N → ablation → merge
+#
+
+
+def multimodal_prep(
+    results_dir: str | Path,
+    super_matrix_path: str | Path | None = None,
+    *,
+    multimodal_selection: str = "mi",
+    top_percentile: float = 10.0,
+    random_state: int = 42,
+    output_dir: str | Path = ".",
+) -> dict:
+    """Stage 1: Build stacking + optional raw-feature matrices.
+
+    Loads per-evaluator model results, builds a stacking matrix from OOF
+    probabilities, optionally loads and selects from the super matrix,
+    and writes outputs as parquet files + a metadata JSON.
+
+    Args:
+        results_dir: Directory with ``*_model_results.json`` files.
+        super_matrix_path: Optional path to ``super_matrix.parquet``.
+        multimodal_selection: Feature selection strategy for raw features
+            (``"mi"`` or ``"boruta_shap"``).
+        top_percentile: Top N% features to retain after MI ranking.
+        random_state: Random seed.
+        output_dir: Directory to write output files.
+
+    Returns:
+        Metadata dict with keys: ``stacking_columns``, ``n_evaluators``,
+        ``evaluators``, ``single_evaluator_aucs``, ``best_single_evaluator``,
+        ``best_single_auc``, ``stacking_shape``, ``raw_shape`` (optional).
+
+    Raises:
+        FileNotFoundError: If ``results_dir`` does not exist.
+        ValueError: If no valid evaluator baselines found, or stacking
+            matrix has 0 columns.
+    """
+    from kreview.core import LABEL_META_COLS
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    log.info(
+        "multimodal_prep_start",
+        results_dir=str(results_dir),
+        super_matrix=str(super_matrix_path) if super_matrix_path else None,
+        multimodal_selection=multimodal_selection,
+        top_percentile=top_percentile,
+    )
+
+    # ── Load baselines ──
+    baselines = _load_per_evaluator_baselines(results_dir)
+
+    # ── Per-evaluator AUC summary ──
+    single_aucs = {}
+    for eval_name, info in baselines.items():
+        if info.get("best_auc") is not None:
+            single_aucs[eval_name] = info["best_auc"]
+
+    best_single_name = max(single_aucs, key=single_aucs.get) if single_aucs else None
+    best_single_auc = (
+        single_aucs.get(best_single_name, 0.0) if best_single_name else 0.0
+    )
+
+    # ── Build stacking matrix ──
+    stacking_df, y_stack = _build_stacking_matrix(baselines)
+
+    # Impute NaNs from outer-join mismatches
+    n_nans = int(stacking_df.isna().sum().sum())
+    if n_nans > 0:
+        stacking_df = stacking_df.fillna(0.5)
+        log.info("stacking_nan_imputed", n_nans=n_nans, fill_value=0.5)
+
+    if stacking_df.empty or len(stacking_df.columns) == 0:
+        raise ValueError(
+            "Stacking matrix has 0 columns after building — "
+            "no evaluators have OOF probabilities"
+        )
+
+    # Save stacking matrix (features + labels)
+    stacking_out = stacking_df.copy()
+    stacking_out["_label"] = y_stack
+    stacking_path = output_dir / "stacking_matrix.parquet"
+    stacking_out.to_parquet(stacking_path, index=False)
+    log.info(
+        "stacking_matrix_saved",
+        path=str(stacking_path),
+        shape=stacking_df.shape,
+        columns_sample=list(stacking_df.columns[:10]),
+    )
+
+    # ── Build raw features matrix (optional) ──
+    raw_shape = None
+    if super_matrix_path is not None:
+        super_matrix_path = Path(super_matrix_path)
+        if not super_matrix_path.exists():
+            raise FileNotFoundError(f"Super matrix not found: {super_matrix_path}")
+
+        super_df = pd.read_parquet(super_matrix_path)
+        log.info(
+            "super_matrix_loaded",
+            n_samples=len(super_df),
+            n_cols=len(super_df.columns),
+        )
+
+        if "label" not in super_df.columns:
+            raise ValueError("super_matrix must contain 'label' column")
+
+        from kreview.selection import build_binary_target
+
+        super_df, y_raw = build_binary_target(super_df, "label")
+
+        feature_cols = [
+            c
+            for c in super_df.select_dtypes(include=np.number).columns
+            if c not in LABEL_META_COLS
+        ]
+        if not feature_cols:
+            raise ValueError("No numeric feature columns in super_matrix")
+
+        X_raw = super_df[feature_cols]
+        X_selected, selected_names = _select_multimodal_features(
+            X_raw,
+            y_raw,
+            top_percentile=top_percentile,
+            strategy=multimodal_selection,
+            random_state=random_state,
+        )
+
+        if X_selected.empty:
+            raise ValueError("No features survived selection")
+
+        raw_out = X_selected.copy()
+        raw_out["_label"] = y_raw
+        raw_path = output_dir / "raw_features_matrix.parquet"
+        raw_out.to_parquet(raw_path, index=False)
+        raw_shape = X_selected.shape
+        log.info(
+            "raw_features_matrix_saved",
+            path=str(raw_path),
+            shape=raw_shape,
+            selection=multimodal_selection,
+            n_selected=len(selected_names),
+        )
+
+    # ── Build metadata ──
+    import json as _json_mod
+
+    metadata = {
+        "stacking_columns": list(stacking_df.columns),
+        "stacking_shape": list(stacking_df.shape),
+        "n_evaluators": len(baselines),
+        "evaluators": sorted(baselines.keys()),
+        "single_evaluator_aucs": single_aucs,
+        "best_single_evaluator": best_single_name,
+        "best_single_auc": best_single_auc,
+        "multimodal_selection": multimodal_selection,
+        "top_percentile": top_percentile,
+        "has_raw_features": raw_shape is not None,
+        "raw_shape": list(raw_shape) if raw_shape is not None else None,
+    }
+
+    meta_path = output_dir / "prep_metadata.json"
+    with open(meta_path, "w") as f:
+        _json_mod.dump(metadata, f, indent=2, default=str)
+    log.info("multimodal_prep_complete", metadata_path=str(meta_path))
+
+    return metadata
+
+
+def multimodal_single(
+    stacking_matrix_path: str | Path,
+    model_name: str,
+    *,
+    raw_features_path: str | Path | None = None,
+    n_folds: int = 5,
+    random_state: int = 42,
+    device: str = "cuda",
+    finetune_epochs: int = 50,
+    finetune_lr: float = 1e-5,
+    best_single_auc: float = 0.0,
+    output_dir: str | Path = ".",
+) -> dict:
+    """Stage 2: Train a single model on the stacking (+ optional raw) matrix.
+
+    Reads the stacking matrix parquet, trains the requested model via
+    :func:`evaluate_model`, and writes a per-model result JSON.
+
+    Args:
+        stacking_matrix_path: Path to ``stacking_matrix.parquet`` from prep.
+        model_name: Model to train (e.g. ``"rf"``, ``"xgb"``, ``"tabpfn_ft"``).
+        raw_features_path: Optional path to ``raw_features_matrix.parquet``.
+        n_folds: Cross-validation folds.
+        random_state: Random seed.
+        device: PyTorch device for GPU models.
+        finetune_epochs: Fine-tuning epochs for ``_ft`` models.
+        finetune_lr: Fine-tuning learning rate for ``_ft`` models.
+        best_single_auc: Best single-evaluator AUC (for delta computation).
+        output_dir: Directory to write output JSON.
+
+    Returns:
+        Results dict with stacking and optional raw-feature metrics.
+
+    Raises:
+        FileNotFoundError: If stacking_matrix_path doesn't exist.
+        ValueError: If model build fails.
+    """
+    import json as _json_mod
+
+    stacking_matrix_path = Path(stacking_matrix_path)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not stacking_matrix_path.exists():
+        raise FileNotFoundError(f"Stacking matrix not found: {stacking_matrix_path}")
+
+    log.info(
+        "multimodal_single_start",
+        model=model_name,
+        stacking_path=str(stacking_matrix_path),
+    )
+
+    # Load stacking matrix
+    stacking_full = pd.read_parquet(stacking_matrix_path)
+    y_stack = stacking_full["_label"].values.astype(int)
+    stacking_df = stacking_full.drop(columns=["_label"])
+
+    # Build GPU kwargs
+    is_gpu = model_name in _GPU_MODEL_NAMES
+    gpu_kwargs = dict(
+        device=device,
+        finetune_epochs=finetune_epochs,
+        finetune_lr=finetune_lr,
+        random_state=random_state,
+    )
+
+    # Build model
+    model = _build_model(model_name, random_state, **(gpu_kwargs if is_gpu else {}))
+    if model is None:
+        raise ValueError(
+            f"Failed to build model '{model_name}' — "
+            f"check that required packages are installed"
+        )
+
+    cv = StratifiedKFold(
+        n_splits=min(n_folds, len(y_stack) // 2),
+        shuffle=True,
+        random_state=random_state,
+    )
+
+    results = {}
+
+    # ── Stacking evaluation ──
+    res, _ = evaluate_model(
+        model,
+        stacking_df.values,
+        y_stack,
+        cv,
+        f"stacking_{model_name}",
+        feature_names=list(stacking_df.columns),
+        random_state=random_state,
+    )
+    results.update(res)
+
+    stacking_auc = res.get(f"auc_stacking_{model_name}")
+    if stacking_auc is not None and best_single_auc > 0:
+        results[f"stacking_{model_name}_vs_best_single"] = (
+            stacking_auc - best_single_auc
+        )
+    log.info(
+        "multimodal_single_stacking_done",
+        model=model_name,
+        auc=stacking_auc,
+    )
+
+    # ── Raw features evaluation (optional) ──
+    if raw_features_path is not None:
+        raw_features_path = Path(raw_features_path)
+        if raw_features_path.exists():
+            raw_full = pd.read_parquet(raw_features_path)
+            y_raw = raw_full["_label"].values.astype(int)
+            X_raw = raw_full.drop(columns=["_label"])
+
+            model_raw = _build_model(
+                model_name, random_state, **(gpu_kwargs if is_gpu else {})
+            )
+            if model_raw is not None:
+                cv_raw = StratifiedKFold(
+                    n_splits=min(n_folds, len(y_raw) // 2),
+                    shuffle=True,
+                    random_state=random_state,
+                )
+                raw_res, _ = evaluate_model(
+                    model_raw,
+                    X_raw.values,
+                    y_raw,
+                    cv_raw,
+                    f"raw_{model_name}",
+                    feature_names=list(X_raw.columns),
+                    random_state=random_state,
+                )
+                results.update(raw_res)
+
+                raw_auc = raw_res.get(f"auc_raw_{model_name}")
+                if raw_auc is not None and best_single_auc > 0:
+                    results[f"raw_{model_name}_vs_best_single"] = (
+                        raw_auc - best_single_auc
+                    )
+                log.info(
+                    "multimodal_single_raw_done",
+                    model=model_name,
+                    auc=raw_auc,
+                )
+        else:
+            log.warning(
+                "raw_features_not_found",
+                path=str(raw_features_path),
+                hint="Skipping raw-feature evaluation for this model",
+            )
+
+    # Save per-model JSON
+    out_path = output_dir / f"stacking_{model_name}_results.json"
+    with open(out_path, "w") as f:
+        _json_mod.dump(results, f, indent=2, default=str)
+    log.info("multimodal_single_saved", path=str(out_path), model=model_name)
+
+    return results
+
+
+def multimodal_ablation(
+    stacking_matrix_path: str | Path,
+    stacking_results_dir: str | Path,
+    *,
+    n_folds: int = 5,
+    random_state: int = 42,
+    output_dir: str | Path = ".",
+) -> dict:
+    """Stage 3: Leave-one-evaluator-out ablation study.
+
+    Finds the best stacking model from partial result JSONs, then for
+    each evaluator drops its columns and retrains to measure marginal
+    contribution.
+
+    Args:
+        stacking_matrix_path: Path to ``stacking_matrix.parquet``.
+        stacking_results_dir: Directory with ``stacking_*_results.json``
+            files from :func:`multimodal_single`.
+        n_folds: Cross-validation folds.
+        random_state: Random seed.
+        output_dir: Directory to write output JSON.
+
+    Returns:
+        Ablation results dict with per-evaluator deltas.
+
+    Raises:
+        FileNotFoundError: If inputs don't exist.
+        ValueError: If no stacking results found.
+    """
+    import json as _json_mod
+
+    stacking_matrix_path = Path(stacking_matrix_path)
+    stacking_results_dir = Path(stacking_results_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not stacking_matrix_path.exists():
+        raise FileNotFoundError(f"Stacking matrix not found: {stacking_matrix_path}")
+
+    log.info(
+        "multimodal_ablation_start",
+        stacking_path=str(stacking_matrix_path),
+        results_dir=str(stacking_results_dir),
+    )
+
+    # Load stacking matrix
+    stacking_full = pd.read_parquet(stacking_matrix_path)
+    y_stack = stacking_full["_label"].values.astype(int)
+    stacking_df = stacking_full.drop(columns=["_label"])
+
+    # Find best stacking model from partial results
+    best_stack_model = None
+    best_stack_auc = 0.0
+
+    for json_path in sorted(stacking_results_dir.glob("stacking_*_results.json")):
+        try:
+            with open(json_path) as f:
+                partial = _json_mod.load(f)
+            for k, v in partial.items():
+                if (
+                    k.startswith("auc_stacking_")
+                    and not k.endswith(("_ci_lower", "_ci_upper"))
+                    and isinstance(v, (int, float))
+                    and v > best_stack_auc
+                ):
+                    best_stack_auc = v
+                    best_stack_model = k.replace("auc_stacking_", "")
+        except (_json_mod.JSONDecodeError, OSError) as exc:
+            log.warning(
+                "ablation_json_read_failed",
+                path=str(json_path),
+                error=str(exc),
+            )
+
+    if best_stack_model is None:
+        raise ValueError(
+            f"No valid stacking results found in {stacking_results_dir}. "
+            f"Run `kreview eval multimodal single` first."
+        )
+
+    log.info(
+        "ablation_best_model",
+        model=best_stack_model,
+        auc=best_stack_auc,
+    )
+
+    # ── Leave-one-evaluator-out ──
+    cv = StratifiedKFold(
+        n_splits=min(n_folds, len(y_stack) // 2),
+        shuffle=True,
+        random_state=random_state,
+    )
+
+    # Discover unique evaluator prefixes from column names
+    evaluator_names = sorted(
+        {col.rsplit("_", 1)[0] for col in stacking_df.columns if "_" in col}
+    )
+
+    ablation = {}
+    for eval_name in evaluator_names:
+        cols_to_drop = [c for c in stacking_df.columns if c.startswith(f"{eval_name}_")]
+        if not cols_to_drop:
+            continue
+
+        X_ablated = stacking_df.drop(columns=cols_to_drop)
+        if X_ablated.empty:
+            continue
+
+        try:
+            model = _build_model(best_stack_model, random_state)
+            res, _ = evaluate_model(
+                model,
+                X_ablated.values,
+                y_stack,
+                cv,
+                f"ablation_{eval_name}",
+                feature_names=list(X_ablated.columns),
+                random_state=random_state,
+            )
+            ablated_auc = res.get(f"auc_ablation_{eval_name}", 0.0)
+            delta = best_stack_auc - (ablated_auc or 0.0)
+            ablation[eval_name] = {
+                "auc_without": ablated_auc,
+                "delta": delta,
+                "n_cols_removed": len(cols_to_drop),
+            }
+            log.info(
+                "ablation_evaluator",
+                evaluator=eval_name,
+                auc_without=ablated_auc,
+                delta=delta,
+                n_cols_removed=len(cols_to_drop),
+            )
+        except Exception as e:
+            log.error(
+                "ablation_evaluator_failed",
+                evaluator=eval_name,
+                error=str(e),
+            )
+            ablation[eval_name] = {"error": str(e)}
+
+    # Sort by delta (most important first)
+    ablation_sorted = dict(
+        sorted(
+            ablation.items(),
+            key=lambda x: x[1].get("delta", 0.0),
+            reverse=True,
+        )
+    )
+
+    results = {
+        "ablation": ablation_sorted,
+        "ablation_model": best_stack_model,
+        "ablation_baseline_auc": best_stack_auc,
+    }
+
+    out_path = output_dir / "ablation_results.json"
+    with open(out_path, "w") as f:
+        _json_mod.dump(results, f, indent=2, default=str)
+    log.info("multimodal_ablation_complete", path=str(out_path))
+
+    return results
+
+
+def multimodal_merge(
+    stacking_results_dir: str | Path,
+    prep_metadata_path: str | Path,
+    *,
+    ablation_path: str | Path | None = None,
+    output_dir: str | Path = ".",
+) -> dict:
+    """Stage 4: Merge partial JSONs into unified ``multimodal_results.json``.
+
+    Combines the prep metadata, per-model stacking results, and ablation
+    results into a single output JSON matching the schema produced by the
+    monolithic :func:`multimodal_eval`.
+
+    Args:
+        stacking_results_dir: Directory with ``stacking_*_results.json``
+            files from :func:`multimodal_single`.
+        prep_metadata_path: Path to ``prep_metadata.json`` from prep.
+        ablation_path: Optional path to ``ablation_results.json``.
+        output_dir: Directory to write ``multimodal_results.json``.
+
+    Returns:
+        Unified results dict matching :func:`multimodal_eval` schema.
+
+    Raises:
+        FileNotFoundError: If prep_metadata_path doesn't exist.
+    """
+    import json as _json_mod
+
+    prep_metadata_path = Path(prep_metadata_path)
+    stacking_results_dir = Path(stacking_results_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not prep_metadata_path.exists():
+        raise FileNotFoundError(f"Prep metadata not found: {prep_metadata_path}")
+
+    log.info(
+        "multimodal_merge_start",
+        metadata_path=str(prep_metadata_path),
+        results_dir=str(stacking_results_dir),
+    )
+
+    with open(prep_metadata_path) as f:
+        metadata = _json_mod.load(f)
+
+    # Build unified results dict
+    results = {
+        "strategy": "multimodal",
+        "n_evaluators": metadata["n_evaluators"],
+        "evaluators": metadata["evaluators"],
+        "single_evaluator_aucs": metadata["single_evaluator_aucs"],
+        "best_single_evaluator": metadata["best_single_evaluator"],
+        "best_single_auc": metadata["best_single_auc"],
+        "stacking_n_features": metadata["stacking_shape"][1],
+        "stacking_features": metadata["stacking_columns"],
+    }
+
+    # Merge all stacking result JSONs
+    stacking_results = {}
+    raw_results = {}
+    n_merged = 0
+
+    for json_path in sorted(stacking_results_dir.glob("stacking_*_results.json")):
+        try:
+            with open(json_path) as f:
+                partial = _json_mod.load(f)
+            for k, v in partial.items():
+                if k.startswith("auc_stacking_") or k.startswith("stacking_"):
+                    stacking_results[k] = v
+                elif k.startswith("auc_raw_") or k.startswith("raw_"):
+                    raw_results[k] = v
+            n_merged += 1
+        except (_json_mod.JSONDecodeError, OSError) as exc:
+            log.warning(
+                "merge_json_read_failed",
+                path=str(json_path),
+                error=str(exc),
+            )
+
+    if n_merged == 0:
+        log.warning(
+            "merge_no_stacking_results",
+            dir=str(stacking_results_dir),
+            hint="No stacking_*_results.json files found",
+        )
+
+    results["stacking"] = stacking_results
+
+    if raw_results:
+        results["raw_features"] = raw_results
+        if metadata.get("has_raw_features"):
+            results["raw_n_features_selected"] = metadata["raw_shape"][1]
+            results["raw_features_selection_method"] = metadata["multimodal_selection"]
+
+    # Merge ablation results
+    if ablation_path is not None:
+        ablation_path = Path(ablation_path)
+        if ablation_path.exists():
+            try:
+                with open(ablation_path) as f:
+                    ablation_data = _json_mod.load(f)
+                results.update(ablation_data)
+            except (_json_mod.JSONDecodeError, OSError) as exc:
+                log.warning(
+                    "merge_ablation_read_failed",
+                    path=str(ablation_path),
+                    error=str(exc),
+                )
+        else:
+            log.warning(
+                "merge_ablation_not_found",
+                path=str(ablation_path),
+                hint="Ablation results will be missing from merged output",
+            )
+
+    # Save unified output
+    out_path = output_dir / "multimodal_results.json"
+    with open(out_path, "w") as f:
+        _json_mod.dump(results, f, indent=2, default=str)
+
+    log.info(
+        "multimodal_merge_complete",
+        path=str(out_path),
+        n_stacking_files=n_merged,
+        has_ablation="ablation" in results,
+        has_raw="raw_features" in results,
+    )
+
+    return results
+
+
 def _build_model(model_name: str, random_state: int, **kwargs):
     """Instantiate a model by name for multimodal evaluation.
 
@@ -2626,9 +3399,10 @@ def _build_model(model_name: str, random_state: int, **kwargs):
     combination.
 
     Args:
-        model_name: One of ``lr``, ``rf``, ``xgb``, ``tabpfn``, ``tabicl``.
+        model_name: One of ``lr``, ``rf``, ``xgb``, ``tabpfn``,
+            ``tabpfn_ft``, ``tabicl``, ``tabicl_ft``.
         random_state: Seed for reproducibility.
-        **kwargs: GPU model params (``device``, ``finetune``, ``finetune_epochs``,
+        **kwargs: GPU model params (``device``, ``finetune_epochs``,
             ``finetune_lr``). Ignored for CPU models.
 
     Returns:
@@ -2637,6 +3411,8 @@ def _build_model(model_name: str, random_state: int, **kwargs):
     Raises:
         ValueError: If ``model_name`` is not recognised.
     """
+    # _GPU_MODEL_NAMES used from module-level constant
+
     if model_name == "lr":
         return Pipeline(
             [
@@ -2665,18 +3441,17 @@ def _build_model(model_name: str, random_state: int, **kwargs):
         except ImportError:
             log.error("xgb_import_failed", hint="pip install xgboost")
             raise
-    elif model_name in ("tabpfn", "tabicl"):
+    elif model_name in _GPU_MODEL_NAMES:
         # Delegate to GPU model factory; returns None on ImportError (logged there)
         return _build_gpu_model(
             model_name,
             device=kwargs.get("device", "cuda"),
-            finetune=kwargs.get("finetune", True),
-            finetune_epochs=kwargs.get("finetune_epochs", 30),
+            finetune_epochs=kwargs.get("finetune_epochs", 50),
             finetune_lr=kwargs.get("finetune_lr", 1e-5),
             random_state=random_state,
         )
     else:
         raise ValueError(
             f"Unknown model: {model_name!r}. "
-            f"Choose from: lr, rf, xgb, tabpfn, tabicl"
+            f"Choose from: lr, rf, xgb, tabpfn, tabpfn_ft, tabicl, tabicl_ft"
         )

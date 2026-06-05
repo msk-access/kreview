@@ -18,18 +18,23 @@ graph LR
     C --> F[Fuse]:::step
     D --> S[Scoreboard]:::step
     E --> S
-    D --> G["Eval Multimodal"]:::step
-    E --> G
-    F --> G
+    D --> MM_PREP["Multimodal Prep"]:::step
+    E --> MM_PREP
+    F --> MM_PREP
+    MM_PREP --> MM_SINGLE["Multimodal Single ×M"]:::step
+    MM_SINGLE --> MM_ABLATION["Multimodal Ablation"]:::step
+    MM_ABLATION --> MM_MERGE["Multimodal Merge"]:::step
     S --> H[Report]:::step
     D --> H
     E --> H
-    G --> I["Report Multimodal"]:::step
+    MM_MERGE --> I["Report Multimodal"]:::step
 ```
 
 !!! note "Parallel execution"
     After feature selection, `eval cpu`, `eval gpu`, and `fuse` run in **parallel**.
-    After eval, `scoreboard`, `report`, and `eval multimodal` run in **parallel** — Scoreboard needs all JSONs; Report needs matrices + model results + scoreboard; Multimodal needs super_matrix + OOF probs.
+    After eval, `scoreboard` and `report` run in **parallel**.
+    The multimodal pipeline is **decomposed**: `prep` builds the stacking matrix, `single` trains per-model stacking classifiers (parallelized across models), `ablation` runs feature ablation, and `merge` aggregates final results.
+    The legacy monolithic `kreview eval multimodal run` can also execute the full pipeline as a single step.
 
 ---
 
@@ -43,9 +48,13 @@ Every module in `kreview` is auto-generated from an nbdev notebook in `nbs/`. **
 | `kreview extract` | `cli.py:extract()` | `nbs/90_cli.ipynb` | Label + extract feature matrices |
 | `kreview select` | `cli_select.py:select()` | `nbs/92_cli_select.ipynb` | Score features + mRMR/hybrid-union selection |
 | `kreview eval cpu` | `cli_eval.py:eval_cpu()` | `nbs/91_cli_eval.ipynb` | CPU model evaluation (LR, RF, XGB) |
-| `kreview eval gpu` | `cli_eval.py:eval_gpu()` | `nbs/91_cli_eval.ipynb` | GPU model evaluation (TabPFN, TabICL) |
+| `kreview eval gpu` | `cli_eval.py:eval_gpu()` | `nbs/91_cli_eval.ipynb` | GPU model evaluation (TabPFN, TabPFN-FT, TabICL, TabICL-FT) |
 | `kreview fuse` | `cli.py:fuse()` | `nbs/90_cli.ipynb` | Fuse per-evaluator matrices → super-matrix |
-| `kreview eval multimodal` | `cli_eval.py:eval_multimodal()` | `nbs/91_cli_eval.ipynb` | Cross-evaluator stacking + ablation |
+| `kreview eval multimodal run` | `cli_eval.py:multimodal_run()` | `nbs/91_cli_eval.ipynb` | Monolithic cross-evaluator stacking + ablation |
+| `kreview eval multimodal prep` | `cli_eval.py:multimodal_prep()` | `nbs/91_cli_eval.ipynb` | Build stacking matrix + feature selection |
+| `kreview eval multimodal single` | `cli_eval.py:multimodal_single()` | `nbs/91_cli_eval.ipynb` | Train single stacking model (parallelizable) |
+| `kreview eval multimodal ablation` | `cli_eval.py:multimodal_ablation()` | `nbs/91_cli_eval.ipynb` | Feature ablation analysis |
+| `kreview eval multimodal merge` | `cli_eval.py:multimodal_merge()` | `nbs/91_cli_eval.ipynb` | Aggregate stacking + ablation results |
 | `kreview report` | `cli.py:report()` | `nbs/90_cli.ipynb` | Re-generate HTML dashboards |
 | `kreview run` | `cli.py:run()` | `nbs/90_cli.ipynb` | Full pipeline orchestrator |
 | `kreview features-list` | `cli.py:features_list()` | `nbs/90_cli.ipynb` | List registered evaluators |
@@ -55,7 +64,7 @@ Every module in `kreview` is auto-generated from an nbdev notebook in `nbs/`. **
 | Module | Source Notebook | Functions | Used By |
 |--------|-----------------|-----------|---------|
 | `selection.py` | `nbs/04_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()`, `MODEL_LABELS`, `POSITIVE_LABELS` | `kreview run`, `kreview select`, report templates |
-| `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()`, `load_model_results()`, `load_all_model_results()` | `kreview run`, `kreview eval cpu/gpu`, `selection.py`, `scoreboard.py`, report templates |
+| `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()`, `load_model_results()`, `load_all_model_results()`, `multimodal_prep()`, `multimodal_single()`, `multimodal_ablation()`, `multimodal_merge()` | `kreview run`, `kreview eval cpu/gpu`, `kreview eval multimodal *`, `selection.py`, `scoreboard.py`, report templates |
 | `scoreboard.py` | Standalone | `build_scoreboard()` | `kreview report`, `KREVIEW_SCOREBOARD` |
 | `core.py` | `nbs/00_core.ipynb` | `LABEL_META_COLS`, `Paths`, `LabelConfig` | All commands |
 | `registry.py` | `nbs/03_registry.ipynb` | `get_all_evaluators()` | `kreview run`, `kreview extract`, `kreview features-list` |
@@ -90,10 +99,14 @@ Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
           → {evaluator}_selection_qc.json  (selection audit trail)
 Eval CPU: → {evaluator}_model_results.json  (AUCs, OOF probs)
           → {evaluator}_{model}_model.joblib  (trained models)
-Eval GPU: → {evaluator}_gpu_model_results.json  (GPU AUCs, OOF probs)
+Eval GPU: → {evaluator}_gpu_model_results.json  (all GPU model AUCs + OOF probs in one JSON)
 Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
 Scoreboard: → scoreboard_combined__all.parquet  (cross-evaluator rankings)
-Multimodal: → multimodal_results.json  (stacking + ablation results)
+Multimodal Prep:     → stacking_matrix.parquet  (OOF probs from all evaluators)
+                     → prep_metadata.json  (feature names, selection QC)
+Multimodal Single:   → stacking_{model}_results.json  (per-model stacking CV)
+Multimodal Ablation: → ablation_results.json  (feature ablation analysis)
+Multimodal Merge:    → multimodal_model_results.json  (final aggregated results)
 Report:   → reports/{evaluator}.html  (interactive dashboards)
 ```
 
@@ -106,11 +119,22 @@ See [Nextflow Integration](../operations/nextflow.md) for full HPC execution doc
 In Nextflow multistage mode (`params.pipeline_mode = 'multistage'`), the DAG executes as:
 
 ```
-LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── EVAL_CPU ──┬── EVAL_MULTIMODAL
-                                           ├── EVAL_GPU ──┤
-                                           └── FUSE ──────┘
-                                                          └── REPORT (parallel)
+LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── EVAL_CPU ────┬── MULTIMODAL_PREP
+                                           ├── EVAL_GPU ────┤
+                                           └── FUSE ────────┘
+                                                    ↓
+                                         MULTIMODAL_SINGLE ×M
+                                                    ↓
+                                         MULTIMODAL_ABLATION
+                                                    ↓
+                                          MULTIMODAL_MERGE
+                                                    ↓
+                                          REPORT_MULTIMODAL
+                                                    \── REPORT (parallel)
 ```
+
+!!! info "Legacy Monolithic Module"
+    The original `KREVIEW_EVAL_MULTIMODAL` module (`eval_multimodal.nf`) is kept for standalone testing. It uses `kreview eval multimodal run` to execute the full pipeline in a single process.
 
 Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 
@@ -123,9 +147,14 @@ Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 | `KREVIEW_EVAL_GPU_SINGLE` | `eval_gpu_single.nf` | Selected matrix + eval_stats | `*_gpu_model_results.json` + `*.joblib` | `outdir/models/gpu/` |
 | `KREVIEW_FUSE` | `fuse.nf` | All selected matrices | `super_matrix.parquet` | `outdir/matrices/fused/` |
 | `KREVIEW_SCOREBOARD` | `scoreboard.nf` | Collected CPU + GPU JSONs | `scoreboard_combined__all.parquet` | `outdir/` |
-| `KREVIEW_EVAL_MULTIMODAL` | `eval_multimodal.nf` | Fuse + eval results | Multimodal results | `outdir/models/multimodal/` |
+| `KREVIEW_MULTIMODAL_PREP` | `multimodal_prep.nf` | Eval results + super_matrix | `stacking_matrix.parquet` + `prep_metadata.json` | `outdir/models/multimodal/` |
+| `KREVIEW_MULTIMODAL_SINGLE_CPU` | `multimodal_single.nf` | Stacking matrix + model name | `stacking_{model}_results.json` | `outdir/models/multimodal/` |
+| `KREVIEW_MULTIMODAL_SINGLE_GPU` | `multimodal_single.nf` | Stacking matrix + GPU model name | `stacking_{model}_results.json` | `outdir/models/multimodal/` |
+| `KREVIEW_MULTIMODAL_ABLATION` | `multimodal_ablation.nf` | Stacking matrix + stacking results | `ablation_results.json` | `outdir/models/multimodal/` |
+| `KREVIEW_MULTIMODAL_MERGE` | `multimodal_merge.nf` | All stacking + ablation results | `multimodal_model_results.json` | `outdir/models/multimodal/` |
 | `KREVIEW_REPORT` | `report.nf` | Matrices + JSONs + stats + QC + joblib + scoreboard | HTML dashboards | `outdir/reports/` |
 | `KREVIEW_REPORT_MULTIMODAL` | `report_multimodal.nf` | Multimodal JSON + super_matrix | Multimodal dashboard | `outdir/reports/` |
+| `KREVIEW_EVAL_MULTIMODAL` | `eval_multimodal.nf` | Fuse + eval results | Multimodal results | `outdir/models/multimodal/` | *(Legacy — standalone testing)* |
 
 ---
 

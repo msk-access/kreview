@@ -4,6 +4,10 @@
 // Runs `kreview eval gpu` on a SINGLE evaluator matrix using
 // TabPFN and/or TabICL foundation models.
 //
+// Model names encode their variant:
+//   tabpfn = zero-shot, tabpfn_ft = fine-tuned
+//   tabicl = zero-shot, tabicl_ft = fine-tuned
+//
 // Used in multistage mode to scatter GPU evaluation across
 // evaluators in parallel (×N jobs on gpushort partition).
 //
@@ -15,7 +19,7 @@
 // Data flow (multistage):
 //   KREVIEW_SELECT_SINGLE.out.matrix (per-evaluator)
 //     → KREVIEW_EVAL_GPU_SINGLE ×N (parallel, gpushort)
-//     → collect → KREVIEW_EVAL_MULTIMODAL
+//     → collect → KREVIEW_MULTIMODAL_PREP → ... → KREVIEW_MULTIMODAL_MERGE
 // ---------------------------------------------------------
 
 process KREVIEW_EVAL_GPU_SINGLE {
@@ -35,8 +39,7 @@ process KREVIEW_EVAL_GPU_SINGLE {
     def evaluator        = matrix.baseName.replace('_matrix', '')
     def models_arg       = params.gpu_models          ?: 'tabpfn,tabicl'
     def device_arg       = params.gpu_device          ?: 'cuda'
-    def finetune_flag    = params.gpu_no_finetune     ? '--no-finetune' : ''
-    def epochs_arg       = params.gpu_finetune_epochs ?: 30
+    def epochs_arg       = params.gpu_finetune_epochs ?: 50
     def cv_folds         = params.cv_folds            ?: 5
     def max_gpu_feat_arg = params.max_gpu_features    ?: 150
     """
@@ -73,7 +76,6 @@ process KREVIEW_EVAL_GPU_SINGLE {
         --matrices-dir matrices \\
         --models ${models_arg} \\
         --device ${device_arg} \\
-        ${finetune_flag} \\
         --finetune-epochs ${epochs_arg} \\
         --cv-folds ${cv_folds} \\
         --seed ${params.seed ?: 42} \\
@@ -96,7 +98,7 @@ process KREVIEW_EVAL_GPU_SINGLE {
     # closes and downstream SCOREBOARD/MULTIMODAL hang forever.
     if ! ls *_gpu_model_results.json 1>/dev/null 2>&1; then
         echo "WARNING: GPU eval failed for ${evaluator} (exit=\$GPU_EXIT), emitting error JSON" >&2
-        echo '{"evaluator": "${evaluator}", "error": "all_gpu_models_failed", "exit_code": '\$GPU_EXIT'}' \\
+        echo '{"evaluator": "${evaluator}", "error": "all_gpu_models_failed", "exit_code": '\$GPU_EXIT'}' \
             > "${evaluator}_gpu_model_results.json"
     fi
 

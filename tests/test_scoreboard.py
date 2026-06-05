@@ -245,3 +245,89 @@ class TestScoreboardV016:
         df = build_scoreboard(mock_results)
         eval_a = df[df["evaluator"] == "EvalA"].iloc[0]
         assert eval_a["n_detected_at_100spec"] == 31
+
+
+# ── GPU model naming tests ──────────────────────────────────────────────────
+
+
+class TestScoreboardGPUModels:
+    """Tests for scoreboard with 4-model GPU naming convention."""
+
+    @pytest.fixture
+    def gpu_results(self, tmp_path):
+        """Create mock results with CPU + GPU (including _ft variants)."""
+        # CPU results for EvalA
+        cpu = {
+            "auc_rf": 0.82,
+            "auc_lr": 0.75,
+            "auc_xgb": 0.80,
+            "cv_folds_actual": 5,
+            "top_features": ["feat1", "feat2"],
+        }
+        (tmp_path / "EvalA_model_results.json").write_text(json.dumps(cpu))
+
+        # GPU results for EvalA (all 4 variants)
+        gpu = {
+            "auc_tabpfn": 0.88,
+            "auc_tabpfn_ft": 0.92,  # Best overall
+            "auc_tabicl": 0.86,
+            "auc_tabicl_ft": 0.90,
+        }
+        (tmp_path / "EvalA_gpu_model_results.json").write_text(json.dumps(gpu))
+
+        return tmp_path
+
+    def test_gpu_auc_columns_discovered(self, gpu_results):
+        """Scoreboard should discover auc_tabpfn, auc_tabpfn_ft, etc."""
+        df = build_scoreboard(gpu_results)
+        assert len(df) == 1
+        cols = set(df.columns)
+        for model in ["tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"]:
+            assert f"auc_{model}" in cols, f"Missing auc_{model}"
+
+    def test_best_auc_includes_gpu(self, gpu_results):
+        """best_auc should consider GPU models too."""
+        df = build_scoreboard(gpu_results)
+        row = df.iloc[0]
+        # tabpfn_ft has the highest AUC (0.92)
+        assert row["best_auc"] == 0.92
+
+    def test_best_model_gpu(self, gpu_results):
+        """best_model should name the GPU model when it wins."""
+        df = build_scoreboard(gpu_results)
+        row = df.iloc[0]
+        assert row["best_model"] == "tabpfn_ft"
+
+    def test_gpu_only_evaluator(self, tmp_path):
+        """Evaluator with only GPU results (no CPU) should still work."""
+        gpu_only = {
+            "auc_tabpfn": 0.80,
+            "auc_tabpfn_ft": 0.85,
+        }
+        (tmp_path / "GpuOnly_gpu_model_results.json").write_text(json.dumps(gpu_only))
+        df = build_scoreboard(tmp_path)
+        assert len(df) == 1
+        assert df.iloc[0]["best_auc"] == 0.85
+        assert df.iloc[0]["best_model"] == "tabpfn_ft"
+
+    def test_mixed_cpu_gpu_ranking(self, tmp_path):
+        """CPU-only and CPU+GPU evaluators should rank correctly together."""
+        cpu_only = {
+            "auc_rf": 0.90,
+            "auc_lr": 0.80,
+            "auc_xgb": 0.85,
+            "top_features": ["a"],
+        }
+        (tmp_path / "CpuOnly_model_results.json").write_text(json.dumps(cpu_only))
+
+        # GPU evaluator with higher AUC
+        cpu_b = {"auc_rf": 0.75, "auc_lr": 0.70}
+        gpu_b = {"auc_tabpfn_ft": 0.95}
+        (tmp_path / "GpuEval_model_results.json").write_text(json.dumps(cpu_b))
+        (tmp_path / "GpuEval_gpu_model_results.json").write_text(json.dumps(gpu_b))
+
+        df = build_scoreboard(tmp_path)
+        assert len(df) == 2
+        # GpuEval (0.95) should be ranked first
+        assert df.iloc[0]["evaluator"] == "GpuEval"
+        assert df.iloc[0]["best_auc"] == 0.95

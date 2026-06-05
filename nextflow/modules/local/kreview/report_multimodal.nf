@@ -4,7 +4,7 @@
 // Runs `kreview report --multimodal` to generate the cross-evaluator
 // multimodal dashboard HTML from multimodal_results.json.
 //
-// This process runs AFTER KREVIEW_EVAL_MULTIMODAL completes.
+// This process runs AFTER the decomposed multimodal pipeline completes
 //
 // Inputs:  multimodal_results.json, super_matrix.parquet
 // Outputs: *_dashboard.html report files
@@ -16,7 +16,7 @@ process KREVIEW_REPORT_MULTIMODAL {
     publishDir "${params.outdir}/reports", mode: 'copy'
 
     input:
-    path(multimodal_json)    // multimodal_results.json from KREVIEW_EVAL_MULTIMODAL
+    path(multimodal_json)    // multimodal_results.json from KREVIEW_MULTIMODAL_MERGE
     path(super_matrix)       // super_matrix.parquet from KREVIEW_FUSE
 
     output:

@@ -829,7 +829,6 @@ class TestBuildModelGPUDispatch:
             "rf",
             random_state=42,
             device="cuda",
-            finetune=True,
             finetune_epochs=10,
         )
         assert model is not None
@@ -940,55 +939,57 @@ class TestSaveFittedModels:
 class TestBuildGpuModelV8:
     """Validate _build_gpu_model() for TabPFN v8 and TabICL v2.1 API changes.
 
-    These tests run WITHOUT GPU hardware — they validate import paths,
+    Updated for the 4-name dispatch (tabpfn, tabpfn_ft, tabicl, tabicl_ft).
+    Tests run WITHOUT GPU hardware — they validate import paths,
     class types, and error handling only.
     """
 
-    def test_tabpfn_finetune_import_path(self):
-        """TabPFN v8: fine-tuning should import from tabpfn.finetuning (not extensions)."""
+    def test_tabpfn_ft_import_path(self):
+        """TabPFN v8: tabpfn_ft should import from tabpfn.finetuning."""
         from kreview.eval_engine import _build_gpu_model
 
         try:
-            model = _build_gpu_model("tabpfn", device="cpu", finetune=True)
+            model = _build_gpu_model("tabpfn_ft", device="cpu")
             if model is not None:
-                # Verify it's the v8 class (lowercase 't')
-                assert (
-                    "FinetunedTabPFN" in type(model).__name__
-                    or "TabPFN" in type(model).__name__
-                )
+                # Should be a GPUModelCVAdapter wrapping FinetunedTabPFNClassifier
+                assert hasattr(model, "predict_proba")
+                assert model.name == "tabpfn_ft"
         except Exception:
             pytest.skip("tabpfn not installed")
 
     def test_tabpfn_zeroshot_import(self):
-        """TabPFN v8: zero-shot should import TabPFNClassifier."""
+        """TabPFN v8: tabpfn (zero-shot) should import TabPFNClassifier."""
         from kreview.eval_engine import _build_gpu_model
 
         try:
-            model = _build_gpu_model("tabpfn", device="cpu", finetune=False)
+            model = _build_gpu_model("tabpfn", device="cpu")
             if model is not None:
-                assert "TabPFNClassifier" in type(model).__name__
+                assert hasattr(model, "predict_proba")
+                assert model.name == "tabpfn"
         except Exception:
             pytest.skip("tabpfn not installed")
 
-    def test_tabicl_finetune_uses_dedicated_class(self):
-        """TabICL v2.1: finetune=True should use FinetunedTabICLClassifier."""
+    def test_tabicl_ft_uses_dedicated_class(self):
+        """TabICL v2.1: tabicl_ft should use FinetunedTabICLClassifier."""
         from kreview.eval_engine import _build_gpu_model
 
         try:
-            model = _build_gpu_model("tabicl", finetune=True)
+            model = _build_gpu_model("tabicl_ft", device="cpu")
             if model is not None:
-                assert "Finetuned" in type(model).__name__
+                assert hasattr(model, "predict_proba")
+                assert model.name == "tabicl_ft"
         except Exception:
             pytest.skip("tabicl not installed")
 
     def test_tabicl_zeroshot_uses_base_class(self):
-        """TabICL v2.1: finetune=False should use TabICLClassifier."""
+        """TabICL v2.1: tabicl (zero-shot) should use TabICLClassifier."""
         from kreview.eval_engine import _build_gpu_model
 
         try:
-            model = _build_gpu_model("tabicl", finetune=False)
+            model = _build_gpu_model("tabicl", device="cpu")
             if model is not None:
-                assert "FinetunedTabICL" not in type(model).__name__
+                assert hasattr(model, "predict_proba")
+                assert model.name == "tabicl"
         except Exception:
             pytest.skip("tabicl not installed")
 
@@ -1389,3 +1390,163 @@ class TestGpuFeatureCapping:
         assert result["gpu_feature_cap_indices"] == sorted(
             result["gpu_feature_cap_indices"]
         )
+
+
+# ── GPUModelCVAdapter tests ─────────────────────────────────────────────────
+
+
+class TestGPUModelCVAdapter:
+    """Tests for GPUModelCVAdapter (Step 1 — classes_ fix).
+
+    Uses DummyClassifier as a stand-in for TabPFN/TabICL to verify:
+    - fit() sets classes_ as plain attribute
+    - predict_proba() delegates correctly
+    - predict() uses argmax of predict_proba
+    - NotFittedError raised before fit
+    - cross_val_predict works (the core bug fix)
+    - factory is called per fit (no stale model reuse)
+    """
+
+    def test_fit_sets_classes(self):
+        """After fit(), adapter.classes_ is a plain np.ndarray attribute."""
+        from kreview.eval_engine import GPUModelCVAdapter
+        from sklearn.dummy import DummyClassifier
+
+        adapter = GPUModelCVAdapter(
+            lambda: DummyClassifier(strategy="prior"), name="test"
+        )
+        X = np.random.randn(30, 3)
+        y = np.array([0] * 15 + [1] * 15)
+        adapter.fit(X, y)
+
+        assert hasattr(adapter, "classes_")
+        np.testing.assert_array_equal(adapter.classes_, np.array([0, 1]))
+        # classes_ should be a plain attribute, not a property
+        assert "classes_" not in type(adapter).__dict__
+
+    def test_predict_proba_shape(self):
+        """predict_proba returns (n_samples, 2) array."""
+        from kreview.eval_engine import GPUModelCVAdapter
+        from sklearn.dummy import DummyClassifier
+
+        adapter = GPUModelCVAdapter(
+            lambda: DummyClassifier(strategy="prior"), name="test"
+        )
+        X = np.random.randn(20, 3)
+        y = np.array([0] * 10 + [1] * 10)
+        adapter.fit(X, y)
+
+        probs = adapter.predict_proba(X)
+        assert probs.shape == (20, 2)
+        # Probabilities should sum to 1
+        np.testing.assert_allclose(probs.sum(axis=1), 1.0, atol=1e-10)
+
+    def test_predict_returns_classes(self):
+        """predict() returns values from classes_ array."""
+        from kreview.eval_engine import GPUModelCVAdapter
+        from sklearn.dummy import DummyClassifier
+
+        adapter = GPUModelCVAdapter(
+            lambda: DummyClassifier(strategy="prior"), name="test"
+        )
+        X = np.random.randn(20, 3)
+        y = np.array([0] * 10 + [1] * 10)
+        adapter.fit(X, y)
+
+        preds = adapter.predict(X)
+        assert set(preds).issubset({0, 1})
+
+    def test_unfitted_raises_not_fitted_error(self):
+        """Calling predict_proba before fit raises NotFittedError."""
+        from kreview.eval_engine import GPUModelCVAdapter
+        from sklearn.exceptions import NotFittedError
+
+        adapter = GPUModelCVAdapter(lambda: None, name="unfitted")
+        with pytest.raises(NotFittedError):
+            adapter.predict_proba(np.random.randn(5, 3))
+
+    def test_cross_val_predict_works(self):
+        """cross_val_predict with the adapter completes without error.
+
+        This is the core regression test — the original bug was that
+        cross_val_predict failed because sklearn.clone() broke TabPFN
+        and classes_ was unset.
+        """
+        from kreview.eval_engine import GPUModelCVAdapter
+        from sklearn.dummy import DummyClassifier
+        from sklearn.model_selection import StratifiedKFold, cross_val_predict
+
+        X = np.random.randn(50, 3)
+        y = np.array([0] * 25 + [1] * 25)
+
+        adapter = GPUModelCVAdapter(
+            lambda: DummyClassifier(strategy="prior"), name="cv_test"
+        )
+        cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        probs = cross_val_predict(adapter, X, y, cv=cv, method="predict_proba")
+
+        assert probs.shape == (50, 2)
+
+    def test_factory_called_per_fit(self):
+        """Model factory is invoked each time fit() is called."""
+        from kreview.eval_engine import GPUModelCVAdapter
+        from sklearn.dummy import DummyClassifier
+
+        call_count = [0]
+
+        def factory():
+            call_count[0] += 1
+            return DummyClassifier(strategy="prior")
+
+        adapter = GPUModelCVAdapter(factory, name="count_test")
+        X = np.random.randn(20, 3)
+        y = np.array([0] * 10 + [1] * 10)
+
+        adapter.fit(X, y)
+        adapter.fit(X, y)
+        assert call_count[0] == 2
+
+    def test_is_sklearn_compatible(self):
+        """Adapter passes sklearn's BaseEstimator/ClassifierMixin checks."""
+        from kreview.eval_engine import GPUModelCVAdapter
+        from sklearn.base import BaseEstimator, ClassifierMixin
+
+        adapter = GPUModelCVAdapter(lambda: None, name="compat")
+        assert isinstance(adapter, BaseEstimator)
+        assert isinstance(adapter, ClassifierMixin)
+
+
+# ── _build_gpu_model name dispatch tests ────────────────────────────────────
+
+
+class TestBuildGpuModelNameDispatch:
+    """Tests for _build_gpu_model() with 4-name dispatch (Step 2).
+
+    Validates:
+    - All 4 valid names are accepted (may return None if deps missing)
+    - Invalid names return None with a log
+    - Return type is GPUModelCVAdapter (when deps are available)
+    """
+
+    @pytest.mark.parametrize("name", ["tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"])
+    def test_valid_names_accepted(self, name):
+        """Valid GPU model names don't raise — they return adapter or None."""
+        from kreview.eval_engine import _build_gpu_model
+
+        result = _build_gpu_model(name, device="cpu")
+        # Either GPUModelCVAdapter (if deps installed) or None
+        assert result is None or hasattr(result, "predict_proba")
+
+    def test_invalid_name_returns_none(self):
+        """Unknown model name returns None (logged, not raised)."""
+        from kreview.eval_engine import _build_gpu_model
+
+        result = _build_gpu_model("invalid_model", device="cpu")
+        assert result is None
+
+    def test_old_finetune_param_rejected(self):
+        """Old finetune=True kwarg is no longer accepted."""
+        from kreview.eval_engine import _build_gpu_model
+
+        with pytest.raises(TypeError):
+            _build_gpu_model("tabpfn", finetune=True)

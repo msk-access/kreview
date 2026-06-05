@@ -80,7 +80,7 @@ In addition to statistical tests, `evaluate_feature()` computes three data quali
 | Missing percentage | `pct_missing` | Percentage of samples with NaN (0–100) |
 | Zero variance | `is_zero_variance` | Whether `std == 0` after dropping NaN (constant feature) |
 
-These metrics are saved to `*_eval_stats.parquet` and surfaced in the dashboard's [Cohort & QC page](../machine-learning/dashboard-guide.md#page-5-cohort--qc).
+These metrics are saved to `*_eval_stats.parquet` and surfaced in the dashboard's [Cohort & QC page](../machine-learning/dashboard-guide.md#page-5-cohort-qc).
 
 ## Feature Selection Scoring (v0.0.9+)
 

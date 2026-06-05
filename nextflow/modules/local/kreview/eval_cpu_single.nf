@@ -10,7 +10,7 @@
 // Data flow (multistage):
 //   KREVIEW_SELECT_SINGLE.out.matrix (per-evaluator)
 //     → KREVIEW_EVAL_CPU_SINGLE ×N (parallel)
-//     → collect → KREVIEW_EVAL_MULTIMODAL
+//     → collect → KREVIEW_MULTIMODAL_PREP → ... → KREVIEW_MULTIMODAL_MERGE
 // ---------------------------------------------------------
 
 process KREVIEW_EVAL_CPU_SINGLE {
