@@ -3,6 +3,7 @@
 # %% ../nbs/02_eval_engine.ipynb #792e3b1f
 from __future__ import annotations
 import json
+from collections.abc import Callable
 from pathlib import Path
 import pandas as pd
 import numpy as np
