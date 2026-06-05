@@ -1085,6 +1085,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#testing-gpu-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧠 Testing GPU Models
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1714,6 +1725,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#testing-gpu-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧠 Testing GPU Models
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1783,7 +1805,7 @@
 
 
 <h1 id="testing-guide">Testing Guide</h1>
-<p><code>kreview</code> is built to process large Fragmentomics datasets and evaluate complex Machine Learning features. Because the codebase runs cross-validation, hyperparameter sweeping, and ML model training (<abbr title="Logistic Regression">LR</abbr>, <abbr title="Random Forest">RF</abbr>, XGBoost) natively in Python, the test suite can quickly become a massive bottleneck if not managed carefully.</p>
+<p><code>kreview</code> is built to process large Fragmentomics datasets and evaluate complex Machine Learning features. Because the codebase runs cross-validation, hyperparameter sweeping, and ML model training (<abbr title="Logistic Regression">LR</abbr>, <abbr title="Random Forest">RF</abbr>, XGBoost + optional GPU models) natively in Python, the test suite can quickly become a massive bottleneck if not managed carefully.</p>
 <p>This guide outlines our testing philosophy, how to run tests, and critical performance optimization strategies.</p>
 <hr>
 <h2 id="running-tests-locally">🏃 Running Tests Locally</h2>
@@ -1807,7 +1829,7 @@ A summary will be printed to your terminal. Our <abbr title="Continuous Integrat
 </code></pre></div><p></p>
 <h3 id="the-module-scope-fixture-pattern-critical">The "Module Scope" Fixture Pattern (CRITICAL)</h3>
 <p>The most common reason for a slow test suite in <code>kreview</code> is repeatedly fitting models inside the test setup. </p>
-<p>For instance, <code>test_eval_engine.py</code> contains over 20 test cases that validate the outputs of <code>single_feature_model()</code>. If each test calls <code>single_feature_model(X, y)</code> independently, it runs 5-fold cross validation for 3 different algorithms <em>20 times</em>, adding minutes to the test run.</p>
+<p>For instance, <code>test_eval_engine.py</code> contains over 20 test cases that validate the outputs of <code>single_feature_model()</code>. If each test calls <code>single_feature_model(X, y)</code> independently, it runs 5-fold cross validation for 3+ different algorithms <em>20 times</em>, adding minutes to the test run.</p>
 <p><strong>The Solution:</strong>
 We heavily leverage <code>@pytest.fixture(scope="module")</code> to cache expensive computations <em>once per test session</em>.</p>
 <p><strong>Example:</strong>
@@ -1832,6 +1854,27 @@ Instead of computing the model inside the test:
 You should edit the files in <code>tests/*.py</code> directly using your standard IDE (VS Code, PyCharm, vim). You do not need to write tests inside the Jupyter notebooks.</p>
 <h2 id="mocking-duckdb">🗃️ Mocking DuckDB</h2>
 <p>When testing extraction pipelines, prefer writing small synthentic Parquet files using <code>pandas.DataFrame.to_parquet()</code> into a Pytest <code>tmp_path</code> fixture rather than querying real patient data. This ensures tests remain deterministic, fast, and secure.</p>
+<h2 id="testing-gpu-models">🧠 Testing GPU Models</h2>
+<p>GPU model tests are <strong>marked with <code>@pytest.mark.gpu</code></strong> and skipped when CUDA is unavailable. The <code>GPUModelCVAdapter</code> wrapper can be tested without a GPU by mocking the inner model:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># ✅ Test GPUModelCVAdapter without GPU</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">scope</span><span class="o">=</span><span class="s2">"module"</span><span class="p">)</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">mock_gpu_adapter</span><span class="p">():</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">kreview.eval_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">GPUModelCVAdapter</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogisticRegression</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="c1"># Use LR as a stand-in to test adapter delegation</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">adapter</span> <span class="o">=</span> <span class="n">GPUModelCVAdapter</span><span class="p">(</span><span class="n">LogisticRegression</span><span class="p">())</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="k">return</span> <span class="n">adapter</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_adapter_sets_classes</span><span class="p">(</span><span class="n">mock_gpu_adapter</span><span class="p">,</span> <span class="n">binary_Xy</span><span class="p">):</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">X</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">binary_Xy</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">mock_gpu_adapter</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">mock_gpu_adapter</span><span class="p">,</span> <span class="s1">'classes_'</span><span class="p">)</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">mock_gpu_adapter</span><span class="o">.</span><span class="n">classes_</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+</code></pre></div>
+<p>For integration tests that require actual GPU hardware, use the <code>gpu</code> mark:
+</p><div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>pytest<span class="w"> </span>-m<span class="w"> </span>gpu<span class="w">  </span><span class="c1"># Run GPU tests only (requires CUDA)</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>pytest<span class="w"> </span>-m<span class="w"> </span><span class="s2">"not gpu"</span><span class="w">  </span><span class="c1"># Skip GPU tests (CI default)</span>
+</code></pre></div><p></p>
 
 
 
@@ -1854,7 +1897,7 @@ You should edit the files in <code>tests/*.py</code> directly using your standar
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 22, 2026 19:05:46 UTC"><span class="timeago" datetime="2026-05-22T19:05:46+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 22, 2026 19:05:46 UTC">2026-05-22</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 5, 2026 18:11:04 UTC"><span class="timeago" datetime="2026-06-05T18:11:04+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 5, 2026 18:11:04 UTC">2026-06-05</span>
   </span>
 
     

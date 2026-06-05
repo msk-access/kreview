@@ -1623,7 +1623,8 @@ to --output.</p>
 </code></pre></div>
 <h3 id="gpu">gpu</h3>
 <p>Per-evaluator evaluation using TabPFN, TabICL (GPU).</p>
-<p>Fine-tuning is ON by default. Use --no-finetune for zero-shot.
+<p>Each model name encodes its variant: 'tabpfn' = zero-shot,
+'tabpfn_ft' = fine-tuned, 'tabicl' = zero-shot, 'tabicl_ft' = fine-tuned.
 Iterates over all *_matrix.parquet files and writes results JSONs.</p>
 <p>Usage:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kreview eval gpu [OPTIONS]
@@ -1632,30 +1633,87 @@ Iterates over all *_matrix.parquet files and writes results JSONs.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>  --matrices-dir PATH             Directory containing *_matrix.parquet files
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>                                  from kreview extract  [required]
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  --output PATH                   Output directory  [default: output/]
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>  --models TEXT                   Comma-separated GPU models: tabpfn,tabicl
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>                                  [default: tabpfn,tabicl]
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>  --no-finetune                   Use zero-shot inference instead of fine-
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>                                  tuning (not recommended)
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>  --finetune-epochs INTEGER       Fine-tuning epochs  [default: 30]
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>  --finetune-lr FLOAT             Fine-tuning learning rate  [default: 1e-05]
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>  --device TEXT                   PyTorch device: cuda, cpu  [default: cuda]
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>  --shap                          Compute SHAP values
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>  --shap-samples INTEGER          Max SHAP samples  [default: 500]
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>  --resume                        Skip evaluators with existing results
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>  --skip-gpu-joblib               Skip saving GPU model joblib files (can be
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>                                  &gt;200MB each)
-<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
-<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>                                  42]
-<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>  --deterministic / --no-deterministic
-<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>                                  Enable PyTorch deterministic mode (slower
-<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>                                  but reproducible).  [default: deterministic]
-<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>  --max-gpu-features INTEGER      Maximum features for GPU models. If feature
-<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>                                  count exceeds this, the top N are selected
-<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>                                  by mutual information from eval_stats. Set
-<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>                                  to 0 to disable capping.  [default: 150]
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>  --models TEXT                   Comma-separated GPU models:
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>                                  tabpfn,tabpfn_ft,tabicl,tabicl_ft  [default:
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>                                  tabpfn,tabicl]
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>  --finetune-epochs INTEGER       Fine-tuning epochs for _ft variants
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>                                  [default: 50]
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>  --finetune-lr FLOAT             Fine-tuning learning rate for _ft variants
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>                                  [default: 1e-05]
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>  --device TEXT                   PyTorch device: cuda, cpu  [default: cuda]
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>  --shap                          Compute SHAP values
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>  --shap-samples INTEGER          Max SHAP samples  [default: 500]
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>  --resume                        Skip evaluators with existing results
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>  --skip-gpu-joblib               Skip saving GPU model joblib files (can be
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>                                  &gt;200MB each)
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>                                  42]
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>                                  but reproducible).  [default: deterministic]
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>  --max-gpu-features INTEGER      Maximum features for GPU models. If feature
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>                                  count exceeds this, the top N are selected
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>                                  by mutual information from eval_stats. Set
+<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a>                                  to 0 to disable capping.  [default: 150]
 </code></pre></div>
 <h3 id="multimodal">multimodal</h3>
+<p>Cross-evaluator multimodal evaluation (stacking + ablation)</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview eval multimodal [OPTIONS] COMMAND [ARGS]...
+</code></pre></div>
+<h4 id="ablation">ablation</h4>
+<p>Stage 3: Leave-one-evaluator-out ablation analysis.</p>
+<p>Uses the best stacking model to measure each evaluator's marginal
+contribution.  Produces <code>ablation_results.json</code>.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kreview eval multimodal ablation [OPTIONS]
+</code></pre></div>
+<p>Options:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>  --stacking-matrix PATH       Path to stacking_matrix.parquet from multimodal
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>                               prep  [required]
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>  --stacking-results-dir PATH  Directory with stacking_*_results.json from
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>                               multimodal single  [required]
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>  --cv-folds INTEGER           Cross-validation folds  [default: 5]
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>  --seed INTEGER               Random seed  [default: 42]
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>  --output PATH                Output directory  [default: output/]
+</code></pre></div>
+<h4 id="merge">merge</h4>
+<p>Stage 4: Merge partial results into unified multimodal_results.json.</p>
+<p>Combines prep metadata, per-model stacking results, and optional
+ablation into a single output matching the monolithic schema.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kreview eval multimodal merge [OPTIONS]
+</code></pre></div>
+<p>Options:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>  --stacking-results-dir PATH  Directory with stacking_*_results.json from
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>                               multimodal single  [required]
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>  --prep-metadata PATH         Path to prep_metadata.json from multimodal prep
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>                               [required]
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>  --ablation-results PATH      Optional path to ablation_results.json from
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>                               multimodal ablation
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>  --output PATH                Output directory  [default: output/]
+</code></pre></div>
+<h4 id="prep">prep</h4>
+<p>Stage 1: Build stacking + raw-feature matrices from evaluator results.</p>
+<p>Produces <code>stacking_matrix.parquet</code>, optionally
+<code>raw_features_matrix.parquet</code>, and <code>prep_metadata.json</code>.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>kreview eval multimodal prep [OPTIONS]
+</code></pre></div>
+<p>Options:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>  --results-dir PATH           Directory with *_model_results.json files from
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>                               eval cpu/gpu  [required]
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>  --super-matrix PATH          Optional path to super_matrix.parquet for raw-
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>                               feature strategy
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>  --multimodal-selection TEXT  Feature selection for raw features: mi
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>                               (default) or boruta_shap  [default: mi]
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>  --top-percentile FLOAT       Top N%% features for MI selection  [default:
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>                               10.0]
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>  --seed INTEGER               Random seed  [default: 42]
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>  --output PATH                Output directory  [default: output/]
+</code></pre></div>
+<h4 id="run">run</h4>
 <p>Cross-evaluator multimodal evaluation with stacking and ablation.</p>
 <p>Reads per-evaluator model_results.json files for OOF probabilities
 and combines them into a stacking matrix.  Three strategies are run:</p>
@@ -1665,34 +1723,60 @@ and combines them into a stacking matrix.  Three strategies are run:</p>
 <li><strong>Ablation</strong>: Leave-one-evaluator-out importance analysis</li>
 </ol>
 <p>Usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview eval multimodal [OPTIONS]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>kreview eval multimodal run [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>  --results-dir PATH              Directory with *_model_results.json files
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>                                  from eval cpu/gpu  [required]
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>  --super-matrix PATH             Optional path to super_matrix.parquet for
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>                                  raw-feature strategy
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>  --output PATH                   Output directory  [default: output/]
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>  --models TEXT                   Comma-separated CPU models for multimodal
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>                                  evaluation (lr,rf,xgb)  [default: rf,xgb]
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>  --gpu-models TEXT               Comma-separated GPU models: tabpfn,tabicl.
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>                                  Empty = CPU only.
-<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>  --top-percentile FLOAT          Top N%% features for MI selection (matches
-<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>                                  per-evaluator pipeline)  [default: 10.0]
-<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>  --multimodal-selection TEXT     Multimodal feature selection: mi (default,
-<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>                                  fast) or boruta_shap (interaction-aware)
-<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>                                  [default: mi]
-<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
-<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>  --device TEXT                   PyTorch device: cuda, cpu  [default: cuda]
-<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>  --no-finetune                   Zero-shot GPU inference (not recommended)
-<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>  --finetune-epochs INTEGER       GPU fine-tuning epochs  [default: 30]
-<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>  --finetune-lr FLOAT             GPU fine-tuning learning rate  [default:
-<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>                                  1e-05]
-<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
-<a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>                                  42]
-<a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>  --deterministic / --no-deterministic
-<a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a>                                  Enable PyTorch deterministic mode (slower
-<a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>                                  but reproducible).  [default: deterministic]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>  --results-dir PATH              Directory with *_model_results.json files
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>                                  from eval cpu/gpu  [required]
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>  --super-matrix PATH             Optional path to super_matrix.parquet for
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>                                  raw-feature strategy
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>  --output PATH                   Output directory  [default: output/]
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>  --models TEXT                   Comma-separated CPU models for multimodal
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>                                  evaluation (lr,rf,xgb)  [default: rf,xgb]
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>  --gpu-models TEXT               Comma-separated GPU models:
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>                                  tabpfn_ft,tabicl_ft. Empty = CPU only.
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>  --top-percentile FLOAT          Top N%% features for MI selection (matches
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>                                  per-evaluator pipeline)  [default: 10.0]
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>  --multimodal-selection TEXT     Multimodal feature selection: mi (default,
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>                                  fast) or boruta_shap (interaction-aware)
+<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>                                  [default: mi]
+<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
+<a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a>  --device TEXT                   PyTorch device: cuda, cpu  [default: cuda]
+<a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a>  --finetune-epochs INTEGER       GPU fine-tuning epochs for _ft variants
+<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a>                                  [default: 50]
+<a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a>  --finetune-lr FLOAT             GPU fine-tuning learning rate  [default:
+<a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a>                                  1e-05]
+<a id="__codelineno-15-21" name="__codelineno-15-21" href="#__codelineno-15-21"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
+<a id="__codelineno-15-22" name="__codelineno-15-22" href="#__codelineno-15-22"></a>                                  42]
+<a id="__codelineno-15-23" name="__codelineno-15-23" href="#__codelineno-15-23"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-15-24" name="__codelineno-15-24" href="#__codelineno-15-24"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-15-25" name="__codelineno-15-25" href="#__codelineno-15-25"></a>                                  but reproducible).  [default: deterministic]
+</code></pre></div>
+<h4 id="single">single</h4>
+<p>Stage 2: Train one model on the stacking (+ optional raw) matrix.</p>
+<p>Produces <code>stacking_{model}_results.json</code>.</p>
+<p>Usage:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kreview eval multimodal single [OPTIONS]
+</code></pre></div>
+<p>Options:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>  --stacking-matrix PATH          Path to stacking_matrix.parquet from
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>                                  multimodal prep  [required]
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>  --model TEXT                    Model to train: rf, xgb, lr, tabpfn_ft,
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>                                  tabicl_ft  [default: rf]
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>  --raw-features-matrix PATH      Optional path to raw_features_matrix.parquet
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>                                  from prep
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>  --device TEXT                   PyTorch device  [default: cuda]
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>  --finetune-epochs INTEGER       GPU fine-tuning epochs  [default: 50]
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>  --finetune-lr FLOAT             GPU fine-tuning learning rate  [default:
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>                                  1e-05]
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>  --best-single-auc FLOAT         Best single-evaluator AUC for delta
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a>                                  computation  [default: 0.0]
+<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a>  --seed INTEGER                  Random seed  [default: 42]
+<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a>                                  Enable PyTorch deterministic mode.
+<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a>                                  [default: deterministic]
+<a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a>  --output PATH                   Output directory  [default: output/]
 </code></pre></div>
 <h2 id="extract">extract</h2>
 <p>Label samples and extract feature matrices (no eval/model/report).</p>
@@ -1700,40 +1784,40 @@ and combines them into a stacking matrix.  Three strategies are run:</p>
 evaluator into <code>*_matrix.parquet</code> files. This is the first half of
 <code>kreview run</code>, designed for parallelized Nextflow execution.</p>
 <p>Usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kreview extract [OPTIONS]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kreview extract [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>  --cancer-samplesheet PATH       Cancer samplesheet CSV  [required]
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>  --healthy-xs1-samplesheet PATH  Healthy XS1 samplesheet CSV  [required]
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>  --healthy-xs2-samplesheet PATH  Healthy XS2 samplesheet CSV  [required]
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>  --cbioportal-dir PATH           Directory with cBioPortal files  [required]
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>  --krewlyzer-dir TEXT            krewlyzer output directory  [required]
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>  --output PATH                   Output directory for matrices  [default:
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>                                  output/]
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>  --min-vaf FLOAT                 Min VAF for Possible ctDNA+ (default 1%)
-<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>                                  [default: 0.01]
-<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>  --min-fragments INTEGER         Min fragments PF for Depth QC (samples below
-<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>                                  are Insufficient Data)  [default: 2000]
-<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>  --min-variants INTEGER          Min # variants passing VAF for Possible
-<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>                                  ctDNA+  [default: 1]
-<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
-<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>                                  only demotion.
-<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>  --features TEXT                 Comma-separated evaluator names (default:
-<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>                                  all)
-<a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a>  --tier INTEGER                  Run only this tier
-<a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a>  --chunk-size TEXT               Samples per DuckDB read batch. 'auto'
-<a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a>                                  (default) probes parquet row density at
-<a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a>                                  runtime, or pass an integer to override
-<a id="__codelineno-10-22" name="__codelineno-10-22" href="#__codelineno-10-22"></a>                                  (e.g. --chunk-size 200).  [default: auto]
-<a id="__codelineno-10-23" name="__codelineno-10-23" href="#__codelineno-10-23"></a>  --labels PATH                   Path to a pre-computed labels.parquet file.
-<a id="__codelineno-10-24" name="__codelineno-10-24" href="#__codelineno-10-24"></a>                                  When provided, skips the internal labeling
-<a id="__codelineno-10-25" name="__codelineno-10-25" href="#__codelineno-10-25"></a>                                  step entirely. Used by Nextflow multistage
-<a id="__codelineno-10-26" name="__codelineno-10-26" href="#__codelineno-10-26"></a>                                  to avoid re-running labeling per evaluator.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>  --cancer-samplesheet PATH       Cancer samplesheet CSV  [required]
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>  --healthy-xs1-samplesheet PATH  Healthy XS1 samplesheet CSV  [required]
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>  --healthy-xs2-samplesheet PATH  Healthy XS2 samplesheet CSV  [required]
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>  --cbioportal-dir PATH           Directory with cBioPortal files  [required]
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>  --krewlyzer-dir TEXT            krewlyzer output directory  [required]
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>  --output PATH                   Output directory for matrices  [default:
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>                                  output/]
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>  --min-vaf FLOAT                 Min VAF for Possible ctDNA+ (default 1%)
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>                                  [default: 0.01]
+<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>  --min-fragments INTEGER         Min fragments PF for Depth QC (samples below
+<a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>                                  are Insufficient Data)  [default: 2000]
+<a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a>  --min-variants INTEGER          Min # variants passing VAF for Possible
+<a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a>                                  ctDNA+  [default: 1]
+<a id="__codelineno-19-14" name="__codelineno-19-14" href="#__codelineno-19-14"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
+<a id="__codelineno-19-15" name="__codelineno-19-15" href="#__codelineno-19-15"></a>                                  only demotion.
+<a id="__codelineno-19-16" name="__codelineno-19-16" href="#__codelineno-19-16"></a>  --features TEXT                 Comma-separated evaluator names (default:
+<a id="__codelineno-19-17" name="__codelineno-19-17" href="#__codelineno-19-17"></a>                                  all)
+<a id="__codelineno-19-18" name="__codelineno-19-18" href="#__codelineno-19-18"></a>  --tier INTEGER                  Run only this tier
+<a id="__codelineno-19-19" name="__codelineno-19-19" href="#__codelineno-19-19"></a>  --chunk-size TEXT               Samples per DuckDB read batch. 'auto'
+<a id="__codelineno-19-20" name="__codelineno-19-20" href="#__codelineno-19-20"></a>                                  (default) probes parquet row density at
+<a id="__codelineno-19-21" name="__codelineno-19-21" href="#__codelineno-19-21"></a>                                  runtime, or pass an integer to override
+<a id="__codelineno-19-22" name="__codelineno-19-22" href="#__codelineno-19-22"></a>                                  (e.g. --chunk-size 200).  [default: auto]
+<a id="__codelineno-19-23" name="__codelineno-19-23" href="#__codelineno-19-23"></a>  --labels PATH                   Path to a pre-computed labels.parquet file.
+<a id="__codelineno-19-24" name="__codelineno-19-24" href="#__codelineno-19-24"></a>                                  When provided, skips the internal labeling
+<a id="__codelineno-19-25" name="__codelineno-19-25" href="#__codelineno-19-25"></a>                                  step entirely. Used by Nextflow multistage
+<a id="__codelineno-19-26" name="__codelineno-19-26" href="#__codelineno-19-26"></a>                                  to avoid re-running labeling per evaluator.
 </code></pre></div>
 <h2 id="features-list">features-list</h2>
 <p>List all registered feature evaluators.</p>
 <p>Usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kreview features-list [OPTIONS]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>kreview features-list [OPTIONS]
 </code></pre></div>
 <h2 id="fuse">fuse</h2>
 <p>Fuse per-evaluator matrices into a single super-matrix.</p>
@@ -1742,37 +1826,37 @@ their feature columns (prefixed with evaluator name), outer-joins on
 SAMPLE_ID, and writes <code>super_matrix.parquet</code> for downstream multimodal
 evaluation.</p>
 <p>Usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>kreview fuse [OPTIONS]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>kreview fuse [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>  --output-dir PATH         Directory containing *_matrix.parquet files
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>                            [required]
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>  --min-evaluators INTEGER  Minimum number of evaluators a sample must appear
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>                            in to be retained  [default: 1]
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>  --output-name TEXT        Filename for the fused super-matrix (written to
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>                            --output-dir)  [default: super_matrix.parquet]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>  --output-dir PATH         Directory containing *_matrix.parquet files
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>                            [required]
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>  --min-evaluators INTEGER  Minimum number of evaluators a sample must appear
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a>                            in to be retained  [default: 1]
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>  --output-name TEXT        Filename for the fused super-matrix (written to
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>                            --output-dir)  [default: super_matrix.parquet]
 </code></pre></div>
 <h2 id="label">label</h2>
 <p>Generate <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels without feature evaluation.</p>
 <p>Usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>kreview label [OPTIONS]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>kreview label [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>  --cancer-samplesheet PATH       Cancer samplesheet CSV  [required]
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>  --healthy-xs1-samplesheet PATH  Healthy XS1 samplesheet CSV  [required]
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>  --healthy-xs2-samplesheet PATH  Healthy XS2 samplesheet CSV  [required]
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>  --cbioportal-dir PATH           Directory with cBioPortal files  [required]
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>  --output PATH                   Output parquet file  [default:
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>                                  labels.parquet]
-<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>  --min-vaf FLOAT                 Min VAF for Possible ctDNA+ (default 1%)
-<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>                                  [default: 0.01]
-<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>  --min-fragments INTEGER         Min fragments PF for Depth QC (samples below
-<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>                                  are Insufficient Data)  [default: 2000]
-<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>  --min-variants INTEGER          Min # variants passing VAF for Possible
-<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>                                  ctDNA+  [default: 1]
-<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
-<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>                                  only demotion. Samples with only CH
-<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>                                  mutations are demoted to Possible ctDNA−.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>  --cancer-samplesheet PATH       Cancer samplesheet CSV  [required]
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>  --healthy-xs1-samplesheet PATH  Healthy XS1 samplesheet CSV  [required]
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>  --healthy-xs2-samplesheet PATH  Healthy XS2 samplesheet CSV  [required]
+<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>  --cbioportal-dir PATH           Directory with cBioPortal files  [required]
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>  --output PATH                   Output parquet file  [default:
+<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a>                                  labels.parquet]
+<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a>  --min-vaf FLOAT                 Min VAF for Possible ctDNA+ (default 1%)
+<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a>                                  [default: 0.01]
+<a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a>  --min-fragments INTEGER         Min fragments PF for Depth QC (samples below
+<a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a>                                  are Insufficient Data)  [default: 2000]
+<a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a>  --min-variants INTEGER          Min # variants passing VAF for Possible
+<a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a>                                  ctDNA+  [default: 1]
+<a id="__codelineno-24-13" name="__codelineno-24-13" href="#__codelineno-24-13"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
+<a id="__codelineno-24-14" name="__codelineno-24-14" href="#__codelineno-24-14"></a>                                  only demotion. Samples with only CH
+<a id="__codelineno-24-15" name="__codelineno-24-15" href="#__codelineno-24-15"></a>                                  mutations are demoted to Possible ctDNA−.
 </code></pre></div>
 <h2 id="report">report</h2>
 <p>Re-generate HTML Dashboards from existing matrix parquet files.</p>
@@ -1781,103 +1865,101 @@ standalone Quarto HTML dashboard, and writes them to <code>out_dir</code>.
 Each evaluator is rendered independently so a single failure does not
 block the remaining dashboards.</p>
 <p>Usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kreview report [OPTIONS]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>kreview report [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>  --input-dir PATH         Directory with *_matrix.parquet files  [required]
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>  --out-dir PATH           Directory to deposit Quarto reports  [default:
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>                           reports/]
-<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>  --cvd-safe               Render dashboards and plots using an Okabe-Ito
-<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>                           Colorblind-Safe palette instead of default neon.
-<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>  --shap-samples INTEGER   Max samples for SHAP explainability computation in
-<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>                           dashboards.  [default: 500]
-<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>  --shap-features INTEGER  Max features to visualize in SHAP plots.  [default:
-<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>                           10]
-<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>  --multimodal             Render the multimodal dashboard for stacking model
-<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>                           results.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>  --input-dir PATH         Directory with *_matrix.parquet files  [required]
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>  --out-dir PATH           Directory to deposit Quarto reports  [default:
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>                           reports/]
+<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>  --cvd-safe               Render dashboards and plots using an Okabe-Ito
+<a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>                           Colorblind-Safe palette instead of default neon.
+<a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a>  --shap-samples INTEGER   Max samples for SHAP explainability computation in
+<a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>                           dashboards.  [default: 500]
+<a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a>  --shap-features INTEGER  Max features to visualize in SHAP plots.  [default:
+<a id="__codelineno-26-9" name="__codelineno-26-9" href="#__codelineno-26-9"></a>                           10]
+<a id="__codelineno-26-10" name="__codelineno-26-10" href="#__codelineno-26-10"></a>  --multimodal             Render the multimodal dashboard for stacking model
+<a id="__codelineno-26-11" name="__codelineno-26-11" href="#__codelineno-26-11"></a>                           results.
 </code></pre></div>
-<h2 id="run">run</h2>
+<h2 id="run_1">run</h2>
 <p>Run full pipeline: label → extract → evaluate → report.</p>
 <p>Usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kreview run [OPTIONS]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>kreview run [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>  --cancer-samplesheet PATH       [required]
-<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>  --healthy-xs1-samplesheet PATH  [required]
-<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>  --healthy-xs2-samplesheet PATH  [required]
-<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>  --cbioportal-dir PATH           [required]
-<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>  --krewlyzer-dir TEXT            krewlyzer output directory  [required]
-<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>  --output PATH                   Output directory  [default: output/]
-<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>  --min-vaf FLOAT                 [default: 0.01]
-<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>  --min-fragments INTEGER         Min fragments PF for Depth QC (samples below
-<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>                                  are Insufficient Data)  [default: 2000]
-<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>  --min-variants INTEGER          [default: 1]
-<a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>  --features TEXT                 Comma-separated features to run
-<a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a>  --tier INTEGER                  Run features of this tier only
-<a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a>  --cvd-safe                      Render dashboards and plots using an Okabe-
-<a id="__codelineno-19-14" name="__codelineno-19-14" href="#__codelineno-19-14"></a>                                  Ito Colorblind-Safe palette instead of
-<a id="__codelineno-19-15" name="__codelineno-19-15" href="#__codelineno-19-15"></a>                                  default neon.
-<a id="__codelineno-19-16" name="__codelineno-19-16" href="#__codelineno-19-16"></a>  --skip-report / --no-skip-report
-<a id="__codelineno-19-17" name="__codelineno-19-17" href="#__codelineno-19-17"></a>                                  Skip HTML report generation  [default: no-
-<a id="__codelineno-19-18" name="__codelineno-19-18" href="#__codelineno-19-18"></a>                                  skip-report]
-<a id="__codelineno-19-19" name="__codelineno-19-19" href="#__codelineno-19-19"></a>  --cv-folds INTEGER              Number of cross-validation folds (3-20,
-<a id="__codelineno-19-20" name="__codelineno-19-20" href="#__codelineno-19-20"></a>                                  default 5)  [default: 5]
-<a id="__codelineno-19-21" name="__codelineno-19-21" href="#__codelineno-19-21"></a>  --impute-strategy TEXT          Imputation strategy for missing values:
-<a id="__codelineno-19-22" name="__codelineno-19-22" href="#__codelineno-19-22"></a>                                  median, mean, or zero  [default: median]
-<a id="__codelineno-19-23" name="__codelineno-19-23" href="#__codelineno-19-23"></a>  --export-duckdb                 Export a persistent duckdb data lake
-<a id="__codelineno-19-24" name="__codelineno-19-24" href="#__codelineno-19-24"></a>                                  containing all feature matrices
-<a id="__codelineno-19-25" name="__codelineno-19-25" href="#__codelineno-19-25"></a>  --chunk-size TEXT               Samples per DuckDB read batch. 'auto'
-<a id="__codelineno-19-26" name="__codelineno-19-26" href="#__codelineno-19-26"></a>                                  (default) probes parquet row density at
-<a id="__codelineno-19-27" name="__codelineno-19-27" href="#__codelineno-19-27"></a>                                  runtime, or pass an integer to override
-<a id="__codelineno-19-28" name="__codelineno-19-28" href="#__codelineno-19-28"></a>                                  (e.g. --chunk-size 200).  [default: auto]
-<a id="__codelineno-19-29" name="__codelineno-19-29" href="#__codelineno-19-29"></a>  --top-n INTEGER                 [DEPRECATED] Use --top-percentile instead.
-<a id="__codelineno-19-30" name="__codelineno-19-30" href="#__codelineno-19-30"></a>                                  If set, overrides --top-percentile with a
-<a id="__codelineno-19-31" name="__codelineno-19-31" href="#__codelineno-19-31"></a>                                  fixed count.
-<a id="__codelineno-19-32" name="__codelineno-19-32" href="#__codelineno-19-32"></a>  --top-percentile FLOAT          Top X%% of features to select per metric
-<a id="__codelineno-19-33" name="__codelineno-19-33" href="#__codelineno-19-33"></a>                                  (AUC, MI). The union of both sets feeds into
-<a id="__codelineno-19-34" name="__codelineno-19-34" href="#__codelineno-19-34"></a>                                  models.  [default: 10.0]
-<a id="__codelineno-19-35" name="__codelineno-19-35" href="#__codelineno-19-35"></a>  --strategy TEXT                 Feature selection strategy: mrmr (default)
-<a id="__codelineno-19-36" name="__codelineno-19-36" href="#__codelineno-19-36"></a>                                  or hybrid_union  [default: mrmr]
-<a id="__codelineno-19-37" name="__codelineno-19-37" href="#__codelineno-19-37"></a>  --multimodal-selection TEXT     Multimodal selection: mi (default) or
-<a id="__codelineno-19-38" name="__codelineno-19-38" href="#__codelineno-19-38"></a>                                  boruta_shap  [default: mi]
-<a id="__codelineno-19-39" name="__codelineno-19-39" href="#__codelineno-19-39"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
-<a id="__codelineno-19-40" name="__codelineno-19-40" href="#__codelineno-19-40"></a>                                  computation in dashboards. Lower values
-<a id="__codelineno-19-41" name="__codelineno-19-41" href="#__codelineno-19-41"></a>                                  reduce memory usage.  [default: 500]
-<a id="__codelineno-19-42" name="__codelineno-19-42" href="#__codelineno-19-42"></a>  --shap-features INTEGER         Max features to visualize in SHAP
-<a id="__codelineno-19-43" name="__codelineno-19-43" href="#__codelineno-19-43"></a>                                  beeswarm/waterfall plots.  [default: 10]
-<a id="__codelineno-19-44" name="__codelineno-19-44" href="#__codelineno-19-44"></a>  --resume                        Skip models whose AUC results already exist
-<a id="__codelineno-19-45" name="__codelineno-19-45" href="#__codelineno-19-45"></a>                                  in the output JSON. Enables incremental
-<a id="__codelineno-19-46" name="__codelineno-19-46" href="#__codelineno-19-46"></a>                                  runs: first CPU, then GPU with --resume.
-<a id="__codelineno-19-47" name="__codelineno-19-47" href="#__codelineno-19-47"></a>  --compute-univariate-auc        Compute per-feature univariate LR AUC.
-<a id="__codelineno-19-48" name="__codelineno-19-48" href="#__codelineno-19-48"></a>                                  Required for hybrid selection (default:
-<a id="__codelineno-19-49" name="__codelineno-19-49" href="#__codelineno-19-49"></a>                                  True).  [default: True]
-<a id="__codelineno-19-50" name="__codelineno-19-50" href="#__codelineno-19-50"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
-<a id="__codelineno-19-51" name="__codelineno-19-51" href="#__codelineno-19-51"></a>                                  only demotion. Samples with only CH
-<a id="__codelineno-19-52" name="__codelineno-19-52" href="#__codelineno-19-52"></a>                                  mutations are demoted to Possible ctDNA−.
-<a id="__codelineno-19-53" name="__codelineno-19-53" href="#__codelineno-19-53"></a>  --gpu-models TEXT               Comma-separated GPU models to run after CPU
-<a id="__codelineno-19-54" name="__codelineno-19-54" href="#__codelineno-19-54"></a>                                  models: tabpfn,tabicl. Empty (default) = CPU
-<a id="__codelineno-19-55" name="__codelineno-19-55" href="#__codelineno-19-55"></a>                                  only. Requires torch + model packages (pip
-<a id="__codelineno-19-56" name="__codelineno-19-56" href="#__codelineno-19-56"></a>                                  install kreview[gpu]).
-<a id="__codelineno-19-57" name="__codelineno-19-57" href="#__codelineno-19-57"></a>  --no-finetune                   Use zero-shot inference for GPU models
-<a id="__codelineno-19-58" name="__codelineno-19-58" href="#__codelineno-19-58"></a>                                  instead of fine-tuning (not recommended).
-<a id="__codelineno-19-59" name="__codelineno-19-59" href="#__codelineno-19-59"></a>  --finetune-epochs INTEGER       Number of fine-tuning epochs for GPU
-<a id="__codelineno-19-60" name="__codelineno-19-60" href="#__codelineno-19-60"></a>                                  foundation models.  [default: 30]
-<a id="__codelineno-19-61" name="__codelineno-19-61" href="#__codelineno-19-61"></a>  --finetune-lr FLOAT             Learning rate for GPU model fine-tuning.
-<a id="__codelineno-19-62" name="__codelineno-19-62" href="#__codelineno-19-62"></a>                                  [default: 1e-05]
-<a id="__codelineno-19-63" name="__codelineno-19-63" href="#__codelineno-19-63"></a>  --device TEXT                   PyTorch device for GPU models: cuda, cpu.
-<a id="__codelineno-19-64" name="__codelineno-19-64" href="#__codelineno-19-64"></a>                                  [default: cuda]
-<a id="__codelineno-19-65" name="__codelineno-19-65" href="#__codelineno-19-65"></a>  --skip-gpu-joblib               Skip saving GPU model joblib files (can be
-<a id="__codelineno-19-66" name="__codelineno-19-66" href="#__codelineno-19-66"></a>                                  &gt;200MB each).
-<a id="__codelineno-19-67" name="__codelineno-19-67" href="#__codelineno-19-67"></a>  --seed INTEGER                  Random seed for reproducibility across all
-<a id="__codelineno-19-68" name="__codelineno-19-68" href="#__codelineno-19-68"></a>                                  models and CV splits.  [default: 42]
-<a id="__codelineno-19-69" name="__codelineno-19-69" href="#__codelineno-19-69"></a>  --deterministic / --no-deterministic
-<a id="__codelineno-19-70" name="__codelineno-19-70" href="#__codelineno-19-70"></a>                                  Enable PyTorch deterministic mode (slower
-<a id="__codelineno-19-71" name="__codelineno-19-71" href="#__codelineno-19-71"></a>                                  but reproducible). Default: True.  [default:
-<a id="__codelineno-19-72" name="__codelineno-19-72" href="#__codelineno-19-72"></a>                                  deterministic]
-<a id="__codelineno-19-73" name="__codelineno-19-73" href="#__codelineno-19-73"></a>  --max-gpu-features INTEGER      Maximum features for GPU models. If feature
-<a id="__codelineno-19-74" name="__codelineno-19-74" href="#__codelineno-19-74"></a>                                  count exceeds this, the top N are selected
-<a id="__codelineno-19-75" name="__codelineno-19-75" href="#__codelineno-19-75"></a>                                  by mutual information from eval_stats. Set
-<a id="__codelineno-19-76" name="__codelineno-19-76" href="#__codelineno-19-76"></a>                                  to 0 to disable capping.  [default: 150]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>  --cancer-samplesheet PATH       [required]
+<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>  --healthy-xs1-samplesheet PATH  [required]
+<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>  --healthy-xs2-samplesheet PATH  [required]
+<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>  --cbioportal-dir PATH           [required]
+<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a>  --krewlyzer-dir TEXT            krewlyzer output directory  [required]
+<a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>  --output PATH                   Output directory  [default: output/]
+<a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a>  --min-vaf FLOAT                 [default: 0.01]
+<a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a>  --min-fragments INTEGER         Min fragments PF for Depth QC (samples below
+<a id="__codelineno-28-9" name="__codelineno-28-9" href="#__codelineno-28-9"></a>                                  are Insufficient Data)  [default: 2000]
+<a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a>  --min-variants INTEGER          [default: 1]
+<a id="__codelineno-28-11" name="__codelineno-28-11" href="#__codelineno-28-11"></a>  --features TEXT                 Comma-separated features to run
+<a id="__codelineno-28-12" name="__codelineno-28-12" href="#__codelineno-28-12"></a>  --tier INTEGER                  Run features of this tier only
+<a id="__codelineno-28-13" name="__codelineno-28-13" href="#__codelineno-28-13"></a>  --cvd-safe                      Render dashboards and plots using an Okabe-
+<a id="__codelineno-28-14" name="__codelineno-28-14" href="#__codelineno-28-14"></a>                                  Ito Colorblind-Safe palette instead of
+<a id="__codelineno-28-15" name="__codelineno-28-15" href="#__codelineno-28-15"></a>                                  default neon.
+<a id="__codelineno-28-16" name="__codelineno-28-16" href="#__codelineno-28-16"></a>  --skip-report / --no-skip-report
+<a id="__codelineno-28-17" name="__codelineno-28-17" href="#__codelineno-28-17"></a>                                  Skip HTML report generation  [default: no-
+<a id="__codelineno-28-18" name="__codelineno-28-18" href="#__codelineno-28-18"></a>                                  skip-report]
+<a id="__codelineno-28-19" name="__codelineno-28-19" href="#__codelineno-28-19"></a>  --cv-folds INTEGER              Number of cross-validation folds (3-20,
+<a id="__codelineno-28-20" name="__codelineno-28-20" href="#__codelineno-28-20"></a>                                  default 5)  [default: 5]
+<a id="__codelineno-28-21" name="__codelineno-28-21" href="#__codelineno-28-21"></a>  --impute-strategy TEXT          Imputation strategy for missing values:
+<a id="__codelineno-28-22" name="__codelineno-28-22" href="#__codelineno-28-22"></a>                                  median, mean, or zero  [default: median]
+<a id="__codelineno-28-23" name="__codelineno-28-23" href="#__codelineno-28-23"></a>  --export-duckdb                 Export a persistent duckdb data lake
+<a id="__codelineno-28-24" name="__codelineno-28-24" href="#__codelineno-28-24"></a>                                  containing all feature matrices
+<a id="__codelineno-28-25" name="__codelineno-28-25" href="#__codelineno-28-25"></a>  --chunk-size TEXT               Samples per DuckDB read batch. 'auto'
+<a id="__codelineno-28-26" name="__codelineno-28-26" href="#__codelineno-28-26"></a>                                  (default) probes parquet row density at
+<a id="__codelineno-28-27" name="__codelineno-28-27" href="#__codelineno-28-27"></a>                                  runtime, or pass an integer to override
+<a id="__codelineno-28-28" name="__codelineno-28-28" href="#__codelineno-28-28"></a>                                  (e.g. --chunk-size 200).  [default: auto]
+<a id="__codelineno-28-29" name="__codelineno-28-29" href="#__codelineno-28-29"></a>  --top-n INTEGER                 [DEPRECATED] Use --top-percentile instead.
+<a id="__codelineno-28-30" name="__codelineno-28-30" href="#__codelineno-28-30"></a>                                  If set, overrides --top-percentile with a
+<a id="__codelineno-28-31" name="__codelineno-28-31" href="#__codelineno-28-31"></a>                                  fixed count.
+<a id="__codelineno-28-32" name="__codelineno-28-32" href="#__codelineno-28-32"></a>  --top-percentile FLOAT          Top X%% of features to select per metric
+<a id="__codelineno-28-33" name="__codelineno-28-33" href="#__codelineno-28-33"></a>                                  (AUC, MI). The union of both sets feeds into
+<a id="__codelineno-28-34" name="__codelineno-28-34" href="#__codelineno-28-34"></a>                                  models.  [default: 10.0]
+<a id="__codelineno-28-35" name="__codelineno-28-35" href="#__codelineno-28-35"></a>  --strategy TEXT                 Feature selection strategy: mrmr (default)
+<a id="__codelineno-28-36" name="__codelineno-28-36" href="#__codelineno-28-36"></a>                                  or hybrid_union  [default: mrmr]
+<a id="__codelineno-28-37" name="__codelineno-28-37" href="#__codelineno-28-37"></a>  --multimodal-selection TEXT     Multimodal selection: mi (default) or
+<a id="__codelineno-28-38" name="__codelineno-28-38" href="#__codelineno-28-38"></a>                                  boruta_shap  [default: mi]
+<a id="__codelineno-28-39" name="__codelineno-28-39" href="#__codelineno-28-39"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
+<a id="__codelineno-28-40" name="__codelineno-28-40" href="#__codelineno-28-40"></a>                                  computation in dashboards. Lower values
+<a id="__codelineno-28-41" name="__codelineno-28-41" href="#__codelineno-28-41"></a>                                  reduce memory usage.  [default: 500]
+<a id="__codelineno-28-42" name="__codelineno-28-42" href="#__codelineno-28-42"></a>  --shap-features INTEGER         Max features to visualize in SHAP
+<a id="__codelineno-28-43" name="__codelineno-28-43" href="#__codelineno-28-43"></a>                                  beeswarm/waterfall plots.  [default: 10]
+<a id="__codelineno-28-44" name="__codelineno-28-44" href="#__codelineno-28-44"></a>  --resume                        Skip models whose AUC results already exist
+<a id="__codelineno-28-45" name="__codelineno-28-45" href="#__codelineno-28-45"></a>                                  in the output JSON. Enables incremental
+<a id="__codelineno-28-46" name="__codelineno-28-46" href="#__codelineno-28-46"></a>                                  runs: first CPU, then GPU with --resume.
+<a id="__codelineno-28-47" name="__codelineno-28-47" href="#__codelineno-28-47"></a>  --compute-univariate-auc        Compute per-feature univariate LR AUC.
+<a id="__codelineno-28-48" name="__codelineno-28-48" href="#__codelineno-28-48"></a>                                  Required for hybrid selection (default:
+<a id="__codelineno-28-49" name="__codelineno-28-49" href="#__codelineno-28-49"></a>                                  True).  [default: True]
+<a id="__codelineno-28-50" name="__codelineno-28-50" href="#__codelineno-28-50"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
+<a id="__codelineno-28-51" name="__codelineno-28-51" href="#__codelineno-28-51"></a>                                  only demotion. Samples with only CH
+<a id="__codelineno-28-52" name="__codelineno-28-52" href="#__codelineno-28-52"></a>                                  mutations are demoted to Possible ctDNA−.
+<a id="__codelineno-28-53" name="__codelineno-28-53" href="#__codelineno-28-53"></a>  --gpu-models TEXT               Comma-separated GPU models:
+<a id="__codelineno-28-54" name="__codelineno-28-54" href="#__codelineno-28-54"></a>                                  tabpfn,tabpfn_ft,tabicl,tabicl_ft. Empty
+<a id="__codelineno-28-55" name="__codelineno-28-55" href="#__codelineno-28-55"></a>                                  (default) = CPU only. Requires torch + model
+<a id="__codelineno-28-56" name="__codelineno-28-56" href="#__codelineno-28-56"></a>                                  packages (pip install kreview[gpu]).
+<a id="__codelineno-28-57" name="__codelineno-28-57" href="#__codelineno-28-57"></a>  --finetune-epochs INTEGER       Number of fine-tuning epochs for _ft GPU
+<a id="__codelineno-28-58" name="__codelineno-28-58" href="#__codelineno-28-58"></a>                                  variants.  [default: 50]
+<a id="__codelineno-28-59" name="__codelineno-28-59" href="#__codelineno-28-59"></a>  --finetune-lr FLOAT             Learning rate for GPU model fine-tuning.
+<a id="__codelineno-28-60" name="__codelineno-28-60" href="#__codelineno-28-60"></a>                                  [default: 1e-05]
+<a id="__codelineno-28-61" name="__codelineno-28-61" href="#__codelineno-28-61"></a>  --device TEXT                   PyTorch device for GPU models: cuda, cpu.
+<a id="__codelineno-28-62" name="__codelineno-28-62" href="#__codelineno-28-62"></a>                                  [default: cuda]
+<a id="__codelineno-28-63" name="__codelineno-28-63" href="#__codelineno-28-63"></a>  --skip-gpu-joblib               Skip saving GPU model joblib files (can be
+<a id="__codelineno-28-64" name="__codelineno-28-64" href="#__codelineno-28-64"></a>                                  &gt;200MB each).
+<a id="__codelineno-28-65" name="__codelineno-28-65" href="#__codelineno-28-65"></a>  --seed INTEGER                  Random seed for reproducibility across all
+<a id="__codelineno-28-66" name="__codelineno-28-66" href="#__codelineno-28-66"></a>                                  models and CV splits.  [default: 42]
+<a id="__codelineno-28-67" name="__codelineno-28-67" href="#__codelineno-28-67"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-28-68" name="__codelineno-28-68" href="#__codelineno-28-68"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-28-69" name="__codelineno-28-69" href="#__codelineno-28-69"></a>                                  but reproducible). Default: True.  [default:
+<a id="__codelineno-28-70" name="__codelineno-28-70" href="#__codelineno-28-70"></a>                                  deterministic]
+<a id="__codelineno-28-71" name="__codelineno-28-71" href="#__codelineno-28-71"></a>  --max-gpu-features INTEGER      Maximum features for GPU models. If feature
+<a id="__codelineno-28-72" name="__codelineno-28-72" href="#__codelineno-28-72"></a>                                  count exceeds this, the top N are selected
+<a id="__codelineno-28-73" name="__codelineno-28-73" href="#__codelineno-28-73"></a>                                  by mutual information from eval_stats. Set
+<a id="__codelineno-28-74" name="__codelineno-28-74" href="#__codelineno-28-74"></a>                                  to 0 to disable capping.  [default: 150]
 </code></pre></div>
 <h2 id="select">select</h2>
 <p>Score features and apply feature selection to extracted matrices.</p>
@@ -1888,32 +1970,32 @@ top features using mRMR (default, redundancy-aware) or hybrid union
 <p>Writes selected matrices, eval stats, and <abbr title="Quality Control">QC</abbr> metadata to <code>--output</code>
 (or overwrites originals when <code>--overwrite</code> is set).</p>
 <p>Usage:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>kreview select [OPTIONS]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>kreview select [OPTIONS]
 </code></pre></div>
 <p>Options:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>  --matrices-dir PATH             Directory with *_matrix.parquet files from
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>                                  kreview extract  [required]
-<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>  --top-percentile FLOAT          Top X%% of features to select (controls K
-<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>                                  for mRMR, or per-metric cutoff for
-<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>                                  hybrid_union)  [default: 50.0]
-<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>  --strategy TEXT                 Feature selection strategy: mrmr (default,
-<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>                                  redundancy-aware) or hybrid_union (AUC∪MI)
-<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>                                  [default: mrmr]
-<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>  --cv-folds INTEGER              Cross-validation folds for univariate AUC
-<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a>                                  scoring  [default: 5]
-<a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a>  --impute-strategy TEXT          Imputation strategy for variance check:
-<a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a>                                  median, mean, zero  [default: median]
-<a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a>  --output PATH                   Output directory for selected matrices
-<a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a>                                  (ignored when --overwrite is set)  [default:
-<a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a>                                  output/]
-<a id="__codelineno-21-16" name="__codelineno-21-16" href="#__codelineno-21-16"></a>  --overwrite                     Overwrite original matrices in --matrices-
-<a id="__codelineno-21-17" name="__codelineno-21-17" href="#__codelineno-21-17"></a>                                  dir instead of writing to --output
-<a id="__codelineno-21-18" name="__codelineno-21-18" href="#__codelineno-21-18"></a>  --compute-univariate-auc / --no-compute-univariate-auc
-<a id="__codelineno-21-19" name="__codelineno-21-19" href="#__codelineno-21-19"></a>                                  Compute per-feature univariate AUC (disable
-<a id="__codelineno-21-20" name="__codelineno-21-20" href="#__codelineno-21-20"></a>                                  for MI-only selection)  [default: compute-
-<a id="__codelineno-21-21" name="__codelineno-21-21" href="#__codelineno-21-21"></a>                                  univariate-auc]
-<a id="__codelineno-21-22" name="__codelineno-21-22" href="#__codelineno-21-22"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
-<a id="__codelineno-21-23" name="__codelineno-21-23" href="#__codelineno-21-23"></a>                                  42]
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>  --matrices-dir PATH             Directory with *_matrix.parquet files from
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>                                  kreview extract  [required]
+<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>  --top-percentile FLOAT          Top X%% of features to select (controls K
+<a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>                                  for mRMR, or per-metric cutoff for
+<a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>                                  hybrid_union)  [default: 50.0]
+<a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>  --strategy TEXT                 Feature selection strategy: mrmr (default,
+<a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>                                  redundancy-aware) or hybrid_union (AUC∪MI)
+<a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a>                                  [default: mrmr]
+<a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a>  --cv-folds INTEGER              Cross-validation folds for univariate AUC
+<a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>                                  scoring  [default: 5]
+<a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>  --impute-strategy TEXT          Imputation strategy for variance check:
+<a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a>                                  median, mean, zero  [default: median]
+<a id="__codelineno-30-13" name="__codelineno-30-13" href="#__codelineno-30-13"></a>  --output PATH                   Output directory for selected matrices
+<a id="__codelineno-30-14" name="__codelineno-30-14" href="#__codelineno-30-14"></a>                                  (ignored when --overwrite is set)  [default:
+<a id="__codelineno-30-15" name="__codelineno-30-15" href="#__codelineno-30-15"></a>                                  output/]
+<a id="__codelineno-30-16" name="__codelineno-30-16" href="#__codelineno-30-16"></a>  --overwrite                     Overwrite original matrices in --matrices-
+<a id="__codelineno-30-17" name="__codelineno-30-17" href="#__codelineno-30-17"></a>                                  dir instead of writing to --output
+<a id="__codelineno-30-18" name="__codelineno-30-18" href="#__codelineno-30-18"></a>  --compute-univariate-auc / --no-compute-univariate-auc
+<a id="__codelineno-30-19" name="__codelineno-30-19" href="#__codelineno-30-19"></a>                                  Compute per-feature univariate AUC (disable
+<a id="__codelineno-30-20" name="__codelineno-30-20" href="#__codelineno-30-20"></a>                                  for MI-only selection)  [default: compute-
+<a id="__codelineno-30-21" name="__codelineno-30-21" href="#__codelineno-30-21"></a>                                  univariate-auc]
+<a id="__codelineno-30-22" name="__codelineno-30-22" href="#__codelineno-30-22"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
+<a id="__codelineno-30-23" name="__codelineno-30-23" href="#__codelineno-30-23"></a>                                  42]
 </code></pre></div>
 
 

@@ -893,13 +893,24 @@
   <a href="#gpu-foundation-models-v0013" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GPU Foundation Models (v0.0.13)
+        GPU Foundation Models (v0.0.13+)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GPU Foundation Models (v0.0.13)">
+    <nav class="md-nav" aria-label="GPU Foundation Models (v0.0.13+)">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#model-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Registry
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#tabpfn-tabular-prior-data-fitted-network" class="md-nav__link">
@@ -917,6 +928,28 @@
     <span class="md-ellipsis">
       
         TabICL (Tabular In-Context Learning)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fine-tuned-variants-v0018" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fine-Tuned Variants (v0.0.18+)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gpumodelcvadapter-v0018" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPUModelCVAdapter (v0.0.18+)
       
     </span>
   </a>
@@ -2060,13 +2093,24 @@
   <a href="#gpu-foundation-models-v0013" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GPU Foundation Models (v0.0.13)
+        GPU Foundation Models (v0.0.13+)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GPU Foundation Models (v0.0.13)">
+    <nav class="md-nav" aria-label="GPU Foundation Models (v0.0.13+)">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#model-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Model Registry
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#tabpfn-tabular-prior-data-fitted-network" class="md-nav__link">
@@ -2084,6 +2128,28 @@
     <span class="md-ellipsis">
       
         TabICL (Tabular In-Context Learning)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fine-tuned-variants-v0018" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fine-Tuned Variants (v0.0.18+)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gpumodelcvadapter-v0018" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPUModelCVAdapter (v0.0.18+)
       
     </span>
   </a>
@@ -2314,10 +2380,10 @@
 
 <h1 id="sklearn-models-metrics">Sklearn Models &amp; Metrics</h1>
 <p>Every feature evaluator undergoes automated ensemble classification to measure how well a <abbr title="Cell-Free DNA">cfDNA</abbr> feature set discriminates <abbr title="Circulating Tumor DNA">ctDNA</abbr>-positive from <abbr title="Circulating Tumor DNA">ctDNA</abbr>-negative samples.</p>
-<p>Inside <code>single_feature_model()</code>, three classifier families are evaluated using stratified cross-validation against a binary label derived from the <a href="../../biology/ctdna-labeling/"><abbr title="Circulating Tumor DNA">ctDNA</abbr> labeling engine</a>.</p>
+<p>Inside <code>single_feature_model()</code>, three CPU classifier families are evaluated using stratified cross-validation against a binary label derived from the <a href="../../biology/ctdna-labeling/"><abbr title="Circulating Tumor DNA">ctDNA</abbr> labeling engine</a>. Optional GPU foundation models add up to four more.</p>
 <hr>
 <h2 id="the-predictive-ensemble">The Predictive Ensemble</h2>
-<p>Three classifier families are trained on every feature set:</p>
+<p>Three CPU classifier families are trained on every feature set:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># 1. Linear Baseline (Logistic Regression)</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">lr</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">([</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="p">(</span><span class="s1">'scaler'</span><span class="p">,</span> <span class="n">StandardScaler</span><span class="p">()),</span>
@@ -2358,7 +2424,7 @@
 <h3 id="1-roc-auc-bootstrap-cis">1. <abbr title="Receiver Operating Characteristic">ROC</abbr>-<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> &amp; Bootstrap CIs</h3>
 <p>The primary scoring metric. To quantify uncertainty, kreview computes <strong>bootstrap 95% confidence intervals</strong> (<code>n_resamples=1000</code>) for every <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> score. Results are stored as <code>auc_rf</code>, <code>auc_rf_ci_lower</code>, <code>auc_rf_ci_upper</code>.</p>
 <h3 id="2-precision-recall-pr-curves">2. Precision-Recall (PR) Curves</h3>
-<p>PR curves are more informative than <abbr title="Receiver Operating Characteristic">ROC</abbr> when the positive class is rare. kreview computes precision-recall curves and average precision (AP) for all three models. PR data is stored as <code>{prefix}_pr_curve</code> and <code>{prefix}_avg_precision</code>.</p>
+<p>PR curves are more informative than <abbr title="Receiver Operating Characteristic">ROC</abbr> when the positive class is rare. kreview computes precision-recall curves and average precision (AP) for all trained models (3 CPU + up to 4 GPU). PR data is stored as <code>{prefix}_pr_curve</code> and <code>{prefix}_avg_precision</code>.</p>
 <h3 id="3-probability-calibration">3. Probability Calibration</h3>
 <p>Tree-based models (<abbr title="Random Forest">RF</abbr>, XGBoost) tend to produce poorly calibrated probabilities. kreview computes <code>sklearn</code> calibration curves (<code>prob_true</code> vs <code>prob_pred</code>) in 10 uniform bins. Stored as <code>rf_calibration</code>.</p>
 <h3 id="4-optimal-thresholding-youdens-j">4. Optimal Thresholding (Youden's J)</h3>
@@ -2374,7 +2440,7 @@
 <p>DCA computes the <strong>net clinical benefit</strong> of using the model vs treating all or treating none. See the <a href="../decision-curve-analysis/">full DCA methodology guide</a>.</p>
 <p>Stored as <code>rf_dca</code> and <code>xgb_dca</code>.</p>
 <h3 id="7-fold-level-auc-tracking">7. Fold-Level <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> Tracking</h3>
-<p>To assess model stability, kreview runs <code>cross_val_score</code> separately and stores per-fold <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> for all three models. A high standard deviation (&gt;0.05) suggests the model is data-sensitive. Stored as <code>{prefix}_fold_aucs</code> and <code>{prefix}_auc_std</code>.</p>
+<p>To assess model stability, kreview runs <code>cross_val_score</code> separately and stores per-fold <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> for all trained models. A high standard deviation (&gt;0.05) suggests the model is data-sensitive. Stored as <code>{prefix}_fold_aucs</code> and <code>{prefix}_auc_std</code>.</p>
 <h3 id="8-sensitivity-at-fixed-specificity-v0016">8. Sensitivity at Fixed Specificity (v0.0.16+)</h3>
 <p>In clinical <abbr title="Circulating Tumor DNA">ctDNA</abbr> detection, <strong>zero false positives on healthy controls</strong> is paramount. kreview computes sensitivity at multiple specificity thresholds:</p>
 <table>
@@ -2438,32 +2504,107 @@
 </ul>
 <p>Serialized into the results JSON under <code>cancer_type_stats</code> and <code>assay_stats</code>.</p>
 <hr>
-<h2 id="gpu-foundation-models-v0013">GPU Foundation Models (v0.0.13)</h2>
-<p>In addition to the CPU ensemble, kreview can optionally train <strong>GPU-accelerated foundation models</strong> when a CUDA-capable device is available.</p>
+<h2 id="gpu-foundation-models-v0013">GPU Foundation Models (v0.0.13+)</h2>
+<p>In addition to the CPU ensemble, kreview can optionally train <strong>GPU-accelerated foundation models</strong> when a CUDA-capable device is available. As of v0.0.18, four GPU model variants are supported (2 zero-shot + 2 fine-tuned).</p>
+<h3 id="model-registry">Model Registry</h3>
+<table>
+<thead>
+<tr>
+<th>Model Key</th>
+<th>Class</th>
+<th>Mode</th>
+<th>Configurable Params</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tabpfn</code></td>
+<td><code>TabPFNClassifier</code></td>
+<td>Zero-shot (frozen weights)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>tabpfn_ft</code></td>
+<td><code>FinetunedTabPFNClassifier</code></td>
+<td>Fine-tuned</td>
+<td><code>--finetune-epochs</code> (50), <code>--finetune-lr</code> (1e-5)</td>
+</tr>
+<tr>
+<td><code>tabicl</code></td>
+<td><code>TabICLClassifier</code></td>
+<td>Zero-shot (frozen weights)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>tabicl_ft</code></td>
+<td><code>FinetunedTabICLClassifier</code></td>
+<td>Fine-tuned</td>
+<td><code>--finetune-epochs</code> (50), <code>--finetune-lr</code> (1e-5)</td>
+</tr>
+</tbody>
+</table>
 <h3 id="tabpfn-tabular-prior-data-fitted-network">TabPFN (Tabular Prior-Data Fitted Network)</h3>
 <p>TabPFN is a prior-data fitted network that performs in-context learning on tabular classification tasks. It was pre-trained on millions of synthetic datasets and can achieve strong performance without hyperparameter tuning.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># v8.0.3 API (updated import paths)</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tabpfn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TabPFNClassifier</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">tabpfn</span> <span class="o">=</span> <span class="n">TabPFNClassifier</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">tabpfn</span> <span class="o">=</span> <span class="n">TabPFNClassifier</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>  <span class="c1"># Zero-shot</span>
 </code></pre></div>
 <h3 id="tabicl-tabular-in-context-learning">TabICL (Tabular In-Context Learning)</h3>
 <p>TabICL is a large-scale in-context learning model for tabular data that uses transformer-based architectures.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># v2.1 API</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tabicl</span><span class="w"> </span><span class="kn">import</span> <span class="n">TabICLClassifier</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">tabicl</span> <span class="o">=</span> <span class="n">TabICLClassifier</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">tabicl</span> <span class="o">=</span> <span class="n">TabICLClassifier</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">)</span>  <span class="c1"># Zero-shot</span>
 </code></pre></div>
+<h3 id="fine-tuned-variants-v0018">Fine-Tuned Variants (v0.0.18+)</h3>
+<p>Fine-tuned variants adapt the pre-trained foundation model weights to the specific dataset during training. This can improve performance on domain-specific data (e.g., <abbr title="Cell-Free DNA">cfDNA</abbr> fragmentomics) at the cost of increased training time.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Fine-tuned TabPFN</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tabpfn</span><span class="w"> </span><span class="kn">import</span> <span class="n">FinetunedTabPFNClassifier</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">tabpfn_ft</span> <span class="o">=</span> <span class="n">FinetunedTabPFNClassifier</span><span class="p">(</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">,</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">n_epochs</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>        <span class="c1"># Configurable via --finetune-epochs</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">learning_rate</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="c1"># Configurable via --finetune-lr</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="p">)</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="c1"># Fine-tuned TabICL</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tabicl</span><span class="w"> </span><span class="kn">import</span> <span class="n">FinetunedTabICLClassifier</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="n">tabicl_ft</span> <span class="o">=</span> <span class="n">FinetunedTabICLClassifier</span><span class="p">(</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">,</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    <span class="n">n_epochs</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    <span class="n">learning_rate</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="p">)</span>
+</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Zero-shot vs Fine-tuned</p>
+<p>To run only zero-shot models (faster, no gradient computation), pass <code>--gpu-models tabpfn,tabicl</code>. The default (<code>tabpfn,tabpfn_ft,tabicl,tabicl_ft</code>) includes all four variants.</p>
+</div>
+<h3 id="gpumodelcvadapter-v0018">GPUModelCVAdapter (v0.0.18+)</h3>
+<p>TabPFN's <code>classes_</code> attribute is a <code>@property</code> that raises <code>AttributeError</code> on unfitted models. Since sklearn's <code>cross_val_predict</code> probes <code>classes_</code> before fitting, kreview wraps all GPU models in <code>GPUModelCVAdapter</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">GPUModelCVAdapter</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="sd">"""sklearn-compatible wrapper for GPU foundation models."""</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">model_</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">classes_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>  <span class="c1"># Plain attribute, not @property</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="k">return</span> <span class="bp">self</span>
+</code></pre></div>
+<ul>
+<li>Exposes <code>classes_</code> as a plain attribute set during <code>fit()</code></li>
+<li>Delegates <code>predict()</code>, <code>predict_proba()</code>, and <code>get_params()</code> to the inner model</li>
+<li>Makes GPU models fully compatible with sklearn's <abbr title="Cross-Validation">CV</abbr> infrastructure (<code>cross_val_predict</code>, <code>cross_val_score</code>)</li>
+</ul>
 <h3 id="gpu-shap-with-shapiq">GPU <abbr title="SHapley Additive exPlanations">SHAP</abbr> with shapiq</h3>
 <p><abbr title="SHapley Additive exPlanations">SHAP</abbr> values for GPU models cannot use <code>TreeExplainer</code> (designed for tree models). Instead, kreview uses the <code>shapiq</code> package, which provides model-agnostic Shapley value computation via kernel-based approximation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">shapiq</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">explainer</span> <span class="o">=</span> <span class="n">shapiq</span><span class="o">.</span><span class="n">TabularExplainer</span><span class="p">(</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">,</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">data</span><span class="o">=</span><span class="n">X_background</span><span class="p">,</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">index</span><span class="o">=</span><span class="s2">"SV"</span><span class="p">,</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">)</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">interaction_values</span> <span class="o">=</span> <span class="n">explainer</span><span class="o">.</span><span class="n">explain</span><span class="p">(</span><span class="n">X_explain</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">shapiq</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">explainer</span> <span class="o">=</span> <span class="n">shapiq</span><span class="o">.</span><span class="n">TabularExplainer</span><span class="p">(</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">,</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">data</span><span class="o">=</span><span class="n">X_background</span><span class="p">,</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">index</span><span class="o">=</span><span class="s2">"SV"</span><span class="p">,</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">)</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="n">interaction_values</span> <span class="o">=</span> <span class="n">explainer</span><span class="o">.</span><span class="n">explain</span><span class="p">(</span><span class="n">X_explain</span><span class="p">)</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Performance</p>
@@ -2481,9 +2622,9 @@
 <hr>
 <h2 id="8020-holdout-evaluation-v0016">80/20 Holdout Evaluation (v0.0.16+)</h2>
 <p>In addition to cross-validation, kreview performs <strong>holdout evaluation</strong> on the 20% test set that was never seen during feature selection or <abbr title="Cross-Validation">CV</abbr>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Full Data → 80/20 split (stratified by label)
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  80% TRAIN → feature selection → 10-fold CV → development AUC
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  20% TEST  → never touched → holdout AUC (honest estimate)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>Full Data → 80/20 split (stratified by label)
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>  80% TRAIN → feature selection → 10-fold CV → development AUC
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>  20% TEST  → never touched → holdout AUC (honest estimate)
 </code></pre></div>
 <p>After <abbr title="Cross-Validation">CV</abbr> completes, the best model is refit on the full training set and evaluated on the holdout:</p>
 <table>
@@ -2562,7 +2703,7 @@
 </div>
 <hr>
 <h2 id="json-output-schema-summary">JSON Output Schema Summary</h2>
-<p><code>cpu_models()</code> + <code>evaluate_holdout()</code> produce <strong>60+ JSON fields</strong> per feature set:</p>
+<p><code>cpu_models()</code> + <code>gpu_models()</code> + <code>evaluate_holdout()</code> produce <strong>100+ JSON fields</strong> per feature set (when all 7 models are trained):</p>
 <table>
 <thead>
 <tr>
@@ -2578,34 +2719,39 @@
 <td>9</td>
 </tr>
 <tr>
+<td>GPU <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> &amp; <abbr title="Continuous Integration">CI</abbr></td>
+<td><code>auc_{tabpfn,tabpfn_ft,tabicl,tabicl_ft}</code>, <code>auc_*_ci_lower/upper</code></td>
+<td>12</td>
+</tr>
+<tr>
 <td>Classification</td>
 <td><code>*_classification_report</code>, <code>*_confusion_matrix</code></td>
-<td>6</td>
+<td>6 (CPU) + 8 (GPU)</td>
 </tr>
 <tr>
 <td>Thresholds</td>
 <td><code>*_optimal_threshold</code></td>
-<td>3</td>
+<td>3 (CPU) + 4 (GPU)</td>
 </tr>
 <tr>
 <td>Sensitivity @ Spec</td>
 <td><code>*_sensitivity_at_{100,99,95}spec</code>, <code>*_threshold_at_100spec</code>, <code>*_n_detected_at_100spec</code>, <code>*_n_total_positive</code></td>
-<td>18</td>
+<td>18 (CPU) + 24 (GPU)</td>
 </tr>
 <tr>
 <td>Healthy-Normal Spec</td>
 <td><code>*_sensitivity_at_100spec_healthy</code>, <code>*_threshold_at_100spec_healthy</code></td>
-<td>6</td>
+<td>6 (CPU) + 8 (GPU)</td>
 </tr>
 <tr>
 <td>Holdout Metrics</td>
 <td><code>holdout_*_auc</code>, <code>holdout_*_sensitivity_at_100spec</code>, <code>holdout_n_train/test</code></td>
-<td>12+</td>
+<td>12+ (CPU) + 16+ (GPU)</td>
 </tr>
 <tr>
 <td>PR Curves</td>
 <td><code>*_pr_curve</code>, <code>*_avg_precision</code></td>
-<td>6</td>
+<td>6 (CPU) + 8 (GPU)</td>
 </tr>
 <tr>
 <td>DCA</td>
@@ -2615,7 +2761,7 @@
 <tr>
 <td>Fold AUCs</td>
 <td><code>*_fold_aucs</code>, <code>*_auc_std</code></td>
-<td>6</td>
+<td>6 (CPU) + 8 (GPU)</td>
 </tr>
 <tr>
 <td>Calibration</td>
@@ -2635,7 +2781,7 @@
 <tr>
 <td>Training Time</td>
 <td><code>*_training_time_sec</code></td>
-<td>3</td>
+<td>3 (CPU) + 4 (GPU)</td>
 </tr>
 <tr>
 <td>Feature Importances</td>
@@ -2657,20 +2803,30 @@
 <td><code>selection_qc</code> (method, overlap stats, feature counts)</td>
 <td>1</td>
 </tr>
+<tr>
+<td>GPU OOF Probs</td>
+<td><code>{gpu_model}_oof_probs</code></td>
+<td>4</td>
+</tr>
+<tr>
+<td>GPU <abbr title="SHapley Additive exPlanations">SHAP</abbr></td>
+<td><code>{gpu_model}_shap_values</code> (when <code>--shap</code> enabled)</td>
+<td>4</td>
+</tr>
 </tbody>
 </table>
 <hr>
 <h2 id="reproducibility">Reproducibility</h2>
 <p>All randomization points in kreview are parameterized via <code>--seed</code> (default: 42) and <code>--deterministic</code> (default: True).</p>
 <h3 id="cli-flags">CLI Flags</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Default (seed=42, deterministic GPU ops)</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>kreview<span class="w"> </span>run<span class="w"> </span>...<span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--deterministic
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Custom seed, faster GPU (non-deterministic cuDNN)</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>gpu<span class="w"> </span>...<span class="w"> </span>--seed<span class="w"> </span><span class="m">123</span><span class="w"> </span>--no-deterministic
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Nextflow</span>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>nextflow<span class="w"> </span>run<span class="w"> </span>main.nf<span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--deterministic<span class="w"> </span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Default (seed=42, deterministic GPU ops)</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>kreview<span class="w"> </span>run<span class="w"> </span>...<span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--deterministic
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Custom seed, faster GPU (non-deterministic cuDNN)</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>kreview<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>gpu<span class="w"> </span>...<span class="w"> </span>--seed<span class="w"> </span><span class="m">123</span><span class="w"> </span>--no-deterministic
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># Nextflow</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>nextflow<span class="w"> </span>run<span class="w"> </span>main.nf<span class="w"> </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span>--deterministic<span class="w"> </span><span class="nb">true</span>
 </code></pre></div>
 <h3 id="what-gets-seeded">What Gets Seeded</h3>
 <table>
@@ -2765,7 +2921,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 3, 2026 19:17:42 UTC"><span class="timeago" datetime="2026-06-03T19:17:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 3, 2026 19:17:42 UTC">2026-06-03</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 5, 2026 18:11:04 UTC"><span class="timeago" datetime="2026-06-05T18:11:04+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 5, 2026 18:11:04 UTC">2026-06-05</span>
   </span>
 
     
