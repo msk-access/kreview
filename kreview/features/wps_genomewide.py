@@ -17,13 +17,18 @@ __all__ = ["log", "WPSGenomeEvaluator"]
 class WPSGenomeEvaluator(FeatureEvaluator):
     """Extracts genome-wide WPS metrics with spectral features.
 
-    For each WPS array, extracts:
-    - mean, std (original)
+    For each WPS array column and region_type, extracts:
+    - mean, std (signal level and dispersion)
     - peak-to-valley amplitude (nucleosome occupancy proxy)
-    - median absolute deviation (robust dispersion)
-    - spectral max power and dominant frequency (FFT-based periodicity)
 
-    Handles both numpy array and string columns from krewlyzer parquets.
+    Supports two extraction paths:
+    - **SQL pushdown (preferred)**: DuckDB parses string arrays and computes
+      aggregates entirely in C++ — orders of magnitude faster than Python.
+    - **Python fallback**: Row-by-row extraction with parse_array() + numpy.
+      Also computes MAD and FFT spectral features (not available in SQL).
+
+    The SQL pushdown produces a "tall" result (one row per sample × region_type)
+    that the CLI pivots to wide format via ``sql_pivot_column``.
     """
 
     name = "WPSGenome"
@@ -40,9 +45,73 @@ class WPSGenomeEvaluator(FeatureEvaluator):
         "prot_frac_nuc",
         "prot_frac_tf",
     ]
-    max_chunk_rows = 5_000_000  # Lower than default 15M for memory safety
+    max_chunk_rows = 2_000_000  # Aggressive chunking for genomewide WPS data
+
+    # When extract_sql() returns a multi-row-per-sample result, the CLI
+    # pivots on this column to produce one row per sample with feature
+    # columns named {pivot_value}_{stat}.
+    sql_pivot_column = "region_type_clean"
+
+    # Array column names used by both SQL and Python paths
+    _array_cols = ("wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf")
+
+    def extract_sql(self) -> str | None:
+        """DuckDB SQL pushdown for WPSGenome.
+
+        Parses string-encoded arrays (e.g. ``"[1.0 2.0 3.0]"``) into DuckDB
+        lists, then computes per-``region_type`` aggregate statistics entirely
+        in DuckDB's C++ engine — eliminating the Python row loop.
+
+        Computes per array column: mean, peak_valley (max - min).
+        Skips: std, MAD, FFT spectral features (require numpy; minimal
+        incremental AUC; WPSBackground already captures periodicity).
+
+        Returns a tall DataFrame: one row per (sample_id, region_type).
+        The CLI pivots this via ``sql_pivot_column`` to wide format.
+        """
+        # Build per-column aggregation expressions.
+        # DuckDB parses "[1.0 2.0 3.0]" → DOUBLE[] via:
+        #   string_split(trim(col, '[]'), ' ') → VARCHAR[]
+        #   list_filter(... , x -> x != '') removes empty strings from double-spaces
+        #   CAST(... AS DOUBLE[]) → typed numeric list
+        agg_parts = []
+        for col in self._array_cols:
+            parse_expr = (
+                f"CAST(list_filter("
+                f"string_split(trim(trim({col}, '[]')), ' '), "
+                f"x -> x != '' AND x IS NOT NULL"
+                f") AS DOUBLE[])"
+            )
+            agg_parts.extend(
+                [
+                    f"list_avg({parse_expr}) AS {col}_mean",
+                    f"(list_max({parse_expr}) - list_min({parse_expr})) AS {col}_peak_valley",
+                ]
+            )
+
+        agg_clause = ",\n            ".join(agg_parts)
+
+        return f"""
+            SELECT
+                regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id,
+                replace(replace(replace(region_type, ' ', '_'), '-', '_'), '|', '_')
+                    AS region_type_clean,
+                {agg_clause}
+            FROM read_parquet(
+                ?,
+                filename=true,
+                union_by_name=true,
+                hive_partitioning=false
+            )
+            WHERE region_type IS NOT NULL
+        """
 
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
+        """Python fallback extraction — row-by-row with parse_array().
+
+        Used when SQL pushdown is unavailable or returns empty. Computes
+        all features including MAD and FFT spectral features.
+        """
         extracted = {}
         try:
             if df.empty:
@@ -50,7 +119,6 @@ class WPSGenomeEvaluator(FeatureEvaluator):
             cols = set(df.columns)
 
             if "region_type" in cols:
-                array_cols = ["wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf"]
                 for row in df.to_dict("records"):
                     rt = (
                         str(row["region_type"])
@@ -58,7 +126,7 @@ class WPSGenomeEvaluator(FeatureEvaluator):
                         .replace("-", "_")
                         .replace("|", "_")
                     )
-                    for a in array_cols:
+                    for a in self._array_cols:
                         if a in cols:
                             arr_raw = parse_array(row[a])
                             if arr_raw is not None and len(arr_raw) > 0:

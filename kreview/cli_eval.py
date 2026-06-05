@@ -16,6 +16,7 @@ Registered in the main CLI via::
 This keeps evaluation-specific code out of the 1,500-line cli.py.
 """
 
+import os
 import typer
 import json
 import time as _time
@@ -28,6 +29,49 @@ import structlog
 log = structlog.get_logger()
 
 eval_app = typer.Typer(name="eval", help="Model evaluation commands")
+
+
+def _validate_gpu_models(models: tuple[str, ...], flag_name: str = "--models") -> None:
+    """Pre-flight check: verify each requested GPU model can be imported and
+    that TabPFN has a valid API token set via TABPFN_TOKEN env var.
+
+    Exits with code 1 if any check fails, providing actionable error messages.
+    """
+    for m in models:
+        if m == "tabpfn":
+            try:
+                import tabpfn  # noqa: F401
+            except ImportError:
+                print(
+                    f"ERROR: GPU model 'tabpfn' was requested but the tabpfn "
+                    f"package is not installed.\n"
+                    f"  Install with: pip install kreview[gpu]\n"
+                    f"  Or remove 'tabpfn' from {flag_name} to run TabICL only.",
+                    flush=True,
+                )
+                raise typer.Exit(code=1)
+            if not os.environ.get("TABPFN_TOKEN"):
+                print(
+                    f"ERROR: GPU model 'tabpfn' requires a TABPFN_TOKEN "
+                    f"environment variable.\n"
+                    f"  1. Register at https://ux.priorlabs.ai\n"
+                    f"  2. Accept the license on the Licenses tab\n"
+                    f"  3. export TABPFN_TOKEN='your-token-here'\n"
+                    f"  Or remove 'tabpfn' from {flag_name} to run TabICL only.",
+                    flush=True,
+                )
+                raise typer.Exit(code=1)
+        elif m == "tabicl":
+            try:
+                import tabicl  # noqa: F401
+            except ImportError:
+                print(
+                    "ERROR: GPU model 'tabicl' was requested but the tabicl "
+                    "package is not installed.\n"
+                    "  Install with: pip install kreview[gpu]",
+                    flush=True,
+                )
+                raise typer.Exit(code=1)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -370,11 +414,19 @@ def eval_cpu(
                 results["holdout_n_train"] = int(train_mask.sum())
                 results["holdout_n_test"] = int(test_mask.sum())
 
-            # Add sample IDs for multimodal alignment (check both cases)
-            if "sample_id" in model_df.columns:
-                results["oof_sample_ids"] = model_df["sample_id"].tolist()
-            elif "SAMPLE_ID" in model_df.columns:
-                results["oof_sample_ids"] = model_df["SAMPLE_ID"].tolist()
+            # Add sample IDs for multimodal alignment.
+            # CRITICAL: must use train-split only — oof_probs from
+            # cross_val_predict covers train rows only, not the full DF.
+            train_id_df = model_df.loc[train_mask] if has_split else model_df
+            id_col = "sample_id" if "sample_id" in train_id_df.columns else "SAMPLE_ID"
+            if id_col in train_id_df.columns:
+                results["oof_sample_ids"] = train_id_df[id_col].tolist()
+                log.info(
+                    "oof_sample_ids_set",
+                    evaluator=evaluator,
+                    n_ids=len(results["oof_sample_ids"]),
+                    source="train_split" if has_split else "full_df",
+                )
 
             _save_results(
                 results,
@@ -511,6 +563,9 @@ def eval_gpu(
     print(f"  Found {len(matrix_files)} evaluator matrices", flush=True)
 
     models_list = tuple(m.strip() for m in models.split(","))
+
+    _validate_gpu_models(models_list, flag_name="--models")
+
     output.mkdir(parents=True, exist_ok=True)
 
     for mf in matrix_files:
@@ -656,11 +711,19 @@ def eval_gpu(
                 results["holdout_n_train"] = n_train
                 results["holdout_n_test"] = n_test
 
-            # Add sample IDs for multimodal alignment (check both cases)
-            if "sample_id" in model_df.columns:
-                results["oof_sample_ids"] = model_df["sample_id"].tolist()
-            elif "SAMPLE_ID" in model_df.columns:
-                results["oof_sample_ids"] = model_df["SAMPLE_ID"].tolist()
+            # Add sample IDs for multimodal alignment.
+            # CRITICAL: must use train-split only — oof_probs from
+            # cross_val_predict covers train rows only, not the full DF.
+            train_id_df = model_df.loc[train_mask] if has_split else model_df
+            id_col = "sample_id" if "sample_id" in train_id_df.columns else "SAMPLE_ID"
+            if id_col in train_id_df.columns:
+                results["oof_sample_ids"] = train_id_df[id_col].tolist()
+                log.info(
+                    "oof_sample_ids_set",
+                    evaluator=evaluator,
+                    n_ids=len(results["oof_sample_ids"]),
+                    source="train_split" if has_split else "full_df",
+                )
 
             # Merge with existing results if resuming
             if existing_results:
@@ -680,15 +743,28 @@ def eval_gpu(
             )
 
             elapsed = _time.time() - t0
+            any_auc = False
             for mn in models_list_run:
                 auc_val = results.get(f"auc_{mn}")
                 holdout_val = results.get(f"holdout_{mn}_auc")
                 if auc_val is not None:
+                    any_auc = True
                     holdout_str = f" | Holdout={holdout_val:.3f}" if holdout_val else ""
                     print(
                         f"  {evaluator}/{mn}: AUC={auc_val:.3f}{holdout_str}",
                         flush=True,
                     )
+
+            # Visible warning when all GPU models failed silently
+            if not any_auc:
+                print(
+                    f"  ⚠ WARNING: No GPU models produced AUC for {evaluator}",
+                    flush=True,
+                )
+                for k, v in results.items():
+                    if k.endswith("_error"):
+                        print(f"    {k}: {v}", flush=True)
+
             print(f"  Completed in {elapsed:.1f}s", flush=True)
 
         except SystemExit:
@@ -814,6 +890,8 @@ def eval_multimodal(
     print("", flush=True)
 
     gpu_model_list = tuple(m.strip() for m in gpu_models.split(",") if m.strip())
+
+    _validate_gpu_models(gpu_model_list, flag_name="--gpu-models")
 
     log.info(
         "eval_multimodal_start",

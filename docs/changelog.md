@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.17] - 2026-06-04
+
+### Added
+- **GPU Model Pre-flight Validation**: `_validate_gpu_models()` in `cli_eval.py` verifies GPU model packages are installed and `TABPFN_TOKEN` is set before any work begins. Shared across `eval gpu`, `eval multimodal`, and monolithic `run` commands. Exits with code 1 and actionable instructions on failure.
+
+### Fixed
+- **OOF Sample IDs Alignment (P0)**: `oof_sample_ids` scoped to train-split only in CPU, GPU, and monolithic paths to match `oof_probs` length from `cross_val_predict`. Added `oof_sample_ids` and `oof_labels` to merge skip set preventing GPU from overwriting CPU alignment keys. This was the root cause of multimodal stacking failure ("25 had IDs but no probs").
+- **BorutaShap scipy Compatibility (P1)**: Monkey-patched `scipy.stats.binom_test` with `binomtest().pvalue` wrapper for BorutaShap compatibility on scipy ≥1.12 (removed in 1.12). Eliminates `ImportError: cannot import name 'binom_test'` in multimodal raw feature selection.
+- **Scoreboard Crash Handling (P2)**: Added try/except with traceback to `scoreboard.nf` inline Python. Moved file writes inside try block. Added `KREVIEW_SCOREBOARD` withName config block (retry 3×, then ignore). Added per-evaluator try/except in `build_scoreboard()` so a malformed evaluator result doesn't kill the scoreboard for all evaluators.
+- **WPSGenome Timeout (P3)**: Implemented DuckDB SQL pushdown (`extract_sql()`) for `WPSGenomeEvaluator` — parses string-encoded arrays via `list_avg`/`list_max`/`list_min` in C++. Added `sql_pivot_column` for tall-to-wide pivot in CLI. Used `pivot_table(aggfunc='first')` for duplicate safety with null guard on pivot failure fallback. Added time/queue escalation in `nextflow.config` (retries 3+ → `cmobic_cpu` 8h).
+- **GPU Silent Failure Logging (P4)**: Record per-model error keys (`{model}_error`) in GPU results dict. Detect all-models-failed state and set `results["error"]`. Added visible `⚠ WARNING` stdout output in both `cli_eval.py` and monolithic `cli.py`.
+- **REPORT Blocked by SCOREBOARD (P5)**: Guarded REPORT channel with `.ifEmpty(file('NO_SCOREBOARD'))` so reports render even when scoreboard fails. Templates already check `scoreboard_path.exists()`.
+- **REPORT_MULTIMODAL SLURM Rejection**: Added `withName: 'KREVIEW_REPORT_MULTIMODAL'` config block with explicit `queue = params.partition ?: 'cmobic_short'`. Previously fell through to `process_medium` label which lacked a queue directive, causing iris institutional config to inject the inaccessible `cpu` partition into sbatch.
+- **Nextflow Channel Deadlocks**: Added `.ifEmpty([])` guards on JSON collect, joblib collect, and GPU collect channels to prevent pipeline deadlock when tasks fail with `errorStrategy = 'ignore'`.
+- **Pivot Crash on Duplicate Rows**: Switched from `pivot()` to `pivot_table(aggfunc='first')` in CLI wide-pivot for WPSGenome tall-to-wide conversion, preventing `ValueError: cannot reshape` on duplicate region_type rows.
+- **Null Guard on Pivot Failure**: Added null check on `feat_matrix` after pivot failure fallback, preventing `AttributeError: NoneType has no attribute 'columns'`.
+- **Queue Directive Safety Net**: Added `queue = params.partition ?: 'cmobic_short'` to `process_medium` and `process_high` label defaults. Prevents any future process from failing SLURM submission due to missing partition.
+
+### Changed
+- **Version Bump**: `__init__.py`, `settings.ini`, `nextflow.config` → `0.0.17`.
+- **Version-agnostic `run_hpc.sh`**: Auto-detects version from `nextflow.config` at runtime. Dynamic `GPU_MODELS` based on `TABPFN_TOKEN` availability. No manual edits needed between releases.
+
 ## [0.0.16] - 2026-06-03
 
 ### Added
