@@ -688,7 +688,11 @@ def run(
         _TABPFN_NAMES = {"tabpfn", "tabpfn_ft"}
         _TABICL_NAMES = {"tabicl", "tabicl_ft"}
         for m in gpu_model_list:
-            pkg = "tabpfn" if m in _TABPFN_NAMES else "tabicl" if m in _TABICL_NAMES else m
+            pkg = (
+                "tabpfn"
+                if m in _TABPFN_NAMES
+                else "tabicl" if m in _TABICL_NAMES else m
+            )
             try:
                 __import__(pkg)
             except ImportError:
@@ -1053,10 +1057,7 @@ def run(
             if not gpu_remaining:
                 _echo("  GPU models: SKIP (--resume, already computed)")
             else:
-                _echo(
-                    f"  Running GPU models: {gpu_remaining} "
-                    f"(device={device})"
-                )
+                _echo(f"  Running GPU models: {gpu_remaining} " f"(device={device})")
                 try:
                     from kreview.eval_engine import gpu_models
 

@@ -304,9 +304,7 @@ class TestScoreboardGPUModels:
             "auc_tabpfn": 0.80,
             "auc_tabpfn_ft": 0.85,
         }
-        (tmp_path / "GpuOnly_gpu_model_results.json").write_text(
-            json.dumps(gpu_only)
-        )
+        (tmp_path / "GpuOnly_gpu_model_results.json").write_text(json.dumps(gpu_only))
         df = build_scoreboard(tmp_path)
         assert len(df) == 1
         assert df.iloc[0]["best_auc"] == 0.85
@@ -320,19 +318,13 @@ class TestScoreboardGPUModels:
             "auc_xgb": 0.85,
             "top_features": ["a"],
         }
-        (tmp_path / "CpuOnly_model_results.json").write_text(
-            json.dumps(cpu_only)
-        )
+        (tmp_path / "CpuOnly_model_results.json").write_text(json.dumps(cpu_only))
 
         # GPU evaluator with higher AUC
         cpu_b = {"auc_rf": 0.75, "auc_lr": 0.70}
         gpu_b = {"auc_tabpfn_ft": 0.95}
-        (tmp_path / "GpuEval_model_results.json").write_text(
-            json.dumps(cpu_b)
-        )
-        (tmp_path / "GpuEval_gpu_model_results.json").write_text(
-            json.dumps(gpu_b)
-        )
+        (tmp_path / "GpuEval_model_results.json").write_text(json.dumps(cpu_b))
+        (tmp_path / "GpuEval_gpu_model_results.json").write_text(json.dumps(gpu_b))
 
         df = build_scoreboard(tmp_path)
         assert len(df) == 2

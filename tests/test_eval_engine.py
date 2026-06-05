@@ -1550,4 +1550,3 @@ class TestBuildGpuModelNameDispatch:
 
         with pytest.raises(TypeError):
             _build_gpu_model("tabpfn", finetune=True)
-

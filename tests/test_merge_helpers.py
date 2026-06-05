@@ -216,9 +216,7 @@ class TestScatteredGpuJsons:
     def test_scattered_gpu_only(self, tmp_path):
         """Scattered GPU-only evaluators are discovered."""
         data = {"auc_tabpfn_ft": 0.87}
-        (tmp_path / "NPS_tabpfn_ft_gpu_model_results.json").write_text(
-            json.dumps(data)
-        )
+        (tmp_path / "NPS_tabpfn_ft_gpu_model_results.json").write_text(json.dumps(data))
         result = load_model_results(tmp_path, "NPS")
         assert result is not None
         assert result["auc_tabpfn_ft"] == 0.87
@@ -250,4 +248,3 @@ class TestScatteredGpuJsons:
         assert result["auc_lr"] == 0.80
         assert result["auc_tabpfn"] == 0.85
         assert result["auc_tabicl_ft"] == 0.90
-

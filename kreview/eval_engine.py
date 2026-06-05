@@ -1490,9 +1490,7 @@ def _build_gpu_model(
             )
             return GPUModelCVAdapter(
                 model_factory=lambda _d=device, _e=finetune_epochs, _lr=finetune_lr: (
-                    FinetunedTabPFNClassifier(
-                        device=_d, epochs=_e, learning_rate=_lr
-                    )
+                    FinetunedTabPFNClassifier(device=_d, epochs=_e, learning_rate=_lr)
                 ),
                 name=name,
             )
@@ -1512,9 +1510,7 @@ def _build_gpu_model(
 
             log.info("gpu_model_built", model=name, mode="zero-shot")
             return GPUModelCVAdapter(
-                model_factory=lambda: TabICLClassifier(
-                    random_state=random_state
-                ),
+                model_factory=lambda: TabICLClassifier(random_state=random_state),
                 name=name,
             )
         except ImportError as e:
@@ -1943,7 +1939,8 @@ def load_model_results(
     gpu_merged_path = directory / f"{evaluator_name}_gpu_model_results.json"
     # 2. Per-model scattered GPU JSONs (from NF scattering)
     per_model_gpu_paths = sorted(
-        p for p in directory.glob(f"{evaluator_name}_*_gpu_model_results.json")
+        p
+        for p in directory.glob(f"{evaluator_name}_*_gpu_model_results.json")
         if p != gpu_merged_path  # Avoid double-counting the merged file
     )
 
@@ -2984,9 +2981,7 @@ def multimodal_single(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not stacking_matrix_path.exists():
-        raise FileNotFoundError(
-            f"Stacking matrix not found: {stacking_matrix_path}"
-        )
+        raise FileNotFoundError(f"Stacking matrix not found: {stacking_matrix_path}")
 
     log.info(
         "multimodal_single_start",
@@ -3009,9 +3004,7 @@ def multimodal_single(
     )
 
     # Build model
-    model = _build_model(
-        model_name, random_state, **(gpu_kwargs if is_gpu else {})
-    )
+    model = _build_model(model_name, random_state, **(gpu_kwargs if is_gpu else {}))
     if model is None:
         raise ValueError(
             f"Failed to build model '{model_name}' — "
@@ -3140,9 +3133,7 @@ def multimodal_ablation(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not stacking_matrix_path.exists():
-        raise FileNotFoundError(
-            f"Stacking matrix not found: {stacking_matrix_path}"
-        )
+        raise FileNotFoundError(f"Stacking matrix not found: {stacking_matrix_path}")
 
     log.info(
         "multimodal_ablation_start",
@@ -3159,9 +3150,7 @@ def multimodal_ablation(
     best_stack_model = None
     best_stack_auc = 0.0
 
-    for json_path in sorted(
-        stacking_results_dir.glob("stacking_*_results.json")
-    ):
+    for json_path in sorted(stacking_results_dir.glob("stacking_*_results.json")):
         try:
             with open(json_path) as f:
                 partial = _json_mod.load(f)
@@ -3207,9 +3196,7 @@ def multimodal_ablation(
 
     ablation = {}
     for eval_name in evaluator_names:
-        cols_to_drop = [
-            c for c in stacking_df.columns if c.startswith(f"{eval_name}_")
-        ]
+        cols_to_drop = [c for c in stacking_df.columns if c.startswith(f"{eval_name}_")]
         if not cols_to_drop:
             continue
 
@@ -3307,9 +3294,7 @@ def multimodal_merge(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not prep_metadata_path.exists():
-        raise FileNotFoundError(
-            f"Prep metadata not found: {prep_metadata_path}"
-        )
+        raise FileNotFoundError(f"Prep metadata not found: {prep_metadata_path}")
 
     log.info(
         "multimodal_merge_start",
@@ -3337,9 +3322,7 @@ def multimodal_merge(
     raw_results = {}
     n_merged = 0
 
-    for json_path in sorted(
-        stacking_results_dir.glob("stacking_*_results.json")
-    ):
+    for json_path in sorted(stacking_results_dir.glob("stacking_*_results.json")):
         try:
             with open(json_path) as f:
                 partial = _json_mod.load(f)
@@ -3369,9 +3352,7 @@ def multimodal_merge(
         results["raw_features"] = raw_results
         if metadata.get("has_raw_features"):
             results["raw_n_features_selected"] = metadata["raw_shape"][1]
-            results["raw_features_selection_method"] = metadata[
-                "multimodal_selection"
-            ]
+            results["raw_features_selection_method"] = metadata["multimodal_selection"]
 
     # Merge ablation results
     if ablation_path is not None:
