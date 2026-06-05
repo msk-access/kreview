@@ -45,6 +45,12 @@ cd kreview
     pip install -e .
     ```
 
+    For GPU model evaluation (TabPFN, TabICL and fine-tuned variants), install with GPU extras:
+    ```bash
+    pip install -e '.[gpu]'
+    ```
+    This adds `tabpfn`, `tabicl`, `shapiq`, and `torch` as dependencies.
+
 === "Developer Install"
     Install with all linting, testing, CI, and documentation tools bundled:
     ```bash

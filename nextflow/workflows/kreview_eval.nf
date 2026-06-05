@@ -17,9 +17,15 @@
 //     |       |   |
 //     +---+---+---+---+
 //     |       |       |
-//  SCOREBOARD |   EVAL_MULTIMODAL   (scoreboard + multimodal in parallel)
+//  SCOREBOARD |  MULTIMODAL_PREP (1)    → build stacking matrix
 //     |       |       |
-//     +---+---+    REPORT_MULTIMODAL
+//     |       |  MULTIMODAL_SINGLE ×N   → scatter per model (CPU/GPU)
+//     |       |       |
+//     |       |  MULTIMODAL_ABLATION    → LOO (best model, CPU)
+//     |       |       |
+//     |       |  MULTIMODAL_MERGE       → unify JSON
+//     |       |       |
+//     +---+---+  REPORT_MULTIMODAL
 //         |
 //       REPORT                 (needs matrices + JSONs + scoreboard + joblib)
 //
@@ -51,9 +57,15 @@ include { KREVIEW_EVAL_CPU_SINGLE } from '../modules/local/kreview/eval_cpu_sing
 include { KREVIEW_EVAL_GPU_SINGLE } from '../modules/local/kreview/eval_gpu_single'
 
 // Multistage — collect-only modules (need all evaluator results)
-include { KREVIEW_EVAL_MULTIMODAL   } from '../modules/local/kreview/eval_multimodal'
 include { KREVIEW_REPORT_MULTIMODAL } from '../modules/local/kreview/report_multimodal'
 include { KREVIEW_SCOREBOARD        } from '../modules/local/kreview/scoreboard'
+
+// Multistage — decomposed multimodal pipeline (prep → single × N → ablation → merge)
+include { KREVIEW_MULTIMODAL_PREP       } from '../modules/local/kreview/multimodal_prep'
+include { KREVIEW_MULTIMODAL_SINGLE_CPU } from '../modules/local/kreview/multimodal_single'
+include { KREVIEW_MULTIMODAL_SINGLE_GPU } from '../modules/local/kreview/multimodal_single'
+include { KREVIEW_MULTIMODAL_ABLATION   } from '../modules/local/kreview/multimodal_ablation'
+include { KREVIEW_MULTIMODAL_MERGE      } from '../modules/local/kreview/multimodal_merge'
 
 workflow KREVIEW_EVAL {
     take:
@@ -166,18 +178,69 @@ workflow KREVIEW_EVAL {
         // Step 4d: Build scoreboard (needs all JSONs)
         KREVIEW_SCOREBOARD(ch_all_jsons)
 
-        // Step 5: Multimodal cross-evaluator evaluation (1 job) [optional]
-        // Needs: OOF probs from CPU/GPU eval + super_matrix from FUSE
+        // Step 5: Multimodal cross-evaluator evaluation [optional]
+        // Uses decomposed pipeline: prep → single × N → ablation → merge
         if (params.run_multimodal_eval) {
-            KREVIEW_EVAL_MULTIMODAL(
-                KREVIEW_FUSE.out.super_matrix,
-                ch_all_jsons
+            // 5a: Prep — build stacking + raw matrices (CPU)
+            KREVIEW_MULTIMODAL_PREP(
+                ch_all_jsons,
+                KREVIEW_FUSE.out.super_matrix
             )
 
-            // Step 5b: Multimodal report — renders stacking dashboard
+            // 5b: Single — scatter per model (CPU + GPU in parallel)
+            def cpu_models = (params.multimodal_models ?: 'rf,xgb').split(',')
+                .collect { it.trim() }
+            ch_cpu_model_names = Channel.of(cpu_models).flatten()
+
+            // Determine raw features path (may not exist)
+            ch_raw_matrix = KREVIEW_MULTIMODAL_PREP.out.raw_features_matrix
+                .ifEmpty(file('NO_RAW_FEATURES'))
+
+            KREVIEW_MULTIMODAL_SINGLE_CPU(
+                ch_cpu_model_names,
+                KREVIEW_MULTIMODAL_PREP.out.stacking_matrix,
+                ch_raw_matrix,
+                KREVIEW_MULTIMODAL_PREP.out.prep_metadata
+            )
+
+            // GPU models — only if requested
+            ch_gpu_single_results = Channel.empty()
+            if (params.multimodal_gpu_models) {
+                def gpu_models = params.multimodal_gpu_models.split(',')
+                    .collect { it.trim() }
+                ch_gpu_model_names = Channel.of(gpu_models).flatten()
+
+                KREVIEW_MULTIMODAL_SINGLE_GPU(
+                    ch_gpu_model_names,
+                    KREVIEW_MULTIMODAL_PREP.out.stacking_matrix,
+                    ch_raw_matrix,
+                    KREVIEW_MULTIMODAL_PREP.out.prep_metadata
+                )
+                ch_gpu_single_results = KREVIEW_MULTIMODAL_SINGLE_GPU.out.single_result
+            }
+
+            // Collect all single results (CPU + GPU)
+            ch_all_single_results = KREVIEW_MULTIMODAL_SINGLE_CPU.out.single_result
+                .mix(ch_gpu_single_results)
+                .collect()
+
+            // 5c: Ablation — LOO using best model (CPU)
+            KREVIEW_MULTIMODAL_ABLATION(
+                KREVIEW_MULTIMODAL_PREP.out.stacking_matrix,
+                ch_all_single_results
+            )
+
+            // 5d: Merge — combine all partial JSONs
+            KREVIEW_MULTIMODAL_MERGE(
+                ch_all_single_results,
+                KREVIEW_MULTIMODAL_PREP.out.prep_metadata,
+                KREVIEW_MULTIMODAL_ABLATION.out.ablation_results
+            )
+
+            // Step 5e: Multimodal report — renders stacking dashboard
             if (!params.skip_report) {
                 KREVIEW_REPORT_MULTIMODAL(
-                    KREVIEW_EVAL_MULTIMODAL.out.multimodal_json,
+                    KREVIEW_MULTIMODAL_MERGE.out.multimodal_json,
                     KREVIEW_FUSE.out.super_matrix,
                 )
             }

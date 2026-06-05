@@ -559,18 +559,13 @@ def run(
     gpu_models_flag: str = typer.Option(
         "",
         "--gpu-models",
-        help="Comma-separated GPU models to run after CPU models: tabpfn,tabicl. "
+        help="Comma-separated GPU models: tabpfn,tabpfn_ft,tabicl,tabicl_ft. "
         "Empty (default) = CPU only. Requires torch + model packages (pip install kreview[gpu]).",
     ),
-    no_finetune: bool = typer.Option(
-        False,
-        "--no-finetune",
-        help="Use zero-shot inference for GPU models instead of fine-tuning (not recommended).",
-    ),
     finetune_epochs: int = typer.Option(
-        30,
+        50,
         "--finetune-epochs",
-        help="Number of fine-tuning epochs for GPU foundation models.",
+        help="Number of fine-tuning epochs for _ft GPU variants.",
     ),
     finetune_lr: float = typer.Option(
         1e-5,
@@ -667,7 +662,6 @@ def run(
     _echo(f"  --gpu-models        : {gpu_models_flag or 'disabled (CPU only)'}")
     if gpu_models_flag:
         _echo(f"  --device            : {device}")
-        _echo(f"  --finetune          : {not no_finetune}")
         _echo(f"  --finetune-epochs   : {finetune_epochs}")
     _echo(f"  --seed              : {seed}")
     _echo(f"  --deterministic     : {deterministic}")
@@ -689,11 +683,12 @@ def run(
             "gpu_models_requested",
             models=gpu_model_list,
             device=device,
-            finetune=not no_finetune,
         )
         # ── Pre-flight: verify requested GPU models can be imported ──
+        _TABPFN_NAMES = {"tabpfn", "tabpfn_ft"}
+        _TABICL_NAMES = {"tabicl", "tabicl_ft"}
         for m in gpu_model_list:
-            pkg = m  # tabpfn or tabicl
+            pkg = "tabpfn" if m in _TABPFN_NAMES else "tabicl" if m in _TABICL_NAMES else m
             try:
                 __import__(pkg)
             except ImportError:
@@ -1060,7 +1055,7 @@ def run(
             else:
                 _echo(
                     f"  Running GPU models: {gpu_remaining} "
-                    f"(device={device}, finetune={not no_finetune})"
+                    f"(device={device})"
                 )
                 try:
                     from kreview.eval_engine import gpu_models
@@ -1083,7 +1078,6 @@ def run(
                         random_state=seed,
                         models=tuple(gpu_remaining),
                         device=device,
-                        finetune=not no_finetune,
                         finetune_epochs=finetune_epochs,
                         finetune_lr=finetune_lr,
                         compute_shap=False,

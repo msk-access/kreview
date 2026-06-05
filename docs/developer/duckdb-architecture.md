@@ -77,4 +77,3 @@ for attempt in range(max_retries):
 
     - First retry: the backoff mechanism will handle transient failures automatically
     - Persistent failures: reduce `--chunk-size` to `100` or `50`
-    - Very congested networks: also try `--workers 1` to serialize I/O completely

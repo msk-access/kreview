@@ -32,7 +32,7 @@ flowchart TD
         A["DuckDB Engine\nChunked I/O with Retry"]:::extract
         B["5-Tier ctDNA Labeling\nAssigns Ground Truth"]:::label
         C["26 Feature Evaluators\n(FSC, EndMotifs, WPS, MDS)"]:::extract
-        D["Sklearn ML Pipeline\n(RF, XGB, LR, CV AUC)"]:::ml
+        D["ML Pipeline\n(RF, XGB, LR + GPU Foundation Models)"]:::ml
     end
     
     subgraph Outputs
@@ -56,7 +56,7 @@ flowchart TD
 
 1. **Ingest & Chunking:** `kreview` loads parquet outputs from the upstream Krewlyzer pipeline. It uses throttled DuckDB queries with exponential backoff retry to parse millions of rows reliably without overwhelming memory or socket limits.
 2. **Gold Standard Labeling:** It accesses clinical MSK-IMPACT files to generate 5-tier truth labels (e.g., verifying if a somatic variant in cfDNA was also detected in the patient's matched solid tissue).
-3. **Statistical Modeling:** It loads fragmentomics features dynamically, evaluating them against the ground truth using non-parametric group testing and ensemble ML evaluation (Random Forest, XGBoost, Logistic Regression).
+3. **Statistical Modeling:** It loads fragmentomics features dynamically, evaluating them against the ground truth using non-parametric group testing and ensemble ML evaluation (Random Forest, XGBoost, Logistic Regression) plus optional GPU foundation models (TabPFN, TabICL and their fine-tuned variants).
 4. **Interactive Insight:** It generates comprehensive 6-page HTML dashboards with progressive disclosure — from executive summary to SHAP explainability — so researchers can inspect diagnostic performance, clinical utility (DCA), and feature importance. See the [Dashboard Guide](machine-learning/dashboard-guide.md) for details.
 
 ---

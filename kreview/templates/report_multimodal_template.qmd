@@ -145,9 +145,16 @@ if mres is not None:
     # Dynamic model discovery
     DYNAMIC_MODELS = []
     _name_map = {
-        "lr": "Logistic Regression", "rf": "Random Forest", "xgb": "XGBoost", "tabpfn": "TabPFN", "tabicl": "TabICL",
-        "stacking_lr": "Stacking LR", "stacking_rf": "Stacking RF", "stacking_xgb": "Stacking XGB",
-        "stacking_tabpfn": "Stacking TabPFN", "stacking_tabicl": "Stacking TabICL"
+        "lr": "Logistic Regression", "rf": "Random Forest", "xgb": "XGBoost",
+        "tabpfn": "TabPFN", "tabpfn_ft": "TabPFN-FT",
+        "tabicl": "TabICL", "tabicl_ft": "TabICL-FT",
+        "stacking_lr": "Stacking LR", "stacking_rf": "Stacking RF",
+        "stacking_xgb": "Stacking XGB",
+        "stacking_tabpfn": "Stacking TabPFN", "stacking_tabpfn_ft": "Stacking TabPFN-FT",
+        "stacking_tabicl": "Stacking TabICL", "stacking_tabicl_ft": "Stacking TabICL-FT",
+        "raw_lr": "Raw LR", "raw_rf": "Raw RF", "raw_xgb": "Raw XGB",
+        "raw_tabpfn": "Raw TabPFN", "raw_tabpfn_ft": "Raw TabPFN-FT",
+        "raw_tabicl": "Raw TabICL", "raw_tabicl_ft": "Raw TabICL-FT",
     }
     for k in mres.keys():
         if k.startswith('auc_') and not k.endswith('_ci_lower') and not k.endswith('_ci_upper') and not k.startswith('auc_delta_'):
@@ -160,19 +167,35 @@ else:
     top_feats = numeric_cols
     DYNAMIC_MODELS = [("lr", "Logistic Regression"), ("rf", "Random Forest"), ("xgb", "XGBoost")]
 
-# ── Dynamic Theme & Colors ──
+# ── Color palette: vanilla/FT pairs share color families ──
 if is_cvd_safe:
-    _base_models = ["#0072B2", "#CC79A7", "#F0E442"]
+    _MODEL_COLORS = {
+        "Logistic Regression": "#0072B2", "Random Forest": "#CC79A7",
+        "XGBoost": "#F0E442", "TabPFN": "#56B4E9", "TabPFN-FT": "#009E73",
+        "TabICL": "#E69F00", "TabICL-FT": "#D55E00",
+        "Stacking LR": "#0072B2", "Stacking RF": "#CC79A7",
+        "Stacking XGB": "#F0E442", "Stacking TabPFN": "#56B4E9",
+        "Stacking TabPFN-FT": "#009E73", "Stacking TabICL": "#E69F00",
+        "Stacking TabICL-FT": "#D55E00",
+        "Raw LR": "#0072B2", "Raw RF": "#CC79A7", "Raw XGB": "#F0E442",
+        "Raw TabPFN": "#56B4E9", "Raw TabPFN-FT": "#009E73",
+        "Raw TabICL": "#E69F00", "Raw TabICL-FT": "#D55E00",
+    }
 else:
-    _base_models = ["#ff9b42", "#E85D75", "#9C27B0"]  # Orange, Hot Pink, Purple
+    _MODEL_COLORS = {
+        "Logistic Regression": "#ff9b42", "Random Forest": "#E85D75",
+        "XGBoost": "#9C27B0", "TabPFN": "#42A5F5", "TabPFN-FT": "#1565C0",
+        "TabICL": "#66BB6A", "TabICL-FT": "#2E7D32",
+        "Stacking LR": "#ff9b42", "Stacking RF": "#E85D75",
+        "Stacking XGB": "#9C27B0", "Stacking TabPFN": "#42A5F5",
+        "Stacking TabPFN-FT": "#1565C0", "Stacking TabICL": "#66BB6A",
+        "Stacking TabICL-FT": "#2E7D32",
+        "Raw LR": "#ff9b42", "Raw RF": "#E85D75", "Raw XGB": "#9C27B0",
+        "Raw TabPFN": "#42A5F5", "Raw TabPFN-FT": "#1565C0",
+        "Raw TabICL": "#66BB6A", "Raw TabICL-FT": "#2E7D32",
+    }
 
-_n_models = max(len(DYNAMIC_MODELS), 3)
-if _n_models <= 3:
-    p_models = _base_models
-elif _n_models <= 8:
-    p_models = px.colors.qualitative.Set2[:_n_models]
-else:
-    p_models = px.colors.qualitative.Alphabet[:_n_models]
+p_models = [_MODEL_COLORS.get(display, "#888") for _, display in DYNAMIC_MODELS]
 
 THEME = {
     "labels": LABEL_COLORS,

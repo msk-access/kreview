@@ -38,6 +38,9 @@ flowchart TD
     !!! info "Why test the build?"
         By validating both the Python wheel and Docker image on every PR, we catch packaging issues *before* they reach the release pipeline.
 
+    !!! tip "CPU/GPU Test Matrix (v0.0.18+)"
+        By default, CI runs `pytest -m "not gpu"` to skip GPU tests (no CUDA in CI runners). GPU tests are marked with `@pytest.mark.gpu` and run separately on GPU-enabled self-hosted runners. See the [Testing Guide](../developer/testing-guide.md) for details.
+
 === "lint.yml"
 
     **Trigger:** Push or PR to `main` / `develop`

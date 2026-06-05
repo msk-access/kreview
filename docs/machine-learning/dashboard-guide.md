@@ -57,10 +57,10 @@ If multiple evaluators have been run, the scoreboard table surfaces the top perf
 Nine tabs, each answering a specific validation question:
 
 ### Performance Metrics
-**Question**: How do the three models compare on clinical metrics?
+**Question**: How do the trained models compare on clinical metrics?
 
-- Grouped bar chart comparing Precision, Sensitivity, Specificity, F1, and Accuracy across LR, RF, and XGBoost (plus GPU models when available)
-- Model summary table with AUC, Youden J threshold, training time, plus v0.0.16 clinical metrics: Sens@100%Spec, Sens@95%Spec, and Holdout AUC (auto-discovered per model)
+- Grouped bar chart comparing Precision, Sensitivity, Specificity, F1, and Accuracy across LR, RF, and XGBoost (plus GPU models — TabPFN, TabPFN-FT, TabICL, TabICL-FT — when available)
+- Model summary table with AUC, Youden J threshold, training time, plus v0.0.16 clinical metrics: Sens@100%Spec, Sens@95%Spec, and Holdout AUC (auto-discovered per model, including GPU models when GPU eval was run)
 - AUC deltas (pairwise differences) and training times
 
 ### ROC Curves with CI
@@ -100,7 +100,7 @@ Nine tabs, each answering a specific validation question:
 ### Confusion Matrices
 **Question**: What are the raw prediction counts at the optimal threshold?
 
-- Side-by-side heatmaps for LR, RF, and XGB
+- Side-by-side heatmaps for all trained models (LR, RF, XGB, and GPU models when available)
 - All predictions are out-of-fold (unbiased)
 - Helps identify whether errors are dominated by false positives or false negatives
 
@@ -114,7 +114,7 @@ Nine tabs, each answering a specific validation question:
 ### Classification Report
 **Question**: Full sklearn-style precision/recall/f1 breakdown?
 
-- Standard classification report table for all three models
+- Standard classification report table for all trained models
 - Includes support (sample count) per class
 
 ### Feature Importances

@@ -140,7 +140,11 @@ if mres is not None:
     
     # Dynamic model discovery
     DYNAMIC_MODELS = []
-    _name_map = {"lr": "Logistic Regression", "rf": "Random Forest", "xgb": "XGBoost", "tabpfn": "TabPFN", "tabicl": "TabICL"}
+    _name_map = {
+        "lr": "Logistic Regression", "rf": "Random Forest", "xgb": "XGBoost",
+        "tabpfn": "TabPFN", "tabpfn_ft": "TabPFN-FT",
+        "tabicl": "TabICL", "tabicl_ft": "TabICL-FT",
+    }
     for k in mres.keys():
         if k.startswith('auc_') and not k.endswith('_ci_lower') and not k.endswith('_ci_upper') and not k.startswith('auc_delta_'):
             m_id = k.replace('auc_', '')
@@ -152,19 +156,29 @@ else:
     top_feats = numeric_cols
     DYNAMIC_MODELS = [("lr", "Logistic Regression"), ("rf", "Random Forest"), ("xgb", "XGBoost")]
 
-# ── Dynamic Theme & Colors ──
+# ── Color palette: vanilla/FT pairs share color families ──
 if is_cvd_safe:
-    _base_models = ["#0072B2", "#CC79A7", "#F0E442"]
+    _MODEL_COLORS = {
+        "Logistic Regression": "#0072B2",  # Blue
+        "Random Forest":       "#CC79A7",  # Rose
+        "XGBoost":             "#F0E442",  # Yellow
+        "TabPFN":              "#56B4E9",  # Sky Blue
+        "TabPFN-FT":           "#009E73",  # Teal
+        "TabICL":              "#E69F00",  # Gold
+        "TabICL-FT":           "#D55E00",  # Vermillion
+    }
 else:
-    _base_models = ["#ff9b42", "#E85D75", "#9C27B0"]  # Orange, Hot Pink, Purple
+    _MODEL_COLORS = {
+        "Logistic Regression": "#ff9b42",  # Orange
+        "Random Forest":       "#E85D75",  # Hot Pink
+        "XGBoost":             "#9C27B0",  # Purple
+        "TabPFN":              "#42A5F5",  # Light Blue
+        "TabPFN-FT":           "#1565C0",  # Dark Blue (FT = deeper shade)
+        "TabICL":              "#66BB6A",  # Light Green
+        "TabICL-FT":           "#2E7D32",  # Dark Green (FT = deeper shade)
+    }
 
-_n_models = max(len(DYNAMIC_MODELS), 3)
-if _n_models <= 3:
-    p_models = _base_models
-elif _n_models <= 8:
-    p_models = px.colors.qualitative.Set2[:_n_models]
-else:
-    p_models = px.colors.qualitative.Alphabet[:_n_models]
+p_models = [_MODEL_COLORS.get(display, "#888") for _, display in DYNAMIC_MODELS]
 
 THEME = {
     "labels": LABEL_COLORS,

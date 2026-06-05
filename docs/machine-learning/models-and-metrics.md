@@ -2,13 +2,13 @@
 
 Every feature evaluator undergoes automated ensemble classification to measure how well a cfDNA feature set discriminates ctDNA-positive from ctDNA-negative samples.
 
-Inside `single_feature_model()`, three classifier families are evaluated using stratified cross-validation against a binary label derived from the [ctDNA labeling engine](../biology/ctdna-labeling.md).
+Inside `single_feature_model()`, three CPU classifier families are evaluated using stratified cross-validation against a binary label derived from the [ctDNA labeling engine](../biology/ctdna-labeling.md). Optional GPU foundation models add up to four more.
 
 ---
 
 ## The Predictive Ensemble
 
-Three classifier families are trained on every feature set:
+Three CPU classifier families are trained on every feature set:
 
 ```python
 # 1. Linear Baseline (Logistic Regression)
@@ -61,7 +61,7 @@ The primary scoring metric. To quantify uncertainty, kreview computes **bootstra
 
 ### 2. Precision-Recall (PR) Curves
 
-PR curves are more informative than ROC when the positive class is rare. kreview computes precision-recall curves and average precision (AP) for all three models. PR data is stored as `{prefix}_pr_curve` and `{prefix}_avg_precision`.
+PR curves are more informative than ROC when the positive class is rare. kreview computes precision-recall curves and average precision (AP) for all trained models (3 CPU + up to 4 GPU). PR data is stored as `{prefix}_pr_curve` and `{prefix}_avg_precision`.
 
 ### 3. Probability Calibration
 
@@ -92,7 +92,7 @@ Stored as `rf_dca` and `xgb_dca`.
 
 ### 7. Fold-Level AUC Tracking
 
-To assess model stability, kreview runs `cross_val_score` separately and stores per-fold AUC for all three models. A high standard deviation (>0.05) suggests the model is data-sensitive. Stored as `{prefix}_fold_aucs` and `{prefix}_auc_std`.
+To assess model stability, kreview runs `cross_val_score` separately and stores per-fold AUC for all trained models. A high standard deviation (>0.05) suggests the model is data-sensitive. Stored as `{prefix}_fold_aucs` and `{prefix}_auc_std`.
 
 ### 8. Sensitivity at Fixed Specificity (v0.0.16+)
 
@@ -131,9 +131,18 @@ Serialized into the results JSON under `cancer_type_stats` and `assay_stats`.
 
 ---
 
-## GPU Foundation Models (v0.0.13)
+## GPU Foundation Models (v0.0.13+)
 
-In addition to the CPU ensemble, kreview can optionally train **GPU-accelerated foundation models** when a CUDA-capable device is available.
+In addition to the CPU ensemble, kreview can optionally train **GPU-accelerated foundation models** when a CUDA-capable device is available. As of v0.0.18, four GPU model variants are supported (2 zero-shot + 2 fine-tuned).
+
+### Model Registry
+
+| Model Key | Class | Mode | Configurable Params |
+|-----------|-------|------|--------------------|
+| `tabpfn` | `TabPFNClassifier` | Zero-shot (frozen weights) | — |
+| `tabpfn_ft` | `FinetunedTabPFNClassifier` | Fine-tuned | `--finetune-epochs` (50), `--finetune-lr` (1e-5) |
+| `tabicl` | `TabICLClassifier` | Zero-shot (frozen weights) | — |
+| `tabicl_ft` | `FinetunedTabICLClassifier` | Fine-tuned | `--finetune-epochs` (50), `--finetune-lr` (1e-5) |
 
 ### TabPFN (Tabular Prior-Data Fitted Network)
 
@@ -143,7 +152,7 @@ TabPFN is a prior-data fitted network that performs in-context learning on tabul
 # v8.0.3 API (updated import paths)
 from tabpfn import TabPFNClassifier
 
-tabpfn = TabPFNClassifier(device="cuda")
+tabpfn = TabPFNClassifier(device="cuda")  # Zero-shot
 ```
 
 ### TabICL (Tabular In-Context Learning)
@@ -154,8 +163,52 @@ TabICL is a large-scale in-context learning model for tabular data that uses tra
 # v2.1 API
 from tabicl import TabICLClassifier
 
-tabicl = TabICLClassifier(device="cuda")
+tabicl = TabICLClassifier(device="cuda")  # Zero-shot
 ```
+
+### Fine-Tuned Variants (v0.0.18+)
+
+Fine-tuned variants adapt the pre-trained foundation model weights to the specific dataset during training. This can improve performance on domain-specific data (e.g., cfDNA fragmentomics) at the cost of increased training time.
+
+```python
+# Fine-tuned TabPFN
+from tabpfn import FinetunedTabPFNClassifier
+
+tabpfn_ft = FinetunedTabPFNClassifier(
+    device="cuda",
+    n_epochs=50,        # Configurable via --finetune-epochs
+    learning_rate=1e-5, # Configurable via --finetune-lr
+)
+
+# Fine-tuned TabICL
+from tabicl import FinetunedTabICLClassifier
+
+tabicl_ft = FinetunedTabICLClassifier(
+    device="cuda",
+    n_epochs=50,
+    learning_rate=1e-5,
+)
+```
+
+!!! tip "Zero-shot vs Fine-tuned"
+    To run only zero-shot models (faster, no gradient computation), pass `--gpu-models tabpfn,tabicl`. The default (`tabpfn,tabpfn_ft,tabicl,tabicl_ft`) includes all four variants.
+
+### GPUModelCVAdapter (v0.0.18+)
+
+TabPFN's `classes_` attribute is a `@property` that raises `AttributeError` on unfitted models. Since sklearn's `cross_val_predict` probes `classes_` before fitting, kreview wraps all GPU models in `GPUModelCVAdapter`:
+
+```python
+class GPUModelCVAdapter:
+    """sklearn-compatible wrapper for GPU foundation models."""
+    def fit(self, X, y):
+        self.model_.fit(X, y)
+        self.classes_ = np.unique(y)  # Plain attribute, not @property
+        return self
+```
+
+- Exposes `classes_` as a plain attribute set during `fit()`
+- Delegates `predict()`, `predict_proba()`, and `get_params()` to the inner model
+- Makes GPU models fully compatible with sklearn's CV infrastructure (`cross_val_predict`, `cross_val_score`)
 
 ### GPU SHAP with shapiq
 
@@ -243,27 +296,30 @@ To assess whether the same features are consistently ranked as important across 
 
 ## JSON Output Schema Summary
 
-`cpu_models()` + `evaluate_holdout()` produce **60+ JSON fields** per feature set:
+`cpu_models()` + `gpu_models()` + `evaluate_holdout()` produce **100+ JSON fields** per feature set (when all 7 models are trained):
 
 | Category | Fields | Count |
 |----------|--------|-------|
 | AUC & CI | `auc_{lr,rf,xgb}`, `auc_*_ci_lower`, `auc_*_ci_upper` | 9 |
-| Classification | `*_classification_report`, `*_confusion_matrix` | 6 |
-| Thresholds | `*_optimal_threshold` | 3 |
-| Sensitivity @ Spec | `*_sensitivity_at_{100,99,95}spec`, `*_threshold_at_100spec`, `*_n_detected_at_100spec`, `*_n_total_positive` | 18 |
-| Healthy-Normal Spec | `*_sensitivity_at_100spec_healthy`, `*_threshold_at_100spec_healthy` | 6 |
-| Holdout Metrics | `holdout_*_auc`, `holdout_*_sensitivity_at_100spec`, `holdout_n_train/test` | 12+ |
-| PR Curves | `*_pr_curve`, `*_avg_precision` | 6 |
+| GPU AUC & CI | `auc_{tabpfn,tabpfn_ft,tabicl,tabicl_ft}`, `auc_*_ci_lower/upper` | 12 |
+| Classification | `*_classification_report`, `*_confusion_matrix` | 6 (CPU) + 8 (GPU) |
+| Thresholds | `*_optimal_threshold` | 3 (CPU) + 4 (GPU) |
+| Sensitivity @ Spec | `*_sensitivity_at_{100,99,95}spec`, `*_threshold_at_100spec`, `*_n_detected_at_100spec`, `*_n_total_positive` | 18 (CPU) + 24 (GPU) |
+| Healthy-Normal Spec | `*_sensitivity_at_100spec_healthy`, `*_threshold_at_100spec_healthy` | 6 (CPU) + 8 (GPU) |
+| Holdout Metrics | `holdout_*_auc`, `holdout_*_sensitivity_at_100spec`, `holdout_n_train/test` | 12+ (CPU) + 16+ (GPU) |
+| PR Curves | `*_pr_curve`, `*_avg_precision` | 6 (CPU) + 8 (GPU) |
 | DCA | `rf_dca`, `xgb_dca` | 2 |
-| Fold AUCs | `*_fold_aucs`, `*_auc_std` | 6 |
+| Fold AUCs | `*_fold_aucs`, `*_auc_std` | 6 (CPU) + 8 (GPU) |
 | Calibration | `rf_calibration` | 1 |
 | Threshold Sweep | `rf_threshold_sweep` | 1 |
 | Feature Stability | `feature_stability` | 1 |
-| Training Time | `*_training_time_sec` | 3 |
+| Training Time | `*_training_time_sec` | 3 (CPU) + 4 (GPU) |
 | Feature Importances | `rf_feature_importances`, `top_features` | 2 |
 | AUC Deltas | `auc_delta_rf_lr`, `auc_delta_xgb_rf` | 2 |
 | Subgroups | `cancer_type_stats`, `assay_stats` | 2 |
 | Selection QC | `selection_qc` (method, overlap stats, feature counts) | 1 |
+| GPU OOF Probs | `{gpu_model}_oof_probs` | 4 |
+| GPU SHAP | `{gpu_model}_shap_values` (when `--shap` enabled) | 4 |
 
 ---
 

@@ -74,6 +74,29 @@ Common issues and their solutions.
     3. Run `nbdev-export`
     4. Verify with `kreview features-list`
 
+??? danger "`AttributeError: 'FinetunedTabPFNClassifier' has no attribute 'classes_'`"
+
+    **Cause:** TabPFN's `classes_` is a `@property` that raises `AttributeError` on unfitted models. sklearn's `cross_val_predict` probes `classes_` before fitting, triggering this error.
+
+    **Fix:** Upgrade to kreview ≥ v0.0.18. The `GPUModelCVAdapter` wrapper exposes `classes_` as a plain attribute set during `fit()`, making GPU models fully compatible with sklearn's CV infrastructure.
+
+    If you see this error on v0.0.18+, ensure your `eval_engine.py` is regenerated from the notebook:
+    ```bash
+    nbdev-export
+    ```
+
+??? warning "Decomposed multimodal pipeline — single model step fails"
+
+    **Cause:** When running the decomposed pipeline (`kreview eval multimodal prep → single → ablation → merge`), one model's `single` step may fail (e.g., GPU OOM, TabPFN token expired) while others succeed.
+
+    **Fix:** The `merge` step gracefully handles missing model JSONs — it aggregates whatever results are available and logs warnings for missing models. Re-run only the failed `single` step:
+    ```bash
+    kreview eval multimodal single \
+        --stacking-matrix results/multimodal/stacking_matrix.parquet \
+        --model tabpfn_ft --device cuda --output results/multimodal/
+    ```
+    Then re-run `ablation` and `merge` to incorporate the recovered results.
+
 ---
 
 ## Dashboard & Reports
