@@ -691,9 +691,9 @@ def run_feature_sql(
     per-sample ``extract()``. It runs the evaluator's SQL query against
     all discovered parquet files at once.
 
-    Most evaluators return one row per sample. Some (e.g. WPSGenome with
-    ``sql_pivot_column``) return a "tall" result with multiple rows per
-    sample; the CLI handles pivoting to wide format.
+    Most evaluators return one row per sample. Some may return a "tall"
+    result with multiple rows per sample (e.g. one row per region_type);
+    the CLI handles pivoting to wide format if needed.
 
     The query must contain a ``read_parquet(?, ...)`` placeholder that
     accepts the file path list.

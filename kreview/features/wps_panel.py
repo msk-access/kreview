@@ -5,7 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 import structlog
-from ..eval_engine import FeatureEvaluator, parse_array
+from ..eval_engine import FeatureEvaluator
+from .wps_genomewide import _to_array
 
 log = structlog.get_logger()
 
@@ -15,16 +16,36 @@ __all__ = ["log", "WPSPanelEvaluator"]
 
 # %% ../../nbs/features/24_wps_panel.ipynb #cee7b4e4
 class WPSPanelEvaluator(FeatureEvaluator):
-    """Extracts WPS nucleosome binding geometries with spectral features.
+    """Extracts WPS panel features aggregated per region_type.
 
-    For each WPS array, extracts:
-    - mean, std (original)
-    - peak-to-valley amplitude
-    - median absolute deviation
-    - spectral max power and dominant frequency (FFT-based periodicity)
-    - local_depth scalar (if available)
+    For each WPS array column (wps_nuc, wps_tf, prot_frac_nuc, prot_frac_tf)
+    and each region_type (TSS, CTCF), computes aggregate statistics across
+    all panel regions of that type:
 
-    Handles both numpy array and string columns from krewlyzer parquets.
+    - mean: average of per-region array means (signal level)
+    - peak_valley: average of per-region (max − min) amplitude
+    - std: std of per-region array means (variability)
+    - mad: MAD of per-region array means (robust dispersion)
+    - spectral_dominant_freq: mean dominant FFT frequency across regions
+
+    Also aggregates scalar ``local_depth`` per region_type (mean).
+
+    Handles numpy arrays (native parquet ``list<float>``),
+    Python lists, and string-encoded arrays (legacy format via ``_to_array``).
+
+    Note:
+        ``spectral_max_power`` was removed — real-data analysis (4 patient
+        samples) showed r=0.90–1.00 correlation with ``std`` after
+        per-region-type aggregation, making it completely redundant.
+        ``spectral_dominant_freq`` is retained because ``wps_tf`` showed
+        38.5% CV across samples, indicating potentially informative
+        periodicity from curated TSS/CTCF target loci.
+
+    Note:
+        WPSGenome does NOT include ``spectral_dominant_freq`` because
+        genome-wide regions are dominated by window harmonics (72% of
+        arrays show period=200). Panel targets have more structured WPS
+        profiles due to curated genomic loci.
     """
 
     name = "WPSPanel"
@@ -41,59 +62,111 @@ class WPSPanelEvaluator(FeatureEvaluator):
     ]
     max_chunk_rows = 5_000_000
 
+    # Column groups used by extract()
+    _array_cols = ("wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf")
+    _float_cols = ("local_depth",)
+    # Minimum array length to compute FFT dominant frequency
+    _min_fft_len = 50
+
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
-        extracted = {}
-        try:
-            if df.empty:
-                return extracted
-            cols = set(df.columns)
+        """Extract WPS panel features aggregated per region_type.
 
-            if "region_type" in cols:
-                array_cols = ["wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf"]
-                float_cols = ["local_depth"]
-                for row in df.to_dict("records"):
-                    rt = (
-                        str(row["region_type"])
-                        .replace(" ", "_")
-                        .replace("-", "_")
-                        .replace("|", "_")
-                    )
+        For each region_type and array column, computes mean, peak_valley,
+        std, mad, and spectral_dominant_freq. Also averages scalar
+        ``local_depth`` per region_type.
 
-                    for m in float_cols:
-                        if m in cols:
-                            v = row[m]
-                            if v is not None and not (
-                                isinstance(v, float) and np.isnan(v)
-                            ):
-                                extracted[f"{rt}_{m}"] = float(v)
-
-                    for a in array_cols:
-                        if a in cols:
-                            arr_raw = parse_array(row[a])
-                            if arr_raw is not None and len(arr_raw) > 0:
-                                arr = np.array(arr_raw)
-                                extracted[f"{rt}_{a}_mean"] = float(np.mean(arr))
-                                extracted[f"{rt}_{a}_std"] = float(np.std(arr))
-
-                                extracted[f"{rt}_{a}_peak_valley"] = float(
-                                    np.max(arr) - np.min(arr)
-                                )
-                                extracted[f"{rt}_{a}_mad"] = float(
-                                    np.median(np.abs(arr - np.median(arr)))
-                                )
-
-                                if len(arr) >= 50:
-                                    fft_vals = np.abs(np.fft.rfft(arr - arr.mean()))
-                                    freqs = np.fft.rfftfreq(len(arr))
-                                    if len(fft_vals) > 2:
-                                        extracted[f"{rt}_{a}_spectral_max_power"] = (
-                                            float(np.max(fft_vals[1:]))
-                                        )
-                                        extracted[
-                                            f"{rt}_{a}_spectral_dominant_freq"
-                                        ] = float(freqs[1:][np.argmax(fft_vals[1:])])
-
-            return extracted
-        except Exception as e:
-            log.exception("extraction_failed", evaluator=self.name, error=str(e))
+        Returns:
+            dict mapping ``{region_type}_{column}_{stat}`` to float values.
+            Empty dict if no features could be extracted.
+        """
+        if df.empty:
             return {}
+
+        cols = set(df.columns)
+        if "region_type" not in cols:
+            log.warning(
+                "wpspanel_missing_region_type",
+                evaluator=self.name,
+                columns=sorted(cols),
+            )
+            return {}
+
+        extracted: dict[str, float] = {}
+        n_regions_processed = 0
+
+        for rt in df["region_type"].unique():
+            if rt is None:
+                continue
+            rt_clean = str(rt).replace(" ", "_").replace("-", "_").replace("|", "_")
+            rt_df = df[df["region_type"] == rt]
+
+            # ── Aggregate scalar columns (mean across regions) ──
+            for m in self._float_cols:
+                if m not in cols:
+                    continue
+                vals = pd.to_numeric(rt_df[m], errors="coerce").dropna()
+                if len(vals) > 0:
+                    extracted[f"{rt_clean}_{m}"] = float(vals.mean())
+
+            # ── Aggregate array columns ──
+            for a in self._array_cols:
+                if a not in cols:
+                    continue
+
+                row_means: list[float] = []
+                row_pvs: list[float] = []
+                row_dom_freqs: list[float] = []
+
+                for val in rt_df[a]:
+                    arr = _to_array(val)
+                    if arr is None or len(arr) == 0:
+                        continue
+                    row_means.append(float(np.mean(arr)))
+                    row_pvs.append(float(np.max(arr) - np.min(arr)))
+
+                    # FFT dominant frequency (per-region, then aggregated)
+                    if len(arr) >= self._min_fft_len:
+                        fft_vals = np.abs(np.fft.rfft(arr - arr.mean()))
+                        freqs = np.fft.rfftfreq(len(arr))
+                        if len(fft_vals) > 2:
+                            row_dom_freqs.append(
+                                float(freqs[1:][np.argmax(fft_vals[1:])])
+                            )
+
+                if not row_means:
+                    log.debug(
+                        "wpspanel_empty_column",
+                        region_type=rt_clean,
+                        column=a,
+                        n_rows=len(rt_df),
+                    )
+                    continue
+
+                means_arr = np.array(row_means)
+                extracted[f"{rt_clean}_{a}_mean"] = float(np.mean(means_arr))
+                extracted[f"{rt_clean}_{a}_peak_valley"] = float(np.mean(row_pvs))
+                extracted[f"{rt_clean}_{a}_std"] = float(np.std(means_arr))
+                extracted[f"{rt_clean}_{a}_mad"] = float(
+                    np.median(np.abs(means_arr - np.median(means_arr)))
+                )
+                if row_dom_freqs:
+                    extracted[f"{rt_clean}_{a}_spectral_dominant_freq"] = float(
+                        np.mean(row_dom_freqs)
+                    )
+                n_regions_processed += len(row_means)
+
+        if not extracted:
+            log.warning(
+                "wpspanel_no_features_extracted",
+                evaluator=self.name,
+                n_rows=len(df),
+                region_types=df["region_type"].unique().tolist(),
+            )
+        else:
+            log.debug(
+                "wpspanel_extracted",
+                n_features=len(extracted),
+                n_regions=n_regions_processed,
+            )
+
+        return extracted

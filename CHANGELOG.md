@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **WPSGenome Extraction Failure**: Removed broken SQL pushdown (`extract_sql()`) that used `trim(col, '[]')` on native `list<float>` arrays, silently producing NULL results. Replaced with pure-Python `extract()` using `_to_array()` helper that handles numpy arrays, Python lists, and legacy string-encoded arrays. Added `_to_array()` as a public utility.
+- **WPSGenome Last-Row-Wins Bug**: Rewrote `extract()` to aggregate per-region-type (TSS, CTCF) statistics across all regions instead of overwriting with the last row. Now computes mean, peak_valley, std, and MAD of per-region array means.
+- **WPSPanel Last-Row-Wins Bug**: Rewrote `extract()` to aggregate per-region-type (TSS, CTCF) statistics across all panel regions (~59-85 rows per type) instead of overwriting with the last row. `local_depth` now averaged across panel regions instead of using last value.
+- **GPUModelCVAdapter Serialization**: Added `__getstate__`/`__setstate__` to exclude unpicklable `model_factory` lambda from pickle. Deserialized adapters work for inference (`predict_proba`) but raise `TypeError` on `fit()` — preventing silent misuse.
+- **Joblib Corrupt File Detection**: `_save_fitted_models()` now validates post-write file size (>100 bytes) and deletes truncated files. Error-level logging replaces silent `log.warning`. Partial files from failed `joblib.dump()` are cleaned up.
+- **`parse_array()` Numpy Passthrough**: Now handles numpy arrays and Python lists as input (passthrough), not just string-encoded arrays. Previously returned `[]` for native parquet `list<float>` data, causing silent data loss.
+
+### Changed
+- **WPSBackground Cleanup**: Removed bare `try/except` for consistency with WPSGenome/WPSPanel. Errors now propagate to CLI handler. Added structured logging for empty/success cases with feature counts and chromosome counts. Metrics list moved to class constant `_metrics`.
+
+### Removed
+- **WPSGenome SQL Pushdown**: Removed `extract_sql()`, `sql_pivot_column`, and CLI pivot code. See v0.0.17 entry — the SQL path was fundamentally incompatible with native array storage.
+- **WPSGenome FFT Features**: Dropped `spectral_max_power` and `spectral_dominant_freq`. Empirical analysis (r=0.91–1.00 with basic stats) proved FFT is redundant with mean/std/peak_valley. Nucleosome periodicity is captured by `WPSBackgroundEvaluator`.
+- **WPSPanel `spectral_max_power`**: Removed — real-data analysis (4 patient samples) showed r=0.90–1.00 with `std` after per-region-type aggregation. `spectral_dominant_freq` retained (38.5% CV in `wps_tf` across samples — potentially informative for curated TSS/CTCF loci).
+
+
 ## [0.0.18] - 2026-06-05
 
 ### Added
@@ -42,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **OOF Sample IDs Alignment (P0)**: `oof_sample_ids` scoped to train-split only in CPU, GPU, and monolithic paths to match `oof_probs` length from `cross_val_predict`. Added `oof_sample_ids` and `oof_labels` to merge skip set preventing GPU from overwriting CPU alignment keys. This was the root cause of multimodal stacking failure ("25 had IDs but no probs").
 - **BorutaShap scipy Compatibility (P1)**: Monkey-patched `scipy.stats.binom_test` with `binomtest().pvalue` wrapper for BorutaShap compatibility on scipy ≥1.12 (removed in 1.12). Eliminates `ImportError: cannot import name 'binom_test'` in multimodal raw feature selection.
 - **Scoreboard Crash Handling (P2)**: Added try/except with traceback to `scoreboard.nf` inline Python. Moved file writes inside try block. Added `KREVIEW_SCOREBOARD` withName config block (retry 3×, then ignore). Added per-evaluator try/except in `build_scoreboard()` so a malformed evaluator result doesn't kill the scoreboard for all evaluators.
-- **WPSGenome Timeout (P3)**: Implemented DuckDB SQL pushdown (`extract_sql()`) for `WPSGenomeEvaluator` — parses string-encoded arrays via `list_avg`/`list_max`/`list_min` in C++. Added `sql_pivot_column` for tall-to-wide pivot in CLI. Used `pivot_table(aggfunc='first')` for duplicate safety with null guard on pivot failure fallback. Added time/queue escalation in `nextflow.config` (retries 3+ → `cmobic_cpu` 8h).
+- **WPSGenome Timeout (P3)**: Implemented DuckDB SQL pushdown (`extract_sql()`) for `WPSGenomeEvaluator` — parses string-encoded arrays via `list_avg`/`list_max`/`list_min` in C++. Added `sql_pivot_column` for tall-to-wide pivot in CLI. Used `pivot_table(aggfunc='first')` for duplicate safety with null guard on pivot failure fallback. Added time/queue escalation in `nextflow.config` (retries 3+ → `cmobic_cpu` 8h). **Note**: This SQL pushdown was later found to be broken — krewlyzer stores arrays as native `FLOAT[]`, not string-encoded. Removed in [Unreleased].
 - **GPU Silent Failure Logging (P4)**: Record per-model error keys (`{model}_error`) in GPU results dict. Detect all-models-failed state and set `results["error"]`. Added visible `⚠ WARNING` stdout output in both `cli_eval.py` and monolithic `cli.py`.
 - **REPORT Blocked by SCOREBOARD (P5)**: Guarded REPORT channel with `.ifEmpty(file('NO_SCOREBOARD'))` so reports render even when scoreboard fails. Templates already check `scoreboard_path.exists()`.
 - **REPORT_MULTIMODAL SLURM Rejection**: Added `withName: 'KREVIEW_REPORT_MULTIMODAL'` config block with explicit `queue = params.partition ?: 'cmobic_short'`. Previously fell through to `process_medium` label which lacked a queue directive, causing iris institutional config to inject the inaccessible `cpu` partition into sbatch.
