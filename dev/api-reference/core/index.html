@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -2865,9 +2865,9 @@ chunk_size=15_000 (single-sweep load) on first probe.</p>
 <p>This is the SQL pushdown alternative to <code>iter_feature_chunks</code> +
 per-sample <code>extract()</code>. It runs the evaluator's SQL query against
 all discovered parquet files at once.</p>
-<p>Most evaluators return one row per sample. Some (e.g. WPSGenome with
-<code>sql_pivot_column</code>) return a "tall" result with multiple rows per
-sample; the CLI handles pivoting to wide format.</p>
+<p>Most evaluators return one row per sample. Some may return a "tall"
+result with multiple rows per sample (e.g. one row per region_type);
+the CLI handles pivoting to wide format if needed.</p>
 <p>The query must contain a <code>read_parquet(?, ...)</code> placeholder that
 accepts the file path list.</p>
 

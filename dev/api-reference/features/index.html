@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1756,6 +1756,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="WPSPanelEvaluator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_panel.WPSPanelEvaluator.extract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
       </ul>
@@ -1798,17 +1815,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        extract_sql
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1839,6 +1845,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="WPSBackgroundEvaluator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_background.WPSBackgroundEvaluator.extract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -2636,6 +2659,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="WPSPanelEvaluator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_panel.WPSPanelEvaluator.extract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
       </ul>
@@ -2678,17 +2718,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        extract_sql
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -2719,6 +2748,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="WPSBackgroundEvaluator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_background.WPSBackgroundEvaluator.extract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -4041,15 +4087,39 @@ parsed from <code>region</code> column format <code>chrN:start-end</code>.</p>
 
 
 
-        <p>Extracts <abbr title="Window Protection Score">WPS</abbr> nucleosome binding geometries with spectral features.</p>
-<p>For each <abbr title="Window Protection Score">WPS</abbr> array, extracts:
-- mean, std (original)
-- peak-to-valley amplitude
-- median absolute deviation
-- spectral max power and dominant frequency (FFT-based periodicity)
-- local_depth scalar (if available)</p>
-<p>Handles both numpy array and string columns from krewlyzer parquets.</p>
+        <p>Extracts <abbr title="Window Protection Score">WPS</abbr> panel features aggregated per region_type.</p>
+<p>For each <abbr title="Window Protection Score">WPS</abbr> array column (wps_nuc, wps_tf, prot_frac_nuc, prot_frac_tf)
+and each region_type (TSS, CTCF), computes aggregate statistics across
+all panel regions of that type:</p>
+<ul>
+<li>mean: average of per-region array means (signal level)</li>
+<li>peak_valley: average of per-region (max − min) amplitude</li>
+<li>std: std of per-region array means (variability)</li>
+<li>mad: MAD of per-region array means (robust dispersion)</li>
+<li>spectral_dominant_freq: mean dominant FFT frequency across regions</li>
+</ul>
+<p>Also aggregates scalar <code>local_depth</code> per region_type (mean).</p>
+<p>Handles numpy arrays (native parquet <code>list&lt;float&gt;</code>),
+Python lists, and string-encoded arrays (legacy format via <code>_to_array</code>).</p>
 
+
+<details class="note" open="">
+  <summary>Note</summary>
+  <p><code>spectral_max_power</code> was removed — real-data analysis (4 patient
+samples) showed r=0.90–1.00 correlation with <code>std</code> after
+per-region-type aggregation, making it completely redundant.
+<code>spectral_dominant_freq</code> is retained because <code>wps_tf</code> showed
+38.5% <abbr title="Cross-Validation">CV</abbr> across samples, indicating potentially informative
+periodicity from curated TSS/CTCF target loci.</p>
+</details>
+
+<details class="note" open="">
+  <summary>Note</summary>
+  <p>WPSGenome does NOT include <code>spectral_dominant_freq</code> because
+genome-wide regions are dominated by window harmonics (72% of
+arrays show period=200). Panel targets have more structured <abbr title="Window Protection Score">WPS</abbr>
+profiles due to curated genomic loci.</p>
+</details>
 
 
 
@@ -4070,6 +4140,60 @@ parsed from <code>region</code> column format <code>chrN:start-end</code>.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="kreview.features.wps_panel.WPSPanelEvaluator.extract" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">extract</span><span class="p">(</span><span class="n">df</span><span class="p">)</span></code>
+
+</h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract <abbr title="Window Protection Score">WPS</abbr> panel features aggregated per region_type.</p>
+<p>For each region_type and array column, computes mean, peak_valley,
+std, mad, and spectral_dominant_freq. Also averages scalar
+<code>local_depth</code> per region_type.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>dict mapping <code>{region_type}_{column}_{stat}</code> to float values.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Empty dict if no features could be extracted.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 
 
@@ -4136,18 +4260,41 @@ parsed from <code>region</code> column format <code>chrN:start-end</code>.</p>
 
 
 
-        <p>Extracts genome-wide <abbr title="Window Protection Score">WPS</abbr> metrics with spectral features.</p>
-<p>For each <abbr title="Window Protection Score">WPS</abbr> array column and region_type, extracts:
-- mean, std (signal level and dispersion)
-- peak-to-valley amplitude (nucleosome occupancy proxy)</p>
-<p>Supports two extraction paths:
-- <strong>SQL pushdown (preferred)</strong>: DuckDB parses string arrays and computes
-  aggregates entirely in C++ — orders of magnitude faster than Python.
-- <strong>Python fallback</strong>: Row-by-row extraction with parse_array() + numpy.
-  Also computes MAD and FFT spectral features (not available in SQL).</p>
-<p>The SQL pushdown produces a "tall" result (one row per sample × region_type)
-that the CLI pivots to wide format via <code>sql_pivot_column</code>.</p>
+        <p>Extracts genome-wide <abbr title="Window Protection Score">WPS</abbr> metrics per region_type.</p>
+<p>For each <abbr title="Window Protection Score">WPS</abbr> array column (wps_nuc, wps_tf, prot_frac_nuc, prot_frac_tf)
+and each region_type (TSS, CTCF), computes aggregate statistics across
+all genomic regions of that type:</p>
+<ul>
+<li>mean: average of per-region array means (signal level)</li>
+<li>peak_valley: average of per-region (max - min) amplitude</li>
+<li>std: standard deviation of per-region array means (variability)</li>
+<li>mad: median absolute deviation of per-region array means (robust dispersion)</li>
+</ul>
+<p>Output features (example): <code>TSS_wps_nuc_mean</code>, <code>CTCF_prot_frac_tf_peak_valley</code></p>
 
+
+<details class="note" open="">
+  <summary>Note</summary>
+  <p>Krewlyzer stores <abbr title="Window Protection Score">WPS</abbr> arrays as native <code>list&lt;float&gt;</code> in parquet,
+not as string-encoded arrays. The <code>extract()</code> method handles
+numpy arrays directly via <code>_to_array()</code> — no string parsing needed.</p>
+</details>
+
+<details class="note" open="">
+  <summary>Note</summary>
+  <p>FFT spectral features were evaluated and found to be redundant with
+basic stats (r=0.91–1.00 with peak_valley/std). Nucleosome periodicity
+is captured at the chromosome level by <code>WPSBackgroundEvaluator</code>
+(NRL, periodicity_score). See <code>wps_fft_analysis.md</code> for details.</p>
+</details>
+
+<details class="note" open="">
+  <summary>Note</summary>
+  <p>SQL pushdown (<code>extract_sql()</code>) was removed because krewlyzer stores
+<abbr title="Window Protection Score">WPS</abbr> arrays as native <code>list&lt;float&gt;</code> (DuckDB <code>FLOAT[]</code>), not as
+string-encoded arrays. The SQL path used <code>trim(col, '[]')</code> which
+cannot parse native array types. See git history for the removed code.</p>
+</details>
 
 
 
@@ -4180,35 +4327,16 @@ that the CLI pivots to wide format via <code>sql_pivot_column</code>.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Python fallback extraction — row-by-row with parse_array().</p>
-<p>Used when SQL pushdown is unavailable or returns empty. Computes
-all features including MAD and FFT spectral features.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h4 id="kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">extract_sql</span><span class="p">()</span></code>
-
-</h4>
-
-
-    <div class="doc doc-contents ">
-
-        <p>DuckDB SQL pushdown for WPSGenome.</p>
-<p>Parses string-encoded arrays (e.g. <code>"[1.0 2.0 3.0]"</code>) into DuckDB
-lists, then computes per-<code>region_type</code> aggregate statistics entirely
-in DuckDB's C++ engine — eliminating the Python row loop.</p>
-<p>Computes per array column: mean, peak_valley (max - min).
-Skips: std, MAD, FFT spectral features (require numpy; minimal
-incremental <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>; WPSBackground already captures periodicity).</p>
-<p>Returns a tall DataFrame: one row per (sample_id, region_type).
-The CLI pivots this via <code>sql_pivot_column</code> to wide format.</p>
+        <p>Extract <abbr title="Window Protection Score">WPS</abbr> features aggregated per region_type.</p>
+<p>For each region_type (TSS, CTCF) and each array column, computes:</p>
+<ul>
+<li>mean: average of per-region array means (signal level)</li>
+<li>peak_valley: average of per-region (max - min) (nucleosome amplitude)</li>
+<li>std: std of per-region array means (variability across regions)</li>
+<li>mad: MAD of per-region array means (robust dispersion)</li>
+</ul>
+<p>Handles both numpy arrays (from native parquet <code>list&lt;float&gt;</code>)
+and string-encoded arrays (legacy format, via <code>parse_array()</code>).</p>
 
 
     </div>
@@ -4280,7 +4408,19 @@ The CLI pivots this via <code>sql_pivot_column</code> to wide format.</p>
 
 
 
-        <p>Extracts periodicity distances for nucleosomes.</p>
+        <p>Extracts per-chromosome nucleosome periodicity metrics.</p>
+<p>Each row in the source parquet represents one chromosome (<code>group_id</code>).
+Metrics are pre-computed by krewlyzer from long-range <abbr title="Window Protection Score">WPS</abbr> autocorrelation:</p>
+<ul>
+<li>nrl_bp: nucleosome repeat length</li>
+<li>nrl_deviation_bp: deviation from expected NRL</li>
+<li>periodicity_score: strength of periodic nucleosome signal</li>
+<li>adjusted_score: adjusted periodicity score</li>
+<li>fragment_ratio: fragment ratio</li>
+</ul>
+<p>Since <code>group_id</code> is unique per row (one per chromosome), features are
+extracted directly without aggregation — each row maps to a distinct
+<code>{chromosome}_{metric}</code> feature.</p>
 
 
 
@@ -4302,6 +4442,57 @@ The CLI pivots this via <code>sql_pivot_column</code> to wide format.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="kreview.features.wps_background.WPSBackgroundEvaluator.extract" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">extract</span><span class="p">(</span><span class="n">df</span><span class="p">)</span></code>
+
+</h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract per-chromosome periodicity features.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>dict mapping <code>{group_id}_{metric}</code> to float values.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Empty dict if no features could be extracted.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 
 
