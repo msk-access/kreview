@@ -10,25 +10,72 @@ from ..eval_engine import FeatureEvaluator, parse_array
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "WPSGenomeEvaluator"]
+__all__ = ["log", "WPSGenomeEvaluator", "_to_array"]
+
+
+# %% ../../nbs/features/25_wps_genomewide.ipynb #a0805d34
+def _to_array(val) -> np.ndarray | None:
+    """Convert a parquet array value to numpy, handling all storage formats.
+
+    Handles:
+    - numpy arrays (native parquet ``list<float>``, DuckDB ``FLOAT[]``)
+    - Python lists/tuples (e.g. from pandas object columns)
+    - String-encoded arrays (legacy format: ``"[1.0 2.0 3.0]"``)
+    - None / NaN → returns None
+
+    Returns:
+        numpy array of floats, or None if the value is empty/invalid.
+    """
+    if val is None:
+        return None
+    if isinstance(val, np.ndarray):
+        return val.astype(float) if val.size > 0 else None
+    if isinstance(val, (list, tuple)):
+        return np.array(val, dtype=float) if len(val) > 0 else None
+    if isinstance(val, str):
+        parsed = parse_array(val)
+        return np.array(parsed, dtype=float) if parsed else None
+    # Scalar NaN check
+    try:
+        if pd.isna(val):
+            return None
+    except (TypeError, ValueError):
+        pass
+    log.warning("wpsgenome_unexpected_type", val_type=type(val).__name__)
+    return None
 
 
 # %% ../../nbs/features/25_wps_genomewide.ipynb #86f68672
 class WPSGenomeEvaluator(FeatureEvaluator):
-    """Extracts genome-wide WPS metrics with spectral features.
+    """Extracts genome-wide WPS metrics per region_type.
 
-    For each WPS array column and region_type, extracts:
-    - mean, std (signal level and dispersion)
-    - peak-to-valley amplitude (nucleosome occupancy proxy)
+    For each WPS array column (wps_nuc, wps_tf, prot_frac_nuc, prot_frac_tf)
+    and each region_type (TSS, CTCF), computes aggregate statistics across
+    all genomic regions of that type:
 
-    Supports two extraction paths:
-    - **SQL pushdown (preferred)**: DuckDB parses string arrays and computes
-      aggregates entirely in C++ — orders of magnitude faster than Python.
-    - **Python fallback**: Row-by-row extraction with parse_array() + numpy.
-      Also computes MAD and FFT spectral features (not available in SQL).
+    - mean: average of per-region array means (signal level)
+    - peak_valley: average of per-region (max - min) amplitude
+    - std: standard deviation of per-region array means (variability)
+    - mad: median absolute deviation of per-region array means (robust dispersion)
 
-    The SQL pushdown produces a "tall" result (one row per sample × region_type)
-    that the CLI pivots to wide format via ``sql_pivot_column``.
+    Output features (example): ``TSS_wps_nuc_mean``, ``CTCF_prot_frac_tf_peak_valley``
+
+    Note:
+        Krewlyzer stores WPS arrays as native ``list<float>`` in parquet,
+        not as string-encoded arrays. The ``extract()`` method handles
+        numpy arrays directly via ``_to_array()`` — no string parsing needed.
+
+    Note:
+        FFT spectral features were evaluated and found to be redundant with
+        basic stats (r=0.91–1.00 with peak_valley/std). Nucleosome periodicity
+        is captured at the chromosome level by ``WPSBackgroundEvaluator``
+        (NRL, periodicity_score). See ``wps_fft_analysis.md`` for details.
+
+    Note:
+        SQL pushdown (``extract_sql()``) was removed because krewlyzer stores
+        WPS arrays as native ``list<float>`` (DuckDB ``FLOAT[]``), not as
+        string-encoded arrays. The SQL path used ``trim(col, '[]')`` which
+        cannot parse native array types. See git history for the removed code.
     """
 
     name = "WPSGenome"
@@ -37,7 +84,7 @@ class WPSGenomeEvaluator(FeatureEvaluator):
     category = "epigenetics_and_geometry"
     # Column projection: only read the 5 columns used by extract().
     # WPS parquets have many additional columns — loading all of them
-    # caused OOM on genome-wide runs (~30K rows x 50+ cols per sample).
+    # caused OOM on genome-wide runs (~30K rows × 50+ cols per sample).
     extract_columns = [
         "region_type",
         "wps_nuc",
@@ -47,112 +94,89 @@ class WPSGenomeEvaluator(FeatureEvaluator):
     ]
     max_chunk_rows = 2_000_000  # Aggressive chunking for genomewide WPS data
 
-    # When extract_sql() returns a multi-row-per-sample result, the CLI
-    # pivots on this column to produce one row per sample with feature
-    # columns named {pivot_value}_{stat}.
-    sql_pivot_column = "region_type_clean"
-
-    # Array column names used by both SQL and Python paths
+    # Array column names used by extract()
     _array_cols = ("wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf")
 
-    def extract_sql(self) -> str | None:
-        """DuckDB SQL pushdown for WPSGenome.
-
-        Parses string-encoded arrays (e.g. ``"[1.0 2.0 3.0]"``) into DuckDB
-        lists, then computes per-``region_type`` aggregate statistics entirely
-        in DuckDB's C++ engine — eliminating the Python row loop.
-
-        Computes per array column: mean, peak_valley (max - min).
-        Skips: std, MAD, FFT spectral features (require numpy; minimal
-        incremental AUC; WPSBackground already captures periodicity).
-
-        Returns a tall DataFrame: one row per (sample_id, region_type).
-        The CLI pivots this via ``sql_pivot_column`` to wide format.
-        """
-        # Build per-column aggregation expressions.
-        # DuckDB parses "[1.0 2.0 3.0]" → DOUBLE[] via:
-        #   string_split(trim(col, '[]'), ' ') → VARCHAR[]
-        #   list_filter(... , x -> x != '') removes empty strings from double-spaces
-        #   CAST(... AS DOUBLE[]) → typed numeric list
-        agg_parts = []
-        for col in self._array_cols:
-            parse_expr = (
-                f"CAST(list_filter("
-                f"string_split(trim(trim({col}, '[]')), ' '), "
-                f"x -> x != '' AND x IS NOT NULL"
-                f") AS DOUBLE[])"
-            )
-            agg_parts.extend(
-                [
-                    f"list_avg({parse_expr}) AS {col}_mean",
-                    f"(list_max({parse_expr}) - list_min({parse_expr})) AS {col}_peak_valley",
-                ]
-            )
-
-        agg_clause = ",\n            ".join(agg_parts)
-
-        return f"""
-            SELECT
-                regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id,
-                replace(replace(replace(region_type, ' ', '_'), '-', '_'), '|', '_')
-                    AS region_type_clean,
-                {agg_clause}
-            FROM read_parquet(
-                ?,
-                filename=true,
-                union_by_name=true,
-                hive_partitioning=false
-            )
-            WHERE region_type IS NOT NULL
-        """
-
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
-        """Python fallback extraction — row-by-row with parse_array().
+        """Extract WPS features aggregated per region_type.
 
-        Used when SQL pushdown is unavailable or returns empty. Computes
-        all features including MAD and FFT spectral features.
+        For each region_type (TSS, CTCF) and each array column, computes:
+
+        - mean: average of per-region array means (signal level)
+        - peak_valley: average of per-region (max - min) (nucleosome amplitude)
+        - std: std of per-region array means (variability across regions)
+        - mad: MAD of per-region array means (robust dispersion)
+
+        Handles both numpy arrays (from native parquet ``list<float>``)
+        and string-encoded arrays (legacy format, via ``parse_array()``).
         """
-        extracted = {}
-        try:
-            if df.empty:
-                return extracted
-            cols = set(df.columns)
-
-            if "region_type" in cols:
-                for row in df.to_dict("records"):
-                    rt = (
-                        str(row["region_type"])
-                        .replace(" ", "_")
-                        .replace("-", "_")
-                        .replace("|", "_")
-                    )
-                    for a in self._array_cols:
-                        if a in cols:
-                            arr_raw = parse_array(row[a])
-                            if arr_raw is not None and len(arr_raw) > 0:
-                                arr = np.array(arr_raw)
-                                extracted[f"{rt}_{a}_mean"] = float(np.mean(arr))
-                                extracted[f"{rt}_{a}_std"] = float(np.std(arr))
-
-                                extracted[f"{rt}_{a}_peak_valley"] = float(
-                                    np.max(arr) - np.min(arr)
-                                )
-                                extracted[f"{rt}_{a}_mad"] = float(
-                                    np.median(np.abs(arr - np.median(arr)))
-                                )
-
-                                if len(arr) >= 50:
-                                    fft_vals = np.abs(np.fft.rfft(arr - arr.mean()))
-                                    freqs = np.fft.rfftfreq(len(arr))
-                                    if len(fft_vals) > 2:
-                                        extracted[f"{rt}_{a}_spectral_max_power"] = (
-                                            float(np.max(fft_vals[1:]))
-                                        )
-                                        extracted[
-                                            f"{rt}_{a}_spectral_dominant_freq"
-                                        ] = float(freqs[1:][np.argmax(fft_vals[1:])])
-
-            return extracted
-        except Exception as e:
-            log.exception("extraction_failed", evaluator=self.name, error=str(e))
+        if df.empty:
             return {}
+
+        cols = set(df.columns)
+        if "region_type" not in cols:
+            log.warning(
+                "wpsgenome_missing_region_type",
+                evaluator=self.name,
+                columns=sorted(cols),
+            )
+            return {}
+
+        extracted: dict[str, float] = {}
+        n_regions_processed = 0
+
+        for rt in df["region_type"].unique():
+            if rt is None:
+                continue
+            rt_clean = str(rt).replace(" ", "_").replace("-", "_").replace("|", "_")
+            rt_df = df[df["region_type"] == rt]
+
+            for a in self._array_cols:
+                if a not in cols:
+                    continue
+
+                # Collect per-region array statistics.
+                # Data can be numpy arrays (native parquet list<float>)
+                # or strings (legacy format).
+                row_means: list[float] = []
+                row_pvs: list[float] = []
+
+                for val in rt_df[a]:
+                    arr = _to_array(val)
+                    if arr is not None and len(arr) > 0:
+                        row_means.append(float(np.mean(arr)))
+                        row_pvs.append(float(np.max(arr) - np.min(arr)))
+
+                if not row_means:
+                    log.debug(
+                        "wpsgenome_empty_column",
+                        region_type=rt_clean,
+                        column=a,
+                        n_rows=len(rt_df),
+                    )
+                    continue
+
+                means_arr = np.array(row_means)
+                extracted[f"{rt_clean}_{a}_mean"] = float(np.mean(means_arr))
+                extracted[f"{rt_clean}_{a}_peak_valley"] = float(np.mean(row_pvs))
+                extracted[f"{rt_clean}_{a}_std"] = float(np.std(means_arr))
+                extracted[f"{rt_clean}_{a}_mad"] = float(
+                    np.median(np.abs(means_arr - np.median(means_arr)))
+                )
+                n_regions_processed += len(row_means)
+
+        if not extracted:
+            log.warning(
+                "wpsgenome_no_features_extracted",
+                evaluator=self.name,
+                n_rows=len(df),
+                region_types=df["region_type"].unique().tolist(),
+            )
+        else:
+            log.debug(
+                "wpsgenome_extracted",
+                n_features=len(extracted),
+                n_regions=n_regions_processed,
+            )
+
+        return extracted

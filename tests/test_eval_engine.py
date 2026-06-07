@@ -36,6 +36,18 @@ except Exception:
 # Models to iterate in tests — only include xgb if available
 _MODELS = ["lr", "rf"] + (["xgb"] if HAS_XGB else [])
 
+
+class _MockPredictor:
+    """Simple picklable model for serialization tests.
+
+    Must be at module level (not inside a test function) so that
+    pickle can resolve the class on deserialization.
+    """
+
+    def predict_proba(self, X):
+        return np.array([[0.3, 0.7]] * len(X))
+
+
 # ── Fixtures ────────────────────────────────────────────────────────────────────
 
 
@@ -935,6 +947,21 @@ class TestSaveFittedModels:
         assert not (tmp_path / "TestEval_lr_model.joblib").exists()
         assert not (tmp_path / "TestEval_rf_model.joblib").exists()
 
+    def test_valid_model_size_check(self, tmp_path):
+        """Valid fitted models pass the post-write size validation (>100 bytes)."""
+        from kreview.cli_eval import _save_fitted_models
+        from sklearn.linear_model import LogisticRegression
+
+        lr = LogisticRegression()
+        lr.fit(np.random.randn(10, 2), np.array([0] * 5 + [1] * 5))
+        fitted = {"lr": lr}
+
+        _save_fitted_models(fitted, tmp_path, "TestEval")
+
+        path = tmp_path / "TestEval_lr_model.joblib"
+        assert path.exists()
+        assert path.stat().st_size > 100  # Valid model, not truncated
+
 
 class TestBuildGpuModelV8:
     """Validate _build_gpu_model() for TabPFN v8 and TabICL v2.1 API changes.
@@ -1008,6 +1035,308 @@ class TestBuildGpuModelV8:
         model = _build_gpu_model("tabpfn", device="cpu")
         # Either a valid model or None (not an exception)
         assert model is None or model is not None
+
+
+# ── v0.0.19 bug fix tests ───────────────────────────────────────────────────
+
+
+class TestParseArray:
+    """Tests for parse_array() — handles numpy, list, string, and None."""
+
+    def test_numpy_array_passthrough(self):
+        """numpy arrays are converted to list[float]."""
+        from kreview.eval_engine import parse_array
+
+        result = parse_array(np.array([1.0, 2.0, 3.0]))
+        assert result == [1.0, 2.0, 3.0]
+
+    def test_python_list_passthrough(self):
+        """Python lists are converted to list[float]."""
+        from kreview.eval_engine import parse_array
+
+        assert parse_array([1.0, 2.0]) == [1.0, 2.0]
+        assert parse_array((1.0, 2.0)) == [1.0, 2.0]
+
+    def test_string_array_parsed(self):
+        """String-encoded arrays are parsed correctly."""
+        from kreview.eval_engine import parse_array
+
+        assert parse_array("[1.0 2.0 3.0]") == [1.0, 2.0, 3.0]
+
+    def test_none_returns_empty(self):
+        """None and non-array inputs return empty list."""
+        from kreview.eval_engine import parse_array
+
+        assert parse_array(None) == []
+        assert parse_array("not_an_array") == []
+        assert parse_array(42) == []
+
+    def test_empty_array_returns_empty(self):
+        """Empty arrays return empty list."""
+        from kreview.eval_engine import parse_array
+
+        assert parse_array(np.array([])) == []
+        assert parse_array([]) == []
+        assert parse_array("[]") == []
+
+
+class TestWPSGenomeExtract:
+    """Tests for WPSGenomeEvaluator.extract() — per-region-type aggregation."""
+
+    def test_numpy_arrays_extracted(self):
+        """Native parquet list<float> (numpy arrays) produce features."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        df = pd.DataFrame(
+            [
+                {
+                    "region_type": "TSS",
+                    "wps_nuc": np.array([1.0, 2.0, 3.0]),
+                    "wps_tf": np.array([4.0, 5.0, 6.0]),
+                    "prot_frac_nuc": np.array([0.1, 0.2]),
+                    "prot_frac_tf": np.array([0.3, 0.4]),
+                },
+                {
+                    "region_type": "TSS",
+                    "wps_nuc": np.array([2.0, 3.0, 4.0]),
+                    "wps_tf": np.array([5.0, 6.0, 7.0]),
+                    "prot_frac_nuc": np.array([0.2, 0.3]),
+                    "prot_frac_tf": np.array([0.4, 0.5]),
+                },
+            ]
+        )
+        result = evaluator.extract(df)
+
+        assert len(result) > 0
+        assert "TSS_wps_nuc_mean" in result
+        assert "TSS_wps_nuc_peak_valley" in result
+        assert "TSS_wps_nuc_std" in result
+        assert "TSS_wps_nuc_mad" in result
+        # Mean of per-row means: mean([2.0, 3.0]) = 2.5
+        assert abs(result["TSS_wps_nuc_mean"] - 2.5) < 1e-6
+
+    def test_string_arrays_extracted(self):
+        """Legacy string-encoded arrays also produce features."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        df = pd.DataFrame(
+            [
+                {
+                    "region_type": "Promo",
+                    "wps_nuc": "[1.0 1.0]",
+                    "wps_tf": "[2.0 2.0]",
+                    "prot_frac_nuc": "[0.5 0.5]",
+                    "prot_frac_tf": "[0.5 0.5]",
+                }
+            ]
+        )
+        result = evaluator.extract(df)
+        assert result["Promo_wps_nuc_mean"] == 1.0
+
+    def test_multiple_region_types(self):
+        """Features are generated separately per region_type."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        df = pd.DataFrame(
+            [
+                {"region_type": "TSS", "wps_nuc": np.array([1.0, 2.0])},
+                {"region_type": "CTCF", "wps_nuc": np.array([3.0, 4.0])},
+            ]
+        )
+        result = evaluator.extract(df)
+        assert "TSS_wps_nuc_mean" in result
+        assert "CTCF_wps_nuc_mean" in result
+        assert result["TSS_wps_nuc_mean"] != result["CTCF_wps_nuc_mean"]
+
+    def test_empty_dataframe_returns_empty(self):
+        """Empty DataFrame returns empty dict."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        result = evaluator.extract(pd.DataFrame())
+        assert result == {}
+
+    def test_missing_region_type_returns_empty(self):
+        """DataFrame without region_type column returns empty dict."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        df = pd.DataFrame([{"wps_nuc": np.array([1.0, 2.0])}])
+        result = evaluator.extract(df)
+        assert result == {}
+
+    def test_no_overwrite_bug(self):
+        """Multiple rows of the same region_type aggregate, not overwrite."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        rows = [
+            {"region_type": "TSS", "wps_nuc": np.array([float(i)])} for i in range(100)
+        ]
+        df = pd.DataFrame(rows)
+        result = evaluator.extract(df)
+        # Mean of 0..99 = 49.5, NOT 99 (last-row-wins bug)
+        assert "TSS_wps_nuc_mean" in result
+        assert abs(result["TSS_wps_nuc_mean"] - 49.5) < 1e-6
+
+
+class TestWPSPanelExtract:
+    """Tests for WPSPanelEvaluator.extract() — per-region-type aggregation."""
+
+    def test_aggregation_not_overwrite(self):
+        """Multiple rows of same region_type aggregate, not overwrite."""
+        from kreview.features.wps_panel import WPSPanelEvaluator
+
+        evaluator = WPSPanelEvaluator()
+        rows = [
+            {"region_type": "TSS", "wps_nuc": np.array([float(i)])} for i in range(100)
+        ]
+        df = pd.DataFrame(rows)
+        result = evaluator.extract(df)
+        # Mean of 0..99 = 49.5, NOT 99 (last-row-wins bug)
+        assert abs(result["TSS_wps_nuc_mean"] - 49.5) < 1e-6
+
+    def test_local_depth_aggregated(self):
+        """local_depth is averaged across rows, not overwritten."""
+        from kreview.features.wps_panel import WPSPanelEvaluator
+
+        evaluator = WPSPanelEvaluator()
+        df = pd.DataFrame(
+            [
+                {
+                    "region_type": "TSS",
+                    "wps_nuc": np.array([1.0]),
+                    "local_depth": 0.5,
+                },
+                {
+                    "region_type": "TSS",
+                    "wps_nuc": np.array([2.0]),
+                    "local_depth": 1.5,
+                },
+            ]
+        )
+        result = evaluator.extract(df)
+        assert abs(result["TSS_local_depth"] - 1.0) < 1e-6  # mean(0.5, 1.5)
+
+    def test_spectral_dominant_freq_present(self):
+        """spectral_dominant_freq is computed for arrays >= 50 positions."""
+        from kreview.features.wps_panel import WPSPanelEvaluator
+
+        evaluator = WPSPanelEvaluator()
+        df = pd.DataFrame([{"region_type": "TSS", "wps_nuc": np.random.randn(200)}])
+        result = evaluator.extract(df)
+        assert "TSS_wps_nuc_spectral_dominant_freq" in result
+
+    def test_no_spectral_max_power(self):
+        """spectral_max_power should NOT be produced (removed as redundant)."""
+        from kreview.features.wps_panel import WPSPanelEvaluator
+
+        evaluator = WPSPanelEvaluator()
+        df = pd.DataFrame([{"region_type": "TSS", "wps_nuc": np.random.randn(200)}])
+        result = evaluator.extract(df)
+        max_power_keys = [k for k in result if "spectral_max_power" in k]
+        assert (
+            max_power_keys == []
+        ), f"spectral_max_power should be removed: {max_power_keys}"
+
+
+class TestWPSBackgroundExtract:
+    """Tests for WPSBackgroundEvaluator.extract() — per-chromosome scalars."""
+
+    def test_per_chromosome_scalars(self):
+        """Each group_id maps to distinct features."""
+        from kreview.features.wps_background import WPSBackgroundEvaluator
+
+        evaluator = WPSBackgroundEvaluator()
+        df = pd.DataFrame(
+            [
+                {"group_id": "chr1", "nrl_bp": 195.0, "periodicity_score": 0.8},
+                {"group_id": "chr2", "nrl_bp": 190.0, "periodicity_score": 0.6},
+            ]
+        )
+        result = evaluator.extract(df)
+        assert result["chr1_nrl_bp"] == 195.0
+        assert result["chr2_nrl_bp"] == 190.0
+        assert result["chr1_periodicity_score"] == 0.8
+
+    def test_empty_returns_empty(self):
+        """Empty DataFrame returns empty dict."""
+        from kreview.features.wps_background import WPSBackgroundEvaluator
+
+        evaluator = WPSBackgroundEvaluator()
+        assert evaluator.extract(pd.DataFrame()) == {}
+
+
+class TestGPUModelCVAdapterSerialization:
+    """Tests for GPUModelCVAdapter pickle/joblib roundtrip."""
+
+    def test_pickle_roundtrip(self):
+        """Adapter with lambda factory serializes and deserializes."""
+        import pickle
+
+        from kreview.eval_engine import GPUModelCVAdapter
+
+        adapter = GPUModelCVAdapter(model_factory=lambda: "mock", name="test_model")
+        adapter.model_ = "fitted_mock"
+        adapter.classes_ = np.array([0, 1])
+
+        data = pickle.dumps(adapter)
+        assert len(data) > 10  # Not a truncated 2-byte header
+
+        loaded = pickle.loads(data)
+        assert loaded.model_ == "fitted_mock"
+        assert loaded.name == "test_model"
+        assert loaded.model_factory is None  # Lambda excluded
+        assert np.array_equal(loaded.classes_, np.array([0, 1]))
+
+    def test_loaded_adapter_predict_works(self):
+        """Deserialized adapter can call predict_proba if model_ supports it."""
+        import pickle
+
+        from kreview.eval_engine import GPUModelCVAdapter
+
+        adapter = GPUModelCVAdapter(model_factory=lambda: None, name="test")
+        adapter.model_ = _MockPredictor()
+        adapter.classes_ = np.array([0, 1])
+
+        loaded = pickle.loads(pickle.dumps(adapter))
+        probs = loaded.predict_proba(np.zeros((2, 3)))
+        assert probs.shape == (2, 2)
+
+    def test_loaded_adapter_fit_raises(self):
+        """Deserialized adapter raises TypeError on fit() — inference only."""
+        import pickle
+
+        from kreview.eval_engine import GPUModelCVAdapter
+
+        adapter = GPUModelCVAdapter(model_factory=lambda: None, name="test")
+        adapter.model_ = "mock"
+        adapter.classes_ = np.array([0, 1])
+
+        loaded = pickle.loads(pickle.dumps(adapter))
+        with pytest.raises(TypeError, match="Cannot fit"):
+            loaded.fit(np.zeros((5, 3)), np.array([0, 0, 1, 1, 0]))
+
+    def test_joblib_roundtrip(self, tmp_path):
+        """Full joblib dump/load cycle produces valid adapter."""
+        import joblib
+
+        from kreview.eval_engine import GPUModelCVAdapter
+
+        adapter = GPUModelCVAdapter(model_factory=lambda: None, name="test")
+        adapter.model_ = "fitted"
+        adapter.classes_ = np.array([0, 1])
+
+        path = tmp_path / "test_model.joblib"
+        joblib.dump(adapter, path)
+        assert path.stat().st_size > 100  # Not a 2-byte truncated file
+
+        loaded = joblib.load(path)
+        assert loaded.model_ == "fitted"
+        assert loaded.model_factory is None
 
 
 class TestBuildModelDispatchV013:
