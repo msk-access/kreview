@@ -188,50 +188,6 @@ def _extract_evaluator(
                 else len(sql_df)
             )
 
-            # Pivot tall → wide when evaluator produces multi-row-per-sample SQL
-            # (e.g. WPSGenome: one row per sample × region_type)
-            pivot_col = getattr(evaluator, "sql_pivot_column", None)
-            if pivot_col and pivot_col in feat_matrix.columns:
-                id_col = (
-                    "sample_id" if "sample_id" in feat_matrix.columns else "SAMPLE_ID"
-                )
-                stat_cols = [
-                    c for c in feat_matrix.columns if c not in (id_col, pivot_col)
-                ]
-                try:
-                    # Use pivot_table (not pivot) to handle duplicate
-                    # (sample_id, region_type) rows gracefully.
-                    pivoted = feat_matrix.pivot_table(
-                        index=id_col,
-                        columns=pivot_col,
-                        values=stat_cols,
-                        aggfunc="first",
-                    )
-                    # Flatten multi-level columns:
-                    # ("wps_nuc_mean", "chr1") → "chr1_wps_nuc_mean"
-                    pivoted.columns = [
-                        f"{region}_{stat}" for stat, region in pivoted.columns
-                    ]
-                    pivoted = pivoted.reset_index()
-                    feat_matrix = pivoted
-                    _echo(
-                        f"  Pivoted {len(sql_df)} rows → "
-                        f"{feat_matrix.shape[0]} samples × "
-                        f"{feat_matrix.shape[1] - 1} features"
-                    )
-                except Exception as exc:
-                    log.error(
-                        "sql_pivot_failed",
-                        evaluator=evaluator.name,
-                        error=str(exc),
-                    )
-                    _echo(
-                        f"  ⚠ Pivot failed for '{evaluator.name}': {exc}, "
-                        f"falling back to chunked extraction..."
-                    )
-                    feat_matrix = None
-                    sql_query = None  # Force fallback to Path B
-
             if feat_matrix is not None:
                 _echo(
                     f"  SQL pushdown complete: {n_samples} samples "

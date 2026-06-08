@@ -140,12 +140,11 @@ disable_error_code = ["arg-type", "assignment", "var-annotated", "misc", "return
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
-    "--cov=kreview",
-    "--cov-report=xml:coverage.xml",
-    "--cov-report=term-missing:skip-covered",
     "--tb=short",
     "-q",
 ]
+# Coverage: run explicitly in CI or locally:
+#   pytest --cov=kreview --cov-report=xml:coverage.xml --cov-report=term-missing:skip-covered
 timeout = 120
 log_cli_level = "WARNING"
 

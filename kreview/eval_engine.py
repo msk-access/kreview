@@ -119,11 +119,25 @@ class FeatureEvaluator:
 
 
 def parse_array(s) -> list[float]:
-    """Parse a string-encoded numeric array into a list of floats.
+    """Parse a numeric array value into a list of floats.
 
-    Handles formats like '[1.0 2.0 3.0]' from parquet serialization.
+    Handles multiple input formats:
+    - numpy arrays (native parquet ``list<float>``, DuckDB ``FLOAT[]``)
+    - Python lists/tuples
+    - String-encoded arrays (``'[1.0 2.0 3.0]'``) from legacy parquet
+
     Returns empty list on any parse failure (no silent corruption).
     """
+    # Native array types — passthrough (most common path for modern parquets)
+    if isinstance(s, np.ndarray):
+        return s.tolist()
+    if isinstance(s, (list, tuple)):
+        try:
+            return [float(x) for x in s]
+        except (ValueError, TypeError):
+            return []
+
+    # String-encoded array — legacy format
     if not isinstance(s, str) or not s.startswith("["):
         return []
     clean = (
@@ -1371,6 +1385,28 @@ class GPUModelCVAdapter(BaseEstimator, ClassifierMixin):
         self.model_factory = model_factory
         self.name = name
 
+    def __getstate__(self) -> dict:
+        """Exclude ``model_factory`` (a lambda closure) from pickle serialization.
+
+        The factory is only needed for training (creating fresh model instances
+        during CV). Deserialized adapters are inference-only — ``predict_proba()``
+        uses the already-fitted ``model_`` attribute.
+        """
+        state = self.__dict__.copy()
+        state.pop("model_factory", None)
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore adapter in inference-only mode (no ``model_factory``).
+
+        Calling ``fit()`` on a deserialized adapter will raise ``TypeError``
+        because ``model_factory`` is None. This is intentional — loaded models
+        are for prediction/SHAP only.
+        """
+        self.__dict__.update(state)
+        if "model_factory" not in self.__dict__:
+            self.model_factory = None
+
     def fit(self, X: np.ndarray, y: np.ndarray) -> "GPUModelCVAdapter":
         """Create a fresh model via factory and fit it.
 
@@ -1380,7 +1416,16 @@ class GPUModelCVAdapter(BaseEstimator, ClassifierMixin):
 
         Returns:
             self
+
+        Raises:
+            TypeError: If called on a deserialized adapter (``model_factory``
+                is None). Loaded models are inference-only.
         """
+        if self.model_factory is None:
+            raise TypeError(
+                f"Cannot fit() a deserialized {self.__class__.__name__} — "
+                f"model_factory is not available. Loaded models are inference-only."
+            )
         self.model_ = self.model_factory()
         self.model_.fit(X, y)
         self.classes_ = np.unique(y)

@@ -14,35 +14,73 @@ __all__ = ["log", "WPSBackgroundEvaluator"]
 
 # %% ../../nbs/features/26_wps_background.ipynb #fccdac31
 class WPSBackgroundEvaluator(FeatureEvaluator):
-    """Extracts periodicity distances for nucleosomes."""
+    """Extracts per-chromosome nucleosome periodicity metrics.
+
+    Each row in the source parquet represents one chromosome (``group_id``).
+    Metrics are pre-computed by krewlyzer from long-range WPS autocorrelation:
+
+    - nrl_bp: nucleosome repeat length
+    - nrl_deviation_bp: deviation from expected NRL
+    - periodicity_score: strength of periodic nucleosome signal
+    - adjusted_score: adjusted periodicity score
+    - fragment_ratio: fragment ratio
+
+    Since ``group_id`` is unique per row (one per chromosome), features are
+    extracted directly without aggregation — each row maps to a distinct
+    ``{chromosome}_{metric}`` feature.
+    """
 
     name = "WPSBackground"
     source_file = ".WPS_background.parquet"
     tier = 2
     category = "epigenetics_and_geometry"
 
+    # Metrics extracted per chromosome
+    _metrics = (
+        "nrl_bp",
+        "nrl_deviation_bp",
+        "periodicity_score",
+        "adjusted_score",
+        "fragment_ratio",
+    )
+
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
-        extracted = {}
-        try:
-            if df.empty:
-                return extracted
-            cols = set(df.columns)
+        """Extract per-chromosome periodicity features.
 
-            if "group_id" in cols:
-                metrics = [
-                    "nrl_bp",
-                    "nrl_deviation_bp",
-                    "periodicity_score",
-                    "adjusted_score",
-                    "fragment_ratio",
-                ]
-                for row in df.to_dict("records"):
-                    gi = str(row["group_id"]).replace(" ", "_")
-                    for m in metrics:
-                        if m in cols and pd.notna(row[m]):
-                            extracted[f"{gi}_{m}"] = float(row[m])
-
-            return extracted
-        except Exception as e:
-            log.exception("extraction_failed", evaluator=self.name, error=str(e))
+        Returns:
+            dict mapping ``{group_id}_{metric}`` to float values.
+            Empty dict if no features could be extracted.
+        """
+        if df.empty:
             return {}
+
+        cols = set(df.columns)
+        if "group_id" not in cols:
+            log.warning(
+                "wpsbackground_missing_group_id",
+                evaluator=self.name,
+                columns=sorted(cols),
+            )
+            return {}
+
+        extracted: dict[str, float] = {}
+        for row in df.to_dict("records"):
+            gi = str(row["group_id"]).replace(" ", "_")
+            for m in self._metrics:
+                if m in cols and pd.notna(row[m]):
+                    extracted[f"{gi}_{m}"] = float(row[m])
+
+        if not extracted:
+            log.warning(
+                "wpsbackground_no_features_extracted",
+                evaluator=self.name,
+                n_rows=len(df),
+            )
+        else:
+            log.debug(
+                "wpsbackground_extracted",
+                n_features=len(extracted),
+                n_chromosomes=df["group_id"].nunique(),
+            )
+
+        return extracted

@@ -250,11 +250,35 @@ def _save_fitted_models(
         out_path = output_dir / f"{evaluator}_{name}_model.joblib"
         try:
             joblib.dump(model, out_path)
-            log.info(
-                "joblib_saved", model=name, evaluator=evaluator, path=str(out_path)
-            )
+
+            # Post-write validation: catch truncated/corrupt files.
+            # A valid fitted sklearn model is always >100 bytes.
+            # A truncated pickle header from failed serialization is exactly
+            # 2 bytes (\x80\x04). Use 100 bytes as a generous safety margin.
+            file_size = out_path.stat().st_size
+            if file_size < 100:
+                out_path.unlink()  # Remove corrupt file
+                log.error(
+                    "joblib_corrupt_removed",
+                    model=name,
+                    evaluator=evaluator,
+                    size_bytes=file_size,
+                    reason="File too small — likely failed to serialize "
+                    "(e.g. unpicklable lambda in model object)",
+                )
+            else:
+                log.info(
+                    "joblib_saved",
+                    model=name,
+                    evaluator=evaluator,
+                    path=str(out_path),
+                    size_mb=round(file_size / 1024 / 1024, 1),
+                )
         except Exception as e:
-            log.warning(
+            # Clean up any partial file left by failed dump
+            if out_path.exists():
+                out_path.unlink()
+            log.error(
                 "joblib_save_failed",
                 model=name,
                 evaluator=evaluator,
