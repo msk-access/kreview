@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-06-08
+
 ### Fixed
 - **WPSGenome Extraction Failure**: Removed broken SQL pushdown (`extract_sql()`) that used `trim(col, '[]')` on native `list<float>` arrays, silently producing NULL results. Replaced with pure-Python `extract()` using `_to_array()` helper that handles numpy arrays, Python lists, and legacy string-encoded arrays. Added `_to_array()` as a public utility.
 - **WPSGenome Last-Row-Wins Bug**: Rewrote `extract()` to aggregate per-region-type (TSS, CTCF) statistics across all regions instead of overwriting with the last row. Now computes mean, peak_valley, std, and MAD of per-region array means.
