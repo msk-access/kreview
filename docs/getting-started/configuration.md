@@ -58,6 +58,27 @@ These are configurable directly from the CLI via `--min-vaf`, `--min-variants`, 
 
 ---
 
+## Ablation Configuration (v0.0.20+)
+
+Feature group ablation is controlled by two parameters in the CLI and Nextflow config:
+
+| Parameter | CLI Flag | NF Param | Default | Description |
+|-----------|----------|----------|---------|-------------|
+| Run ablation | `--run-ablation` | `run_ablation` | `false` | Enable nested CV feature group ablation |
+| Inner folds | `--ablation-inner-folds` | `ablation_inner_folds` | `3` | Number of inner CV folds for subset scoring |
+
+When enabled, ablation runs between feature selection and model evaluation. It uses `sensitivity_at_100spec_healthy` as the optimization metric for selecting the best feature group subset per model.
+
+```bash
+# Enable ablation with 3-fold inner CV
+kreview run ... --run-ablation --ablation-inner-folds 3
+
+# Nextflow
+nextflow run ... --run_ablation true --ablation_inner_folds 3
+```
+
+---
+
 ## The `cbioportal_dir`
 
 !!! danger "Required Files"

@@ -94,6 +94,7 @@ nav:
       - Core Operations: api-reference/core.md
       - Labeling Engine: api-reference/labels.md
       - Evaluation Engine: api-reference/eval-engine.md
+      - Scoreboard: api-reference/scoreboard.md
       - Feature Cards: api-reference/feature-cards.md
       - Evaluator Registry: api-reference/features.md
   - Changelog: changelog.md

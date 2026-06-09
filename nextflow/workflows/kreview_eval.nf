@@ -10,8 +10,12 @@
 //        |
 //   KREVIEW_SELECT_SINGLE ×N   (per-evaluator feature selection)
 //        |
-//     +---+---+---+
-//     |       |   |
+//     +---+---+---+---+
+//     |       |   |   |
+//  [ABLATE]  FUSE |   |        (optional: params.run_ablation)
+//     |       |   |   |
+//   MERGE_ABL |   |   |        (→ best_subset.json per evaluator)
+//     |       |   |   |
 //  EVAL_CPU  FUSE EVAL_GPU     (CPU ×N parallel, GPU ×N on gpushort)
 //  (×N)      (1)  (×N)
 //     |       |   |

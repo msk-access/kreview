@@ -2179,6 +2179,9 @@ def cpu_models(
                 else:
                     final_model = last_fitted
 
+                # Store refit feature names for holdout slicing (GAP 1 fix)
+                results[f"{model_name}_refit_features"] = refit_feats
+
                 if model_name == "lr":
                     lr_fitted = final_model
                 elif model_name == "rf":
@@ -2187,7 +2190,8 @@ def cpu_models(
                     xgb_fitted = final_model
 
                 log.info("nested_cv_model_done", model=model_name,
-                         auc=f"{results.get(f'auc_{model_name}', 0):.4f}")
+                         auc=f"{results.get(f'auc_{model_name}', 0):.4f}",
+                         n_refit_features=len(refit_feats))
 
             # ── OOF labels ──
             results["oof_labels"] = y.tolist()
@@ -2970,8 +2974,17 @@ def gpu_models(
                 if last_fitted is not None:
                     fitted_models[model_name] = last_fitted
 
+                # Track features used by last fold's model for holdout (GAP 1)
+                last_fold_key = str(max(set(fold_arr)))
+                if last_fold_key in model_fold_data:
+                    last_feats = model_fold_data[last_fold_key].get("features", [])
+                else:
+                    last_feats = feature_names or []
+                results[f"{model_name}_refit_features"] = last_feats
+
                 log.info("nested_cv_gpu_model_done", model=model_name,
-                         auc=f"{results.get(f'auc_{model_name}', 0):.4f}")
+                         auc=f"{results.get(f'auc_{model_name}', 0):.4f}",
+                         n_refit_features=len(last_feats))
 
             results["oof_labels"] = y.tolist()
             results["nested_cv"] = True

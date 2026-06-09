@@ -21,6 +21,9 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
     - `select_single.nf` — Per-evaluator feature scoring + mRMR/hybrid-union selection
     - `eval_cpu_single.nf` — Per-evaluator CPU model evaluation (LR, RF, XGB)
     - `eval_gpu_single.nf` — Per-evaluator GPU model evaluation (TabPFN, TabPFN-FT, TabICL, TabICL-FT) — all models in one process
+    - `ablate_cpu_single.nf` — Nested CV feature group ablation (CPU models, v0.0.20+)
+    - `ablate_gpu_single.nf` — Nested CV feature group ablation (GPU models, v0.0.20+)
+    - `merge_ablation.nf` — Merge CPU + GPU ablation → `best_subset.json` (v0.0.20+)
     - `fuse.nf` — Super-matrix construction (all evaluators merged)
     - `scoreboard.nf` — Cross-evaluator scoreboard aggregation (v0.0.15)
     - `eval_multimodal.nf` — **[LEGACY]** Monolithic cross-evaluator stacking via `kreview eval multimodal run` (kept for standalone testing)
@@ -39,10 +42,17 @@ The pipeline supports two modes controlled by `params.pipeline_mode`:
 ```mermaid
 graph LR
     classDef step fill:#8b5cf6,stroke:#5b21b6,color:#fff;
+    classDef opt fill:#f59e0b,stroke:#b45309,color:#fff;
     A["Label (1 job)"]:::step --> B["Extract ×N"]:::step
     B --> C["Select ×N"]:::step
-    C --> D["Eval CPU ×N"]:::step
-    C --> E["Eval GPU ×N"]:::step
+    C --> ABL_CPU["Ablate CPU ×N"]:::opt
+    C --> ABL_GPU["Ablate GPU ×N"]:::opt
+    ABL_CPU --> ABL_MERGE["Merge Ablation ×N"]:::opt
+    ABL_GPU --> ABL_MERGE
+    ABL_MERGE --> D["Eval CPU ×N"]:::step
+    ABL_MERGE --> E["Eval GPU ×N"]:::step
+    C --> D
+    C --> E
     C --> F["Fuse (1 job)"]:::step
     D --> S["Scoreboard"]:::step
     E --> S
@@ -60,6 +70,9 @@ graph LR
 
 !!! note "Decomposed Multimodal Pipeline (v0.0.18+)"
     The multimodal pipeline is decomposed into 4 sequential stages: `prep` → `single ×M` → `ablation` → `merge`. The `single` stage is parallelized across models (CPU and GPU variants). This replaces the legacy monolithic `KREVIEW_EVAL_MULTIMODAL` process, which is kept for standalone testing via `kreview eval multimodal run`.
+
+!!! tip "Feature Group Ablation (v0.0.20+, optional)"
+    When `params.run_ablation = true`, the ABLATE stages (amber nodes) run between SELECT and EVAL. They use inner cross-validation (`sensitivity_at_100spec_healthy`) to identify the best feature group subset per model, producing a `best_subset.json` consumed by EVAL. When disabled (default), EVAL runs directly after SELECT.
 
 For a detailed architecture overview with notebook-to-module mappings, see the [Pipeline Architecture](../developer/pipeline-architecture.md) developer guide.
 
@@ -88,6 +101,11 @@ outdir/
 │   └── fused/
 │       └── super_matrix.parquet                # All evaluators merged
 ├── models/
+│   ├── ablation/                               # Feature group ablation (v0.0.20+)
+│   │   ├── AtacOnTarget_ablation_cpu_results.json  # Per-fold best subsets (CPU)
+│   │   ├── AtacOnTarget_ablation_gpu_results.json  # Per-fold best subsets (GPU)
+│   │   ├── AtacOnTarget_best_subset.json           # Merged winning features
+│   │   └── ...
 │   ├── cpu/                                    # Per-evaluator CPU model results
 │   │   ├── AtacOnTarget_model_results.json
 │   │   ├── AtacOnTarget_lr_model.joblib
@@ -135,6 +153,8 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --run_multimodal_eval true \
   --multimodal_selection boruta_shap \
   --multimodal_gpu_models "tabpfn_ft,tabicl_ft" \
+  --run_ablation true \
+  --ablation_inner_folds 3 \
   --ch_hotspot_maf /path/to/ch_hotspots.maf \
   --max_gpu_features 150 \
   --seed 42 \

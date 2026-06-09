@@ -72,7 +72,7 @@ def eval_ablate_cpu(
     """
     from kreview.eval_engine import ablate_feature_groups
 
-    print(f"╔══ ABLATE CPU ═══════════════════════════════════════╗", flush=True)
+    print("╔══ ABLATE CPU ═══════════════════════════════════════╗", flush=True)
     print(f"  Matrix:      {matrix}", flush=True)
     print(f"  Outer folds: {n_outer_folds}", flush=True)
     print(f"  Inner folds: {n_inner_folds}", flush=True)
@@ -92,12 +92,12 @@ def eval_ablate_cpu(
     if "error" in result:
         print(f"  ⚠ ERROR: {result['error']}", flush=True)
     elif result.get("passthrough"):
-        print(f"  ℹ Passthrough (single feature group)", flush=True)
+        print("  ℹ Passthrough (single feature group)", flush=True)
     else:
         print(f"  ✓ Ablation complete: {result.get('n_groups', 0)} groups, "
               f"{len(result.get('per_fold_results', []))} folds", flush=True)
     print(f"  Time: {elapsed:.1f}s", flush=True)
-    print(f"╚════════════════════════════════════════════════════╝", flush=True)
+    print("╚════════════════════════════════════════════════════╝", flush=True)
 
 
 @ablate_app.command("gpu")
@@ -122,7 +122,7 @@ def eval_ablate_gpu(
     _validate_gpu_models(model_tuple)
     from kreview.eval_engine import ablate_feature_groups
 
-    print(f"╔══ ABLATE GPU ═══════════════════════════════════════╗", flush=True)
+    print("╔══ ABLATE GPU ═══════════════════════════════════════╗", flush=True)
     print(f"  Matrix:      {matrix}", flush=True)
     print(f"  Models:      {model_tuple}", flush=True)
     print(f"  Device:      {device}", flush=True)
@@ -144,9 +144,9 @@ def eval_ablate_gpu(
     if "error" in result:
         print(f"  ⚠ ERROR: {result['error']}", flush=True)
     else:
-        print(f"  ✓ GPU ablation complete", flush=True)
+        print("  ✓ GPU ablation complete", flush=True)
     print(f"  Time: {elapsed:.1f}s", flush=True)
-    print(f"╚════════════════════════════════════════════════════╝", flush=True)
+    print("╚════════════════════════════════════════════════════╝", flush=True)
 
 
 @ablate_app.command("merge")
@@ -162,7 +162,7 @@ def eval_ablate_merge(
     """
     from kreview.eval_engine import merge_ablation
 
-    print(f"╔══ ABLATE MERGE ═════════════════════════════════════╗", flush=True)
+    print("╔══ ABLATE MERGE ═════════════════════════════════════╗", flush=True)
     print(f"  CPU JSON: {cpu_json}", flush=True)
     print(f"  GPU JSON: {gpu_json or 'None'}", flush=True)
 
@@ -175,8 +175,8 @@ def eval_ablate_merge(
     n_models = len(result.get("per_model_per_fold_features", {}))
     print(f"  ✓ Merged: {n_models} models", flush=True)
     if result.get("gpu_error"):
-        print(f"  ⚠ GPU ablation had errors — CPU-only results", flush=True)
-    print(f"╚════════════════════════════════════════════════════╝", flush=True)
+        print("  ⚠ GPU ablation had errors — CPU-only results", flush=True)
+    print("╚════════════════════════════════════════════════════╝", flush=True)
 
 
 def _validate_gpu_models(models: tuple[str, ...], flag_name: str = "--models") -> None:
@@ -583,7 +583,7 @@ def eval_cpu(
                         fold_assign = bs_data.get("fold_assignment")
                         print(f"  Using best_subset: {bs_path.name}", flush=True)
                     else:
-                        print(f"  Passthrough (single group) — using all features",
+                        print("  Passthrough (single group) — using all features",
                               flush=True)
                 else:
                     print(f"  ⚠ best_subset not found: {bs_path}", flush=True)
@@ -615,9 +615,21 @@ def eval_cpu(
 
                 for model_name, fitted_model in [("lr", lr), ("rf", rf), ("xgb", xgb)]:
                     if fitted_model is not None:
+                        # When nested CV is active, the refitted model uses a
+                        # feature subset. Slice X_test to match (GAP 1 fix).
+                        refit_feats = results.get(f"{model_name}_refit_features")
+                        if refit_feats and per_fold_data is not None:
+                            refit_idx = [
+                                feature_cols.index(f) for f in refit_feats
+                                if f in feature_cols
+                            ]
+                            X_test_model = X_test[:, refit_idx] if refit_idx else X_test
+                        else:
+                            X_test_model = X_test
+
                         holdout_res = evaluate_holdout(
                             fitted_model,
-                            X_test,
+                            X_test_model,
                             y_test,
                             model_name,
                             sample_labels=test_labels,
@@ -930,9 +942,21 @@ def eval_gpu(
 
                 for model_name, fitted_model in fitted.items():
                     if fitted_model is not None:
+                        # When nested CV is active, the fitted GPU model uses
+                        # a feature subset. Slice X_test to match (GAP 1 fix).
+                        refit_feats = results.get(f"{model_name}_refit_features")
+                        if refit_feats and per_fold_data is not None:
+                            refit_idx = [
+                                feature_cols.index(f) for f in refit_feats
+                                if f in feature_cols
+                            ]
+                            X_test_model = X_test[:, refit_idx] if refit_idx else X_test_gpu
+                        else:
+                            X_test_model = X_test_gpu
+
                         holdout_res = evaluate_holdout(
                             fitted_model,
-                            X_test_gpu,
+                            X_test_model,
                             y_test,
                             model_name,
                             sample_labels=test_labels,
