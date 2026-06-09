@@ -162,6 +162,20 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
             for m_id, auc_val in all_aucs.items():
                 rec[f"auc_{m_id}"] = auc_val
 
+            # Ablation info (v0.0.20+)
+            rec["nested_cv"] = data.get("nested_cv", False)
+
+            # Best sensitivity@100spec_healthy across ALL models
+            best_sh = np.nan
+            for m_id in all_aucs.keys():
+                sh_key = f"{m_id}_sensitivity_at_100spec_healthy"
+                sh_val = data.get(sh_key)
+                if sh_val is None and "stacking" in data:
+                    sh_val = data["stacking"].get(sh_key)
+                if sh_val is not None and (np.isnan(best_sh) or sh_val > best_sh):
+                    best_sh = sh_val
+            rec["best_sens_100spec_healthy"] = best_sh
+
             records.append(rec)
         except Exception as exc:
             log.warning(
