@@ -94,8 +94,11 @@ def eval_ablate_cpu(
     elif result.get("passthrough"):
         print("  ℹ Passthrough (single feature group)", flush=True)
     else:
-        print(f"  ✓ Ablation complete: {result.get('n_groups', 0)} groups, "
-              f"{len(result.get('per_fold_results', []))} folds", flush=True)
+        print(
+            f"  ✓ Ablation complete: {result.get('n_groups', 0)} groups, "
+            f"{len(result.get('per_fold_results', []))} folds",
+            flush=True,
+        )
     print(f"  Time: {elapsed:.1f}s", flush=True)
     print("╚════════════════════════════════════════════════════╝", flush=True)
 
@@ -105,13 +108,18 @@ def eval_ablate_gpu(
     matrix: Path = typer.Option(..., help="Path to selected matrix parquet"),
     output: Path = typer.Option(".", help="Output directory for ablation JSON"),
     models: str = typer.Option("tabpfn,tabicl", help="Comma-separated GPU model names"),
-    n_outer_folds: int = typer.Option(5, help="Outer CV folds (must match CPU ablation)"),
+    n_outer_folds: int = typer.Option(
+        5, help="Outer CV folds (must match CPU ablation)"
+    ),
     n_inner_folds: int = typer.Option(3, help="Inner CV folds for subset selection"),
     seed: int = typer.Option(42, help="Random seed"),
     device: str = typer.Option("cuda", help="PyTorch device"),
     max_gpu_features: int = typer.Option(150, help="Feature cap for GPU models"),
-    eval_stats: Path = typer.Option(None, "--eval-stats",
-        help="Path to eval_stats parquet for score-based feature capping"),
+    eval_stats: Path = typer.Option(
+        None,
+        "--eval-stats",
+        help="Path to eval_stats parquet for score-based feature capping",
+    ),
 ):
     """GPU feature group ablation (TabPFN, TabICL) with nested CV.
 
@@ -583,8 +591,10 @@ def eval_cpu(
                         fold_assign = bs_data.get("fold_assignment")
                         print(f"  Using best_subset: {bs_path.name}", flush=True)
                     else:
-                        print("  Passthrough (single group) — using all features",
-                              flush=True)
+                        print(
+                            "  Passthrough (single group) — using all features",
+                            flush=True,
+                        )
                 else:
                     print(f"  ⚠ best_subset not found: {bs_path}", flush=True)
 
@@ -620,7 +630,8 @@ def eval_cpu(
                         refit_feats = results.get(f"{model_name}_refit_features")
                         if refit_feats and per_fold_data is not None:
                             refit_idx = [
-                                feature_cols.index(f) for f in refit_feats
+                                feature_cols.index(f)
+                                for f in refit_feats
                                 if f in feature_cols
                             ]
                             X_test_model = X_test[:, refit_idx] if refit_idx else X_test
@@ -947,10 +958,13 @@ def eval_gpu(
                         refit_feats = results.get(f"{model_name}_refit_features")
                         if refit_feats and per_fold_data is not None:
                             refit_idx = [
-                                feature_cols.index(f) for f in refit_feats
+                                feature_cols.index(f)
+                                for f in refit_feats
                                 if f in feature_cols
                             ]
-                            X_test_model = X_test[:, refit_idx] if refit_idx else X_test_gpu
+                            X_test_model = (
+                                X_test[:, refit_idx] if refit_idx else X_test_gpu
+                            )
                         else:
                             X_test_model = X_test_gpu
 

@@ -837,6 +837,7 @@ def identify_feature_groups(
     """
     if meta_cols is None:
         from kreview.core import LABEL_META_COLS
+
         meta_cols = LABEL_META_COLS
 
     groups: dict[str, list[str]] = {}
@@ -971,7 +972,8 @@ def _inner_cv_sensitivity(
     if n_pos < n_inner_folds or n_neg < n_inner_folds:
         log.debug(
             "inner_cv_insufficient_samples",
-            n_pos=n_pos, n_neg=n_neg,
+            n_pos=n_pos,
+            n_neg=n_neg,
             n_inner_folds=n_inner_folds,
         )
         return 0.0
@@ -1089,8 +1091,13 @@ def ablate_feature_groups(
     matrix_path = Path(matrix_path)
     evaluator = matrix_path.stem.replace("_matrix", "")
 
-    log.info("ablation_start", evaluator=evaluator, models=models,
-             n_outer=n_outer_folds, n_inner=n_inner_folds)
+    log.info(
+        "ablation_start",
+        evaluator=evaluator,
+        models=models,
+        n_outer=n_outer_folds,
+        n_inner=n_inner_folds,
+    )
 
     # ── 1. Load matrix and filter to train split ──
     df = pd.read_parquet(matrix_path)
@@ -1102,8 +1109,11 @@ def ablate_feature_groups(
         df = df[train_mask].copy()
         log.info("ablation_train_filter", n_train=len(df), n_holdout=n_excluded)
     else:
-        log.warning("ablation_no_split_column", evaluator=evaluator,
-                    impact="using all samples — holdout leakage risk")
+        log.warning(
+            "ablation_no_split_column",
+            evaluator=evaluator,
+            impact="using all samples — holdout leakage risk",
+        )
 
     # ── 2. Build binary target ──
     model_df, y = build_binary_target(df, label_col="label")
@@ -1111,7 +1121,8 @@ def ablate_feature_groups(
 
     # ── 3. Identify feature columns and groups ──
     feature_cols = [
-        c for c in model_df.select_dtypes(include=np.number).columns
+        c
+        for c in model_df.select_dtypes(include=np.number).columns
         if c not in LABEL_META_COLS
     ]
     if not feature_cols:
@@ -1122,8 +1133,9 @@ def ablate_feature_groups(
     model_df[feature_cols] = _impute(model_df[feature_cols], "median")
     nonconst = [c for c in feature_cols if model_df[c].std() > 0]
     if len(nonconst) < len(feature_cols):
-        log.info("ablation_dropped_zero_var",
-                 n_dropped=len(feature_cols) - len(nonconst))
+        log.info(
+            "ablation_dropped_zero_var", n_dropped=len(feature_cols) - len(nonconst)
+        )
     feature_cols = nonconst
 
     groups = identify_feature_groups(feature_cols)
@@ -1131,8 +1143,9 @@ def ablate_feature_groups(
 
     if len(subsets) == 1:
         # Single group → passthrough, no ablation needed
-        log.info("ablation_passthrough", evaluator=evaluator,
-                 reason="single_feature_group")
+        log.info(
+            "ablation_passthrough", evaluator=evaluator, reason="single_feature_group"
+        )
         result = {
             "evaluator": evaluator,
             "passthrough": True,
@@ -1161,9 +1174,9 @@ def ablate_feature_groups(
     fold_assignment = np.full(len(y), -1, dtype=int)
 
     per_fold_results = []
-    for fold_idx, (train_idx, val_idx) in enumerate(outer_cv.split(
-        model_df[feature_cols].values, y
-    )):
+    for fold_idx, (train_idx, val_idx) in enumerate(
+        outer_cv.split(model_df[feature_cols].values, y)
+    ):
         fold_assignment[val_idx] = fold_idx
         fold_result = {"fold": fold_idx, "models": {}}
 
@@ -1174,28 +1187,37 @@ def ablate_feature_groups(
         y_outer_train = y_full[train_idx]
         labels_outer_train = sample_labels[train_idx]
 
-        log.info("ablation_outer_fold", fold=fold_idx,
-                 n_train=len(train_idx), n_val=len(val_idx))
+        log.info(
+            "ablation_outer_fold",
+            fold=fold_idx,
+            n_train=len(train_idx),
+            n_val=len(val_idx),
+        )
 
         for model_name, model_factory in model_factories.items():
             model_scores: dict[str, float] = {}
 
             for subset_name, subset_cols in subsets.items():
                 # Map subset columns to indices in feature_cols
-                col_indices = [feature_cols.index(c) for c in subset_cols
-                               if c in feature_cols]
+                col_indices = [
+                    feature_cols.index(c) for c in subset_cols if c in feature_cols
+                ]
                 if not col_indices:
                     model_scores[subset_name] = 0.0
                     continue
 
                 # Apply GPU feature cap if needed
-                if (max_gpu_features and model_name in _GPU_MODEL_NAMES
-                        and len(col_indices) > max_gpu_features):
+                if (
+                    max_gpu_features
+                    and model_name in _GPU_MODEL_NAMES
+                    and len(col_indices) > max_gpu_features
+                ):
                     if capped_features:
                         # Score-based: keep only top features by univariate AUC
                         cap_set = set(capped_features[:max_gpu_features])
-                        col_indices = [i for i in col_indices
-                                       if feature_cols[i] in cap_set]
+                        col_indices = [
+                            i for i in col_indices if feature_cols[i] in cap_set
+                        ]
                     else:
                         # Variance-based fallback: keep highest-variance features
                         variances = np.var(X_outer_train[:, col_indices], axis=0)
@@ -1215,9 +1237,13 @@ def ablate_feature_groups(
                     )
                     model_scores[subset_name] = score
                 except Exception as e:
-                    log.warning("ablation_inner_cv_error",
-                                model=model_name, subset=subset_name,
-                                fold=fold_idx, error=str(e))
+                    log.warning(
+                        "ablation_inner_cv_error",
+                        model=model_name,
+                        subset=subset_name,
+                        fold=fold_idx,
+                        error=str(e),
+                    )
                     model_scores[subset_name] = 0.0
 
             # Determine winner for this model in this fold
@@ -1233,11 +1259,14 @@ def ablate_feature_groups(
                 "winner_features": subsets.get(winner, subsets["ALL"]),
             }
 
-            log.info("ablation_fold_model_done",
-                     fold=fold_idx, model=model_name,
-                     winner=winner,
-                     winner_score=f"{model_scores.get(winner, 0.0):.4f}",
-                     n_subsets_evaluated=len(model_scores))
+            log.info(
+                "ablation_fold_model_done",
+                fold=fold_idx,
+                model=model_name,
+                winner=winner,
+                winner_score=f"{model_scores.get(winner, 0.0):.4f}",
+                n_subsets_evaluated=len(model_scores),
+            )
 
         per_fold_results.append(fold_result)
 
@@ -1258,8 +1287,12 @@ def ablate_feature_groups(
         "random_state": random_state,
     }
 
-    log.info("ablation_complete", evaluator=evaluator,
-             n_folds=n_outer_folds, n_models=len(model_factories))
+    log.info(
+        "ablation_complete",
+        evaluator=evaluator,
+        n_folds=n_outer_folds,
+        n_models=len(model_factories),
+    )
 
     # ── 8. Save output ──
     if output_path:
@@ -1293,24 +1326,37 @@ def _build_ablation_model_factories(
 
     for name in models:
         if name == "lr":
-            factories["lr"] = lambda: Pipeline([
-                ("scaler", StandardScaler()),
-                ("clf", LogisticRegression(
-                    max_iter=2000, solver="lbfgs",
-                    class_weight="balanced", random_state=42,
-                )),
-            ])
+            factories["lr"] = lambda: Pipeline(
+                [
+                    ("scaler", StandardScaler()),
+                    (
+                        "clf",
+                        LogisticRegression(
+                            max_iter=2000,
+                            solver="lbfgs",
+                            class_weight="balanced",
+                            random_state=42,
+                        ),
+                    ),
+                ]
+            )
         elif name == "rf":
             factories["rf"] = lambda: RandomForestClassifier(
-                n_estimators=500, max_depth=8,
-                class_weight="balanced", random_state=42, n_jobs=-1,
+                n_estimators=500,
+                max_depth=8,
+                class_weight="balanced",
+                random_state=42,
+                n_jobs=-1,
             )
         elif name == "xgb":
+
             def _xgb_factory():
                 try:
                     from xgboost import XGBClassifier
+
                     return XGBClassifier(
-                        n_estimators=300, max_depth=6,
+                        n_estimators=300,
+                        max_depth=6,
                         learning_rate=0.1,
                         scale_pos_weight=1.0,
                         use_label_encoder=False,
@@ -1322,16 +1368,22 @@ def _build_ablation_model_factories(
                 except ImportError:
                     log.warning("xgb_not_available", fallback="rf")
                     return RandomForestClassifier(
-                        n_estimators=500, max_depth=8,
-                        class_weight="balanced", random_state=42, n_jobs=-1,
+                        n_estimators=500,
+                        max_depth=8,
+                        class_weight="balanced",
+                        random_state=42,
+                        n_jobs=-1,
                     )
+
             factories["xgb"] = _xgb_factory
         elif name in ("tabpfn", "tabicl"):
             # Zero-shot only for inner CV ablation
             _name = name
             _device = device
+
             def _gpu_factory(n=_name, d=_device):
                 return GPUModelCVAdapter(model_name=n, device=d)
+
             factories[name] = _gpu_factory
         else:
             log.warning("unknown_ablation_model", name=name)
@@ -1362,11 +1414,16 @@ def _load_feature_cap(
     """
     try:
         stats_df = pd.read_parquet(eval_stats_path)
-        if "feature_column" not in stats_df.columns or "univariate_auc" not in stats_df.columns:
+        if (
+            "feature_column" not in stats_df.columns
+            or "univariate_auc" not in stats_df.columns
+        ):
             log.warning("eval_stats_missing_columns", path=str(eval_stats_path))
             return None
         available = stats_df[stats_df["feature_column"].isin(feature_cols)]
-        top = available.nlargest(max_features, "univariate_auc")["feature_column"].tolist()
+        top = available.nlargest(max_features, "univariate_auc")[
+            "feature_column"
+        ].tolist()
         log.info("feature_cap_loaded", n_capped=len(top), max_features=max_features)
         return top
     except Exception as e:
@@ -1480,14 +1537,17 @@ def merge_ablation(
                 with open(gpu_json_path) as f:
                     gpu_result = json.load(f)
                 if "error" in gpu_result:
-                    log.warning("merge_ablation_gpu_error",
-                                evaluator=evaluator,
-                                error=gpu_result["error"])
+                    log.warning(
+                        "merge_ablation_gpu_error",
+                        evaluator=evaluator,
+                        error=gpu_result["error"],
+                    )
                     gpu_error = True
                     gpu_result = None
             except Exception as e:
-                log.warning("merge_ablation_gpu_load_failed",
-                            evaluator=evaluator, error=str(e))
+                log.warning(
+                    "merge_ablation_gpu_load_failed", evaluator=evaluator, error=str(e)
+                )
                 gpu_error = True
 
     # Combine per-fold results from CPU and GPU
@@ -1532,9 +1592,13 @@ def merge_ablation(
         "models_merged": list(per_model_per_fold.keys()),
     }
 
-    log.info("merge_ablation_complete", evaluator=evaluator,
-             n_models=len(per_model_per_fold),
-             n_folds=n_folds, gpu_error=gpu_error)
+    log.info(
+        "merge_ablation_complete",
+        evaluator=evaluator,
+        n_models=len(per_model_per_fold),
+        n_folds=n_folds,
+        gpu_error=gpu_error,
+    )
 
     if output_path:
         _save_merged_json(merged, output_path, evaluator)
@@ -1553,8 +1617,9 @@ def _save_merged_json(
     out_path = output_path / f"{evaluator}_best_subset.json"
     with open(out_path, "w") as f:
         json.dump(result, f, indent=2, default=str)
-    log.info("best_subset_saved", path=str(out_path),
-             size_bytes=out_path.stat().st_size)
+    log.info(
+        "best_subset_saved", path=str(out_path), size_bytes=out_path.stat().st_size
+    )
     return out_path
 
 
@@ -1647,9 +1712,7 @@ def _compute_oof_metrics(
                 detected = int((oof_probs[pos_mask] > max_healthy).sum())
             else:
                 detected = 0
-            result[f"{name}_sensitivity_at_100spec_healthy"] = (
-                detected / max(1, n_pos)
-            )
+            result[f"{name}_sensitivity_at_100spec_healthy"] = detected / max(1, n_pos)
             result[f"{name}_threshold_at_100spec_healthy"] = max_healthy
             result[f"{name}_n_detected_at_100spec_healthy"] = detected
 
@@ -2064,31 +2127,46 @@ def cpu_models(
         # ── NESTED CV PATH: per-fold feature subsets from ablation ──
         if per_fold_features is not None and fold_assignment is not None:
             fold_arr = np.array(fold_assignment)
-            log.info("cpu_models_nested_cv", n_folds=folds,
-                     models=list(per_fold_features.keys()))
+            log.info(
+                "cpu_models_nested_cv",
+                n_folds=folds,
+                models=list(per_fold_features.keys()),
+            )
 
             # Build model definitions matching standard path hyperparams
             model_defs = {
-                "lr": lambda: Pipeline([
-                    ("scaler", StandardScaler()),
-                    ("lr", LogisticRegression(
-                        max_iter=1000, random_state=random_state,
-                        class_weight="balanced",
-                    )),
-                ]),
+                "lr": lambda: Pipeline(
+                    [
+                        ("scaler", StandardScaler()),
+                        (
+                            "lr",
+                            LogisticRegression(
+                                max_iter=1000,
+                                random_state=random_state,
+                                class_weight="balanced",
+                            ),
+                        ),
+                    ]
+                ),
                 "rf": lambda: RandomForestClassifier(
-                    n_estimators=100, max_depth=5,
+                    n_estimators=100,
+                    max_depth=5,
                     min_samples_leaf=max(1, min(10, len(y) // 10)),
-                    random_state=random_state, class_weight="balanced",
+                    random_state=random_state,
+                    class_weight="balanced",
                 ),
             }
             # XGB
             try:
                 from xgboost import XGBClassifier as _XGB
+
                 pos_w = len(y[y == 0]) / max(1, len(y[y == 1]))
                 model_defs["xgb"] = lambda: _XGB(
-                    n_estimators=100, max_depth=5, learning_rate=0.1,
-                    random_state=random_state, eval_metric="logloss",
+                    n_estimators=100,
+                    max_depth=5,
+                    learning_rate=0.1,
+                    random_state=random_state,
+                    eval_metric="logloss",
                     scale_pos_weight=pos_w,
                 )
             except Exception:
@@ -2098,8 +2176,11 @@ def cpu_models(
 
             for model_name, model_factory in model_defs.items():
                 if model_name not in per_fold_features:
-                    log.debug("nested_cv_skip_model", model=model_name,
-                              reason="not_in_per_fold_features")
+                    log.debug(
+                        "nested_cv_skip_model",
+                        model=model_name,
+                        reason="not_in_per_fold_features",
+                    )
                     continue
 
                 model_fold_data = per_fold_features[model_name].get("folds", {})
@@ -2118,8 +2199,11 @@ def cpu_models(
                         fold_feats = feature_names if feature_names else []
 
                     # Map feature names to column indices
-                    feat_idx = [feature_names.index(f) for f in fold_feats
-                                if f in (feature_names or [])]
+                    feat_idx = [
+                        feature_names.index(f)
+                        for f in fold_feats
+                        if f in (feature_names or [])
+                    ]
                     if not feat_idx:
                         feat_idx = list(range(X.shape[1]))  # fallback to all
 
@@ -2139,13 +2223,14 @@ def cpu_models(
                 # Verify full OOF coverage
                 nan_count = int(np.isnan(oof_probs).sum())
                 if nan_count > 0:
-                    log.warning("nested_cv_oof_gaps", model=model_name,
-                                n_nan=nan_count)
+                    log.warning("nested_cv_oof_gaps", model=model_name, n_nan=nan_count)
                     oof_probs = np.nan_to_num(oof_probs, nan=0.5)
 
                 # Compute standard metrics from stitched OOF
                 model_res = _compute_oof_metrics(
-                    y, oof_probs, model_name,
+                    y,
+                    oof_probs,
+                    model_name,
                     feature_names=feature_names,
                     sample_labels=sample_labels,
                     random_state=random_state,
@@ -2161,18 +2246,25 @@ def cpu_models(
                 ]
                 if all_fold_feats:
                     from collections import Counter
+
                     feat_counts = Counter(f for flist in all_fold_feats for f in flist)
                     # Features appearing in majority of folds
                     majority = len(all_fold_feats) // 2 + 1
-                    refit_feats = [f for f, c in feat_counts.most_common()
-                                   if c >= majority and f in (feature_names or [])]
+                    refit_feats = [
+                        f
+                        for f, c in feat_counts.most_common()
+                        if c >= majority and f in (feature_names or [])
+                    ]
                     if not refit_feats:
                         refit_feats = feature_names or []
                 else:
                     refit_feats = feature_names or []
 
-                refit_idx = [feature_names.index(f) for f in refit_feats
-                             if f in (feature_names or [])]
+                refit_idx = [
+                    feature_names.index(f)
+                    for f in refit_feats
+                    if f in (feature_names or [])
+                ]
                 if refit_idx:
                     final_model = model_factory()
                     final_model.fit(X[:, refit_idx], y)
@@ -2189,9 +2281,12 @@ def cpu_models(
                 elif model_name == "xgb":
                     xgb_fitted = final_model
 
-                log.info("nested_cv_model_done", model=model_name,
-                         auc=f"{results.get(f'auc_{model_name}', 0):.4f}",
-                         n_refit_features=len(refit_feats))
+                log.info(
+                    "nested_cv_model_done",
+                    model=model_name,
+                    auc=f"{results.get(f'auc_{model_name}', 0):.4f}",
+                    n_refit_features=len(refit_feats),
+                )
 
             # ── OOF labels ──
             results["oof_labels"] = y.tolist()
@@ -2904,8 +2999,11 @@ def gpu_models(
         # ── NESTED CV PATH: per-fold feature subsets from ablation ──
         if per_fold_features is not None and fold_assignment is not None:
             fold_arr = np.array(fold_assignment)
-            log.info("gpu_models_nested_cv", n_folds=folds,
-                     models=list(per_fold_features.keys()))
+            log.info(
+                "gpu_models_nested_cv",
+                n_folds=folds,
+                models=list(per_fold_features.keys()),
+            )
 
             for model_name in models:
                 if model_name not in per_fold_features:
@@ -2926,8 +3024,11 @@ def gpu_models(
                     else:
                         fold_feats = feature_names if feature_names else []
 
-                    feat_idx = [feature_names.index(f) for f in fold_feats
-                                if f in (feature_names or [])]
+                    feat_idx = [
+                        feature_names.index(f)
+                        for f in fold_feats
+                        if f in (feature_names or [])
+                    ]
                     if not feat_idx:
                         feat_idx = list(range(X.shape[1]))
 
@@ -2942,7 +3043,8 @@ def gpu_models(
 
                     try:
                         model = _build_gpu_model(
-                            model_name, device=device,
+                            model_name,
+                            device=device,
                             finetune_epochs=finetune_epochs,
                             finetune_lr=finetune_lr,
                             random_state=random_state,
@@ -2954,17 +3056,24 @@ def gpu_models(
                             oof_probs[test_mask] = model.predict_proba(X_te)[:, 1]
                         last_fitted = model
                     except Exception as e:
-                        log.warning("nested_cv_gpu_fold_error",
-                                    model=model_name, fold=fold_k, error=str(e))
+                        log.warning(
+                            "nested_cv_gpu_fold_error",
+                            model=model_name,
+                            fold=fold_k,
+                            error=str(e),
+                        )
 
                 nan_count = int(np.isnan(oof_probs).sum())
                 if nan_count > 0:
-                    log.warning("nested_cv_gpu_oof_gaps", model=model_name,
-                                n_nan=nan_count)
+                    log.warning(
+                        "nested_cv_gpu_oof_gaps", model=model_name, n_nan=nan_count
+                    )
                     oof_probs = np.nan_to_num(oof_probs, nan=0.5)
 
                 model_res = _compute_oof_metrics(
-                    y, oof_probs, model_name,
+                    y,
+                    oof_probs,
+                    model_name,
                     feature_names=feature_names,
                     sample_labels=sample_labels,
                     random_state=random_state,
@@ -2982,9 +3091,12 @@ def gpu_models(
                     last_feats = feature_names or []
                 results[f"{model_name}_refit_features"] = last_feats
 
-                log.info("nested_cv_gpu_model_done", model=model_name,
-                         auc=f"{results.get(f'auc_{model_name}', 0):.4f}",
-                         n_refit_features=len(last_feats))
+                log.info(
+                    "nested_cv_gpu_model_done",
+                    model=model_name,
+                    auc=f"{results.get(f'auc_{model_name}', 0):.4f}",
+                    n_refit_features=len(last_feats),
+                )
 
             results["oof_labels"] = y.tolist()
             results["nested_cv"] = True
@@ -3087,12 +3199,14 @@ def gpu_models(
                         continue
                     res_sub = _subgroup_metrics(mask, y, oof_preds)
                     if res_sub:
-                        c_stats.append({
-                            "cancer_type": c_type,
-                            "n_samples": int(n_samp),
-                            "n_positives": int(y[mask].sum()),
-                            **res_sub,
-                        })
+                        c_stats.append(
+                            {
+                                "cancer_type": c_type,
+                                "n_samples": int(n_samp),
+                                "n_positives": int(y[mask].sum()),
+                                **res_sub,
+                            }
+                        )
                 results["cancer_type_stats"] = c_stats
 
             # Assay subgroup analysis
@@ -3106,12 +3220,14 @@ def gpu_models(
                         continue
                     res_sub = _subgroup_metrics(mask, y, oof_preds)
                     if res_sub:
-                        a_stats.append({
-                            "assay": a_type,
-                            "n_samples": int(n_samp),
-                            "n_positives": int(y[mask].sum()),
-                            **res_sub,
-                        })
+                        a_stats.append(
+                            {
+                                "assay": a_type,
+                                "n_samples": int(n_samp),
+                                "n_positives": int(y[mask].sum()),
+                                **res_sub,
+                            }
+                        )
                 results["assay_stats"] = a_stats
 
         # Detect when ALL GPU models failed — the results dict will have

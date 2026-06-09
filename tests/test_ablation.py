@@ -23,7 +23,6 @@ from kreview.eval_engine import (
     merge_ablation,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
@@ -239,7 +238,10 @@ class TestScoreboardAblation:
             "TestEval": {
                 "auc_lr": 0.85,
                 "lr_oof_probs": [0.5] * 10,
-                "lr_classification_report": {"1": {"recall": 0.8}, "0": {"recall": 0.9}},
+                "lr_classification_report": {
+                    "1": {"recall": 0.8},
+                    "0": {"recall": 0.9},
+                },
                 "lr_sensitivity_at_100spec_healthy": 0.3,
                 "nested_cv": True,
             }
