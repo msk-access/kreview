@@ -1558,6 +1558,125 @@ def _save_merged_json(
     return out_path
 
 
+def _compute_oof_metrics(
+    y: np.ndarray,
+    oof_probs: np.ndarray,
+    name: str,
+    feature_names: list[str] | None = None,
+    sample_labels: np.ndarray | None = None,
+    random_state: int = 42,
+    fold_assignment: np.ndarray | None = None,
+) -> dict:
+    """Compute all standard metrics from stitched OOF probabilities.
+
+    Shared between the standard path (``cross_val_predict``) and the
+    nested CV path (manual fold iteration with per-fold features).
+    Produces the same keys that :func:`evaluate_model` would.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Binary labels (0/1).
+    oof_probs : np.ndarray
+        Out-of-fold predicted probabilities, one per sample.
+    name : str
+        Model name prefix (e.g. ``"lr"``, ``"rf"``).
+    feature_names : list[str] | None
+        Feature column names (for logging only).
+    sample_labels : np.ndarray | None
+        Original 4-tier labels for healthy-normal specificity.
+    random_state : int
+        Random seed for bootstrap CI.
+    fold_assignment : np.ndarray | None
+        Per-sample fold indices for per-fold AUC computation.
+
+    Returns
+    -------
+    dict
+        Standard metric keys including ``auc_{name}``, sensitivity at
+        fixed specificity, healthy-normal threshold, optimal threshold,
+        classification report, confusion matrix, fold AUCs, etc.
+    """
+    result = {}
+
+    # AUC
+    try:
+        result[f"auc_{name}"] = float(roc_auc_score(y, oof_probs))
+    except ValueError:
+        result[f"auc_{name}"] = 0.5
+    result[f"{name}_oof_probs"] = np.round(oof_probs, 6).tolist()
+
+    # Bootstrap CI
+    try:
+        ci_lo, ci_hi = _bootstrap_auc(y, oof_probs, seed=random_state)
+        result[f"auc_{name}_ci_lower"] = ci_lo
+        result[f"auc_{name}_ci_upper"] = ci_hi
+    except Exception:
+        result[f"auc_{name}_ci_lower"] = result[f"auc_{name}"]
+        result[f"auc_{name}_ci_upper"] = result[f"auc_{name}"]
+
+    # Sensitivity at fixed specificity (100%, 99%, 95%)
+    fpr, tpr, thresholds = roc_curve(y, oof_probs)
+    zero_fpr_mask = fpr == 0.0
+    if zero_fpr_mask.any():
+        sens_100 = float(tpr[zero_fpr_mask][-1])
+        thresh_100 = float(thresholds[zero_fpr_mask][-1])
+    else:
+        sens_100, thresh_100 = 0.0, float("inf")
+
+    result[f"{name}_sensitivity_at_100spec"] = sens_100
+    result[f"{name}_threshold_at_100spec"] = thresh_100
+    result[f"{name}_n_detected_at_100spec"] = int(round(sens_100 * y.sum()))
+    result[f"{name}_n_total_positive"] = int(y.sum())
+
+    for target_spec, label in [(0.99, "99spec"), (0.95, "95spec")]:
+        target_fpr = 1.0 - target_spec
+        valid = fpr <= target_fpr
+        result[f"{name}_sensitivity_at_{label}"] = (
+            float(tpr[valid][-1]) if valid.any() else 0.0
+        )
+
+    # Healthy-normal specificity
+    if sample_labels is not None:
+        healthy_mask = np.array([lbl == "Healthy Normal" for lbl in sample_labels])
+        if healthy_mask.any():
+            max_healthy = float(oof_probs[healthy_mask].max())
+            pos_mask = y == 1
+            n_pos = int(pos_mask.sum())
+            if n_pos > 0:
+                detected = int((oof_probs[pos_mask] > max_healthy).sum())
+            else:
+                detected = 0
+            result[f"{name}_sensitivity_at_100spec_healthy"] = (
+                detected / max(1, n_pos)
+            )
+            result[f"{name}_threshold_at_100spec_healthy"] = max_healthy
+            result[f"{name}_n_detected_at_100spec_healthy"] = detected
+
+    # Optimal threshold + classification metrics
+    threshold = _optimal_threshold(y, oof_probs)
+    result[f"{name}_optimal_threshold"] = threshold
+    cls_rep, cm = _classification_metrics(y, oof_probs, threshold=threshold)
+    result[f"{name}_classification_report"] = cls_rep
+    result[f"{name}_confusion_matrix"] = cm
+
+    # Per-fold AUC tracking
+    if fold_assignment is not None:
+        fold_aucs = []
+        for k in sorted(set(fold_assignment)):
+            mask = np.array(fold_assignment) == k
+            if len(np.unique(y[mask])) == 2:
+                try:
+                    fold_aucs.append(float(roc_auc_score(y[mask], oof_probs[mask])))
+                except ValueError:
+                    pass
+        if fold_aucs:
+            result[f"{name}_fold_aucs"] = fold_aucs
+            result[f"{name}_auc_std"] = float(np.std(fold_aucs))
+
+    return result
+
+
 # ── Universal Model Evaluator ─────────────────────────────────────────────────
 
 
@@ -1882,6 +2001,8 @@ def cpu_models(
     compute_shap: bool = False,
     shap_samples: int = 500,
     sample_labels: np.ndarray | None = None,
+    per_fold_features: dict | None = None,
+    fold_assignment: list | np.ndarray | None = None,
 ) -> tuple[dict, object, object, object]:
     """Train LR, RF, and XGB on a feature matrix with stratified CV.
 
@@ -1889,9 +2010,19 @@ def cpu_models(
     cross-model diagnostics (AUC deltas, top features, threshold sweep,
     DCA, feature stability, subgroup analysis).
 
+    When ``per_fold_features`` and ``fold_assignment`` are provided
+    (from nested CV ablation), bypasses ``evaluate_model()`` and uses
+    manual fold iteration with per-fold feature filtering.
+
     Args:
         sample_labels: Original 4-tier labels for computing healthy-normal
             specificity. Passed to ``evaluate_model()``.
+        per_fold_features: Dict from best_subset.json with per-model
+            per-fold feature lists. Structure:
+            ``{model_name: {"folds": {"0": {"features": [...]}, ...}}}``.
+            When ``None``, uses standard path (all features, all folds).
+        fold_assignment: Per-sample fold index array from ablation.
+            Must align with the samples in X/y.
 
     Returns (results_dict, lr_pipeline, rf_model, xgb_model).
 
@@ -1929,6 +2060,146 @@ def cpu_models(
 
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         results["cv_folds_actual"] = folds
+
+        # ── NESTED CV PATH: per-fold feature subsets from ablation ──
+        if per_fold_features is not None and fold_assignment is not None:
+            fold_arr = np.array(fold_assignment)
+            log.info("cpu_models_nested_cv", n_folds=folds,
+                     models=list(per_fold_features.keys()))
+
+            # Build model definitions matching standard path hyperparams
+            model_defs = {
+                "lr": lambda: Pipeline([
+                    ("scaler", StandardScaler()),
+                    ("lr", LogisticRegression(
+                        max_iter=1000, random_state=random_state,
+                        class_weight="balanced",
+                    )),
+                ]),
+                "rf": lambda: RandomForestClassifier(
+                    n_estimators=100, max_depth=5,
+                    min_samples_leaf=max(1, min(10, len(y) // 10)),
+                    random_state=random_state, class_weight="balanced",
+                ),
+            }
+            # XGB
+            try:
+                from xgboost import XGBClassifier as _XGB
+                pos_w = len(y[y == 0]) / max(1, len(y[y == 1]))
+                model_defs["xgb"] = lambda: _XGB(
+                    n_estimators=100, max_depth=5, learning_rate=0.1,
+                    random_state=random_state, eval_metric="logloss",
+                    scale_pos_weight=pos_w,
+                )
+            except Exception:
+                pass
+
+            lr_fitted, rf_fitted, xgb_fitted = None, None, None
+
+            for model_name, model_factory in model_defs.items():
+                if model_name not in per_fold_features:
+                    log.debug("nested_cv_skip_model", model=model_name,
+                              reason="not_in_per_fold_features")
+                    continue
+
+                model_fold_data = per_fold_features[model_name].get("folds", {})
+                oof_probs = np.full(len(y), np.nan)
+                last_fitted = None
+
+                for fold_k in sorted(set(fold_arr)):
+                    train_mask = fold_arr != fold_k
+                    test_mask = fold_arr == fold_k
+
+                    fold_key = str(fold_k)
+                    if fold_key in model_fold_data:
+                        fold_feats = model_fold_data[fold_key].get("features", [])
+                    else:
+                        # Fallback: use all features if this fold is missing
+                        fold_feats = feature_names if feature_names else []
+
+                    # Map feature names to column indices
+                    feat_idx = [feature_names.index(f) for f in fold_feats
+                                if f in (feature_names or [])]
+                    if not feat_idx:
+                        feat_idx = list(range(X.shape[1]))  # fallback to all
+
+                    X_tr = X[train_mask][:, feat_idx]
+                    X_te = X[test_mask][:, feat_idx]
+
+                    m = model_factory()
+                    m.fit(X_tr, y[train_mask])
+
+                    if hasattr(m, "predict_proba"):
+                        oof_probs[test_mask] = m.predict_proba(X_te)[:, 1]
+                    elif hasattr(m, "decision_function"):
+                        oof_probs[test_mask] = m.decision_function(X_te)
+
+                    last_fitted = m
+
+                # Verify full OOF coverage
+                nan_count = int(np.isnan(oof_probs).sum())
+                if nan_count > 0:
+                    log.warning("nested_cv_oof_gaps", model=model_name,
+                                n_nan=nan_count)
+                    oof_probs = np.nan_to_num(oof_probs, nan=0.5)
+
+                # Compute standard metrics from stitched OOF
+                model_res = _compute_oof_metrics(
+                    y, oof_probs, model_name,
+                    feature_names=feature_names,
+                    sample_labels=sample_labels,
+                    random_state=random_state,
+                    fold_assignment=fold_arr,
+                )
+                results.update(model_res)
+
+                # Refit on full data using most-common features
+                all_fold_feats = [
+                    model_fold_data[str(k)].get("features", [])
+                    for k in sorted(set(fold_arr))
+                    if str(k) in model_fold_data
+                ]
+                if all_fold_feats:
+                    from collections import Counter
+                    feat_counts = Counter(f for flist in all_fold_feats for f in flist)
+                    # Features appearing in majority of folds
+                    majority = len(all_fold_feats) // 2 + 1
+                    refit_feats = [f for f, c in feat_counts.most_common()
+                                   if c >= majority and f in (feature_names or [])]
+                    if not refit_feats:
+                        refit_feats = feature_names or []
+                else:
+                    refit_feats = feature_names or []
+
+                refit_idx = [feature_names.index(f) for f in refit_feats
+                             if f in (feature_names or [])]
+                if refit_idx:
+                    final_model = model_factory()
+                    final_model.fit(X[:, refit_idx], y)
+                else:
+                    final_model = last_fitted
+
+                if model_name == "lr":
+                    lr_fitted = final_model
+                elif model_name == "rf":
+                    rf_fitted = final_model
+                elif model_name == "xgb":
+                    xgb_fitted = final_model
+
+                log.info("nested_cv_model_done", model=model_name,
+                         auc=f"{results.get(f'auc_{model_name}', 0):.4f}")
+
+            # ── OOF labels ──
+            results["oof_labels"] = y.tolist()
+            results["nested_cv"] = True
+
+            # ── AUC deltas (same as standard path) ──
+            if "auc_rf" in results and "auc_lr" in results:
+                results["auc_delta_rf_lr"] = results["auc_rf"] - results["auc_lr"]
+            if "auc_xgb" in results and "auc_rf" in results:
+                results["auc_delta_xgb_rf"] = results["auc_xgb"] - results["auc_rf"]
+
+            return results, lr_fitted, rf_fitted, xgb_fitted
 
         # ── Logistic Regression (Pipeline prevents scaler leakage, C-01) ──
         lr_pipe = Pipeline(
@@ -2513,6 +2784,8 @@ def gpu_models(
     sample_labels: np.ndarray | None = None,
     max_gpu_features: int | None = None,
     eval_stats: pd.DataFrame | None = None,
+    per_fold_features: dict | None = None,
+    fold_assignment: list | np.ndarray | None = None,
 ) -> tuple[dict, dict[str, object]]:
     """Train GPU foundation models on a feature matrix.
 
@@ -2544,6 +2817,10 @@ def gpu_models(
         eval_stats: DataFrame from ``score_features()`` containing
             feature scoring columns. Used for intelligent feature
             capping when max_gpu_features is set.
+        per_fold_features: Dict from best_subset.json with per-model
+            per-fold feature lists (from ablation). When provided, uses
+            manual fold iteration with per-fold feature filtering.
+        fold_assignment: Per-sample fold index array from ablation.
 
     Returns:
         (results_dict, fitted_models_dict). fitted_models_dict maps
@@ -2619,6 +2896,86 @@ def gpu_models(
 
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         results["cv_folds_actual"] = folds
+
+        # ── NESTED CV PATH: per-fold feature subsets from ablation ──
+        if per_fold_features is not None and fold_assignment is not None:
+            fold_arr = np.array(fold_assignment)
+            log.info("gpu_models_nested_cv", n_folds=folds,
+                     models=list(per_fold_features.keys()))
+
+            for model_name in models:
+                if model_name not in per_fold_features:
+                    log.debug("nested_cv_gpu_skip", model=model_name)
+                    continue
+
+                model_fold_data = per_fold_features[model_name].get("folds", {})
+                oof_probs = np.full(len(y), np.nan)
+                last_fitted = None
+
+                for fold_k in sorted(set(fold_arr)):
+                    train_mask = fold_arr != fold_k
+                    test_mask = fold_arr == fold_k
+
+                    fold_key = str(fold_k)
+                    if fold_key in model_fold_data:
+                        fold_feats = model_fold_data[fold_key].get("features", [])
+                    else:
+                        fold_feats = feature_names if feature_names else []
+
+                    feat_idx = [feature_names.index(f) for f in fold_feats
+                                if f in (feature_names or [])]
+                    if not feat_idx:
+                        feat_idx = list(range(X.shape[1]))
+
+                    # Apply GPU feature cap per-fold
+                    if max_gpu_features and len(feat_idx) > max_gpu_features:
+                        variances = np.var(X[train_mask][:, feat_idx], axis=0)
+                        top_k = np.argsort(variances)[-max_gpu_features:]
+                        feat_idx = [feat_idx[i] for i in top_k]
+
+                    X_tr = X[train_mask][:, feat_idx]
+                    X_te = X[test_mask][:, feat_idx]
+
+                    try:
+                        model = _build_gpu_model(
+                            model_name, device=device,
+                            finetune_epochs=finetune_epochs,
+                            finetune_lr=finetune_lr,
+                            random_state=random_state,
+                        )
+                        if model is None:
+                            continue
+                        model.fit(X_tr, y[train_mask])
+                        if hasattr(model, "predict_proba"):
+                            oof_probs[test_mask] = model.predict_proba(X_te)[:, 1]
+                        last_fitted = model
+                    except Exception as e:
+                        log.warning("nested_cv_gpu_fold_error",
+                                    model=model_name, fold=fold_k, error=str(e))
+
+                nan_count = int(np.isnan(oof_probs).sum())
+                if nan_count > 0:
+                    log.warning("nested_cv_gpu_oof_gaps", model=model_name,
+                                n_nan=nan_count)
+                    oof_probs = np.nan_to_num(oof_probs, nan=0.5)
+
+                model_res = _compute_oof_metrics(
+                    y, oof_probs, model_name,
+                    feature_names=feature_names,
+                    sample_labels=sample_labels,
+                    random_state=random_state,
+                    fold_assignment=fold_arr,
+                )
+                results.update(model_res)
+                if last_fitted is not None:
+                    fitted_models[model_name] = last_fitted
+
+                log.info("nested_cv_gpu_model_done", model=model_name,
+                         auc=f"{results.get(f'auc_{model_name}', 0):.4f}")
+
+            results["oof_labels"] = y.tolist()
+            results["nested_cv"] = True
+            return results, fitted_models
 
         for model_name in models:
             model = _build_gpu_model(
