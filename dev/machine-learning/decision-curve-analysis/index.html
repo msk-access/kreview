@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1366,6 +1366,8 @@
       
         
       
+        
+      
     
     
     
@@ -1512,6 +1514,34 @@
     
   
     Evaluation Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/scoreboard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoreboard
   
 
     
@@ -1792,11 +1822,11 @@
   
 
 
-<h1 id="decision-curve-analysis-dca">Decision Curve Analysis (DCA)</h1>
+<h1 id="decision-curve-analysis-dca">Decision Curve Analysis (<abbr title="Decision Curve Analysis">DCA</abbr>)</h1>
 <p>Decision Curve Analysis evaluates the <strong>net clinical benefit</strong> of using a predictive model at different probability thresholds, compared to default strategies of treating all patients or treating none.</p>
 <hr>
-<h2 id="why-dca">Why DCA?</h2>
-<p><abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> tells you <em>how well</em> a model discriminates, but not <em>whether using it improves clinical decisions</em>. DCA bridges this gap by asking:</p>
+<h2 id="why-dca">Why <abbr title="Decision Curve Analysis">DCA</abbr>?</h2>
+<p><abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> tells you <em>how well</em> a model discriminates, but not <em>whether using it improves clinical decisions</em>. <abbr title="Decision Curve Analysis">DCA</abbr> bridges this gap by asking:</p>
 <blockquote>
 <p>At a given risk threshold, does using this model result in more correctly identified positives without generating too many false-positive interventions?</p>
 </blockquote>
@@ -1846,13 +1876,13 @@
 </ul>
 <hr>
 <h2 id="in-kreview">In kreview</h2>
-<p>DCA is computed for <abbr title="Random Forest">RF</abbr> and XGBoost models inside <code>single_feature_model()</code> using <code>decision_curve_analysis()</code>:</p>
+<p><abbr title="Decision Curve Analysis">DCA</abbr> is computed for <abbr title="Random Forest">RF</abbr> and XGBoost models inside <code>single_feature_model()</code> using <code>decision_curve_analysis()</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">kreview.eval_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">decision_curve_analysis</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">dca</span> <span class="o">=</span> <span class="n">decision_curve_analysis</span><span class="p">(</span><span class="n">y_true</span><span class="p">,</span> <span class="n">y_prob</span><span class="p">,</span> <span class="n">thresholds</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.99</span><span class="p">,</span> <span class="mi">99</span><span class="p">))</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Returns: {"thresholds", "net_benefit_model", "net_benefit_treat_all"}</span>
 </code></pre></div>
-<p>The dashboard renders DCA on the <strong>Model Validation → Decision Curve Analysis</strong> tab with:</p>
+<p>The dashboard renders <abbr title="Decision Curve Analysis">DCA</abbr> on the <strong>Model Validation → Decision Curve Analysis</strong> tab with:</p>
 <ul>
 <li>Model curves (<abbr title="Random Forest">RF</abbr>, XGBoost) as solid lines</li>
 <li>"Treat All" as a dashed gray line</li>
@@ -1860,7 +1890,7 @@
 </ul>
 <hr>
 <h2 id="clinical-context">Clinical context</h2>
-<p>DCA is most informative when:</p>
+<p><abbr title="Decision Curve Analysis">DCA</abbr> is most informative when:</p>
 <ul>
 <li>The <strong>positive class prevalence</strong> is low (kreview's typical healthy-normal-enriched cohorts)</li>
 <li>The <strong>cost of false positives</strong> is non-trivial (e.g. invasive tissue biopsy, unnecessary treatment)</li>
@@ -1868,7 +1898,7 @@
 </ul>
 <div class="admonition note">
 <p class="admonition-title">Limitation</p>
-<p>DCA assumes a specific decision context (treat vs. don't treat). In fragmentomics research, the "treatment" is typically further diagnostic workup rather than direct therapy. Interpret net benefit accordingly.</p>
+<p><abbr title="Decision Curve Analysis">DCA</abbr> assumes a specific decision context (treat vs. don't treat). In fragmentomics research, the "treatment" is typically further diagnostic workup rather than direct therapy. Interpret net benefit accordingly.</p>
 </div>
 <hr>
 <h2 id="references">References</h2>

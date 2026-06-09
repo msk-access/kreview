@@ -28,7 +28,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
 <body data-md-color-accent="custom" data-md-color-primary="custom" data-md-color-scheme="default" dir="ltr">
 <input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox">
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
@@ -685,6 +685,18 @@
 </a>
 </li>
 <li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/scoreboard/">
+<span class="md-ellipsis">
+    
+  
+    Scoreboard
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
 <a class="md-nav__link" href="../../api-reference/feature-cards/">
 <span class="md-ellipsis">
     
@@ -856,10 +868,17 @@
 </nav>
 <pre class="mermaid"><code>graph LR
     classDef step fill:#8b5cf6,stroke:#5b21b6,color:#fff;
+    classDef opt fill:#f59e0b,stroke:#b45309,color:#fff;
     A["Label"]:::step --&gt; B["Extract ×N"]:::step
     B --&gt; C[Select]:::step
-    C --&gt; D["Eval CPU"]:::step
-    C --&gt; E["Eval GPU"]:::step
+    C --&gt; ABL_CPU["Ablate CPU ×N"]:::opt
+    C --&gt; ABL_GPU["Ablate GPU ×N"]:::opt
+    ABL_CPU --&gt; ABL_MERGE["Merge Ablation ×N"]:::opt
+    ABL_GPU --&gt; ABL_MERGE
+    ABL_MERGE --&gt; D["Eval CPU"]:::step
+    ABL_MERGE --&gt; E["Eval GPU"]:::step
+    C --&gt; D
+    C --&gt; E
     C --&gt; F[Fuse]:::step
     D --&gt; S[Scoreboard]:::step
     E --&gt; S
@@ -884,6 +903,10 @@ Use mouse to pan and zoom
 After eval, <code>scoreboard</code> and <code>report</code> run in <strong>parallel</strong>.
 The multimodal pipeline is <strong>decomposed</strong>: <code>prep</code> builds the stacking matrix, <code>single</code> trains per-model stacking classifiers (parallelized across models), <code>ablation</code> runs feature ablation, and <code>merge</code> aggregates final results.
 The legacy monolithic <code>kreview eval multimodal run</code> can also execute the full pipeline as a single step.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Feature Group Ablation (v0.0.20+, optional)</p>
+<p>When <code>params.run_ablation = true</code>, the ABLATE stages (shown in amber) run between SELECT and EVAL. They use nested inner <abbr title="Cross-Validation">CV</abbr> to identify the best feature group subset per model, producing a <code>best_subset.json</code> that EVAL consumes via <code>--best-subset</code>. When <code>run_ablation = false</code> (default), EVAL runs directly after SELECT with all selected features.</p>
 </div>
 <hr>
 <h2 id="command-module-notebook-mapping">Command → Module → Notebook Mapping</h2>
@@ -914,7 +937,25 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <td><code>kreview select</code></td>
 <td><code>cli_select.py:select()</code></td>
 <td><code>nbs/92_cli_select.ipynb</code></td>
-<td>Score features + mRMR/hybrid-union selection</td>
+<td>Score features + <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr>/hybrid-union selection</td>
+</tr>
+<tr>
+<td><code>kreview eval ablate cpu</code></td>
+<td><code>cli_eval.py:eval_ablate_cpu()</code></td>
+<td><code>nbs/91_cli_eval.ipynb</code></td>
+<td>Nested <abbr title="Cross-Validation">CV</abbr> feature group ablation (CPU)</td>
+</tr>
+<tr>
+<td><code>kreview eval ablate gpu</code></td>
+<td><code>cli_eval.py:eval_ablate_gpu()</code></td>
+<td><code>nbs/91_cli_eval.ipynb</code></td>
+<td>Nested <abbr title="Cross-Validation">CV</abbr> feature group ablation (GPU)</td>
+</tr>
+<tr>
+<td><code>kreview eval ablate merge</code></td>
+<td><code>cli_eval.py:eval_ablate_merge()</code></td>
+<td><code>nbs/91_cli_eval.ipynb</code></td>
+<td>Merge CPU + GPU ablation → <code>best_subset.json</code></td>
 </tr>
 <tr>
 <td><code>kreview eval cpu</code></td>
@@ -1004,8 +1045,8 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <tr>
 <td><code>eval_engine.py</code></td>
 <td><code>nbs/02_eval_engine.ipynb</code></td>
-<td><code>cpu_models()</code>, <code>gpu_models()</code>, <code>univariate_auc()</code>, <code>mutual_info_score()</code>, <code>load_model_results()</code>, <code>load_all_model_results()</code>, <code>multimodal_prep()</code>, <code>multimodal_single()</code>, <code>multimodal_ablation()</code>, <code>multimodal_merge()</code></td>
-<td><code>kreview run</code>, <code>kreview eval cpu/gpu</code>, <code>kreview eval multimodal *</code>, <code>selection.py</code>, <code>scoreboard.py</code>, report templates</td>
+<td><code>cpu_models()</code>, <code>gpu_models()</code>, <code>univariate_auc()</code>, <code>mutual_info_score()</code>, <code>load_model_results()</code>, <code>load_all_model_results()</code>, <code>identify_feature_groups()</code>, <code>generate_subsets()</code>, <code>ablate_feature_groups()</code>, <code>merge_ablation()</code>, <code>_compute_oof_metrics()</code>, <code>multimodal_prep()</code>, <code>multimodal_single()</code>, <code>multimodal_ablation()</code>, <code>multimodal_merge()</code></td>
+<td><code>kreview run</code>, <code>kreview eval cpu/gpu</code>, <code>kreview eval ablate *</code>, <code>kreview eval multimodal *</code>, <code>selection.py</code>, <code>scoreboard.py</code>, report templates</td>
 </tr>
 <tr>
 <td><code>scoreboard.py</code></td>
@@ -1045,35 +1086,42 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <a href="#__codelineno-1-3" id="__codelineno-1-3" name="__codelineno-1-3"></a>Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
 <a href="#__codelineno-1-4" id="__codelineno-1-4" name="__codelineno-1-4"></a>          → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
 <a href="#__codelineno-1-5" id="__codelineno-1-5" name="__codelineno-1-5"></a>          → {evaluator}_selection_qc.json  (selection audit trail)
-<a href="#__codelineno-1-6" id="__codelineno-1-6" name="__codelineno-1-6"></a>Eval CPU: → {evaluator}_model_results.json  (AUCs, OOF probs)
-<a href="#__codelineno-1-7" id="__codelineno-1-7" name="__codelineno-1-7"></a>          → {evaluator}_{model}_model.joblib  (trained models)
-<a href="#__codelineno-1-8" id="__codelineno-1-8" name="__codelineno-1-8"></a>Eval GPU: → {evaluator}_gpu_model_results.json  (all GPU model AUCs + OOF probs in one JSON)
-<a href="#__codelineno-1-9" id="__codelineno-1-9" name="__codelineno-1-9"></a>Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
-<a href="#__codelineno-1-10" id="__codelineno-1-10" name="__codelineno-1-10"></a>Scoreboard: → scoreboard_combined__all.parquet  (cross-evaluator rankings)
-<a href="#__codelineno-1-11" id="__codelineno-1-11" name="__codelineno-1-11"></a>Multimodal Prep:     → stacking_matrix.parquet  (OOF probs from all evaluators)
-<a href="#__codelineno-1-12" id="__codelineno-1-12" name="__codelineno-1-12"></a>                     → prep_metadata.json  (feature names, selection QC)
-<a href="#__codelineno-1-13" id="__codelineno-1-13" name="__codelineno-1-13"></a>Multimodal Single:   → stacking_{model}_results.json  (per-model stacking CV)
-<a href="#__codelineno-1-14" id="__codelineno-1-14" name="__codelineno-1-14"></a>Multimodal Ablation: → ablation_results.json  (feature ablation analysis)
-<a href="#__codelineno-1-15" id="__codelineno-1-15" name="__codelineno-1-15"></a>Multimodal Merge:    → multimodal_model_results.json  (final aggregated results)
-<a href="#__codelineno-1-16" id="__codelineno-1-16" name="__codelineno-1-16"></a>Report:   → reports/{evaluator}.html  (interactive dashboards)
+<a href="#__codelineno-1-6" id="__codelineno-1-6" name="__codelineno-1-6"></a>Ablate CPU:  → {evaluator}_ablation_cpu_results.json  (per-fold best subsets for LR/RF/XGB)
+<a href="#__codelineno-1-7" id="__codelineno-1-7" name="__codelineno-1-7"></a>Ablate GPU:  → {evaluator}_ablation_gpu_results.json  (per-fold best subsets for TabPFN/TabICL)
+<a href="#__codelineno-1-8" id="__codelineno-1-8" name="__codelineno-1-8"></a>Merge Ablation: → {evaluator}_best_subset.json  (merged per-model-per-fold winning features + fold_assignment)
+<a href="#__codelineno-1-9" id="__codelineno-1-9" name="__codelineno-1-9"></a>Eval CPU: → {evaluator}_model_results.json  (AUCs, OOF probs)
+<a href="#__codelineno-1-10" id="__codelineno-1-10" name="__codelineno-1-10"></a>          → {evaluator}_{model}_model.joblib  (trained models)
+<a href="#__codelineno-1-11" id="__codelineno-1-11" name="__codelineno-1-11"></a>Eval GPU: → {evaluator}_gpu_model_results.json  (all GPU model AUCs + OOF probs in one JSON)
+<a href="#__codelineno-1-12" id="__codelineno-1-12" name="__codelineno-1-12"></a>Fuse:     → super_matrix.parquet  (wide join on SAMPLE_ID)
+<a href="#__codelineno-1-13" id="__codelineno-1-13" name="__codelineno-1-13"></a>Scoreboard: → scoreboard_combined__all.parquet  (cross-evaluator rankings)
+<a href="#__codelineno-1-14" id="__codelineno-1-14" name="__codelineno-1-14"></a>Multimodal Prep:     → stacking_matrix.parquet  (OOF probs from all evaluators)
+<a href="#__codelineno-1-15" id="__codelineno-1-15" name="__codelineno-1-15"></a>                     → prep_metadata.json  (feature names, selection QC)
+<a href="#__codelineno-1-16" id="__codelineno-1-16" name="__codelineno-1-16"></a>Multimodal Single:   → stacking_{model}_results.json  (per-model stacking CV)
+<a href="#__codelineno-1-17" id="__codelineno-1-17" name="__codelineno-1-17"></a>Multimodal Ablation: → ablation_results.json  (feature ablation analysis)
+<a href="#__codelineno-1-18" id="__codelineno-1-18" name="__codelineno-1-18"></a>Multimodal Merge:    → multimodal_model_results.json  (final aggregated results)
+<a href="#__codelineno-1-19" id="__codelineno-1-19" name="__codelineno-1-19"></a>Report:   → reports/{evaluator}.html  (interactive dashboards)
 </code></pre></div>
 <hr>
 <h2 id="nextflow-parallelism">Nextflow Parallelism</h2>
 <p>See <a href="../../operations/nextflow/">Nextflow Integration</a> for full <abbr title="High-Performance Computing">HPC</abbr> execution docs.</p>
-<p>In Nextflow multistage mode (<code>params.pipeline_mode = 'multistage'</code>), the DAG executes as:</p>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-2-1" id="__codelineno-2-1" name="__codelineno-2-1"></a>LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── EVAL_CPU ────┬── MULTIMODAL_PREP
-<a href="#__codelineno-2-2" id="__codelineno-2-2" name="__codelineno-2-2"></a>                                           ├── EVAL_GPU ────┤
-<a href="#__codelineno-2-3" id="__codelineno-2-3" name="__codelineno-2-3"></a>                                           └── FUSE ────────┘
-<a href="#__codelineno-2-4" id="__codelineno-2-4" name="__codelineno-2-4"></a>                                                    ↓
-<a href="#__codelineno-2-5" id="__codelineno-2-5" name="__codelineno-2-5"></a>                                         MULTIMODAL_SINGLE ×M
-<a href="#__codelineno-2-6" id="__codelineno-2-6" name="__codelineno-2-6"></a>                                                    ↓
-<a href="#__codelineno-2-7" id="__codelineno-2-7" name="__codelineno-2-7"></a>                                         MULTIMODAL_ABLATION
-<a href="#__codelineno-2-8" id="__codelineno-2-8" name="__codelineno-2-8"></a>                                                    ↓
-<a href="#__codelineno-2-9" id="__codelineno-2-9" name="__codelineno-2-9"></a>                                          MULTIMODAL_MERGE
-<a href="#__codelineno-2-10" id="__codelineno-2-10" name="__codelineno-2-10"></a>                                                    ↓
-<a href="#__codelineno-2-11" id="__codelineno-2-11" name="__codelineno-2-11"></a>                                          REPORT_MULTIMODAL
-<a href="#__codelineno-2-12" id="__codelineno-2-12" name="__codelineno-2-12"></a>                                                    \── REPORT (parallel)
+<p>In Nextflow multistage mode (<code>params.pipeline_mode = 'multistage'</code>), the <abbr title="Directed Acyclic Graph">DAG</abbr> executes as:</p>
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-2-1" id="__codelineno-2-1" name="__codelineno-2-1"></a>LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── [ABLATE_CPU ×N] ──┬── EVAL_CPU ────┬── MULTIMODAL_PREP
+<a href="#__codelineno-2-2" id="__codelineno-2-2" name="__codelineno-2-2"></a>                                          ├── [ABLATE_GPU ×N] ──┤      (optional)  ├── EVAL_GPU ────┤
+<a href="#__codelineno-2-3" id="__codelineno-2-3" name="__codelineno-2-3"></a>                                          │  [MERGE_ABLATION] ──┘                  └── FUSE ────────┘
+<a href="#__codelineno-2-4" id="__codelineno-2-4" name="__codelineno-2-4"></a>                                          │                                               ↓
+<a href="#__codelineno-2-5" id="__codelineno-2-5" name="__codelineno-2-5"></a>                                          │                                    MULTIMODAL_SINGLE ×M
+<a href="#__codelineno-2-6" id="__codelineno-2-6" name="__codelineno-2-6"></a>                                          │                                               ↓
+<a href="#__codelineno-2-7" id="__codelineno-2-7" name="__codelineno-2-7"></a>                                          │                                    MULTIMODAL_ABLATION
+<a href="#__codelineno-2-8" id="__codelineno-2-8" name="__codelineno-2-8"></a>                                          │                                               ↓
+<a href="#__codelineno-2-9" id="__codelineno-2-9" name="__codelineno-2-9"></a>                                          │                                     MULTIMODAL_MERGE
+<a href="#__codelineno-2-10" id="__codelineno-2-10" name="__codelineno-2-10"></a>                                          │                                               ↓
+<a href="#__codelineno-2-11" id="__codelineno-2-11" name="__codelineno-2-11"></a>                                          │                                     REPORT_MULTIMODAL
+<a href="#__codelineno-2-12" id="__codelineno-2-12" name="__codelineno-2-12"></a>                                          └── SCOREBOARD ───────── REPORT (parallel)
 </code></pre></div>
+<div class="admonition info">
+<p class="admonition-title">Optional Ablation Stages (v0.0.20+)</p>
+<p>The <code>[ABLATE_CPU]</code>, <code>[ABLATE_GPU]</code>, and <code>[MERGE_ABLATION]</code> stages are optional and controlled by <code>params.run_ablation</code> (default: <code>false</code>). When disabled, EVAL runs directly after SELECT with all selected features. When enabled, MERGE produces a <code>best_subset.json</code> consumed by EVAL via <code>--best-subset</code>.</p>
+</div>
 <div class="admonition info">
 <p class="admonition-title">Legacy Monolithic Module</p>
 <p>The original <code>KREVIEW_EVAL_MULTIMODAL</code> module (<code>eval_multimodal.nf</code>) is kept for standalone testing. It uses <code>kreview eval multimodal run</code> to execute the full pipeline in a single process.</p>
@@ -1112,16 +1160,37 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <td><code>outdir/matrices/selected/</code></td>
 </tr>
 <tr>
+<td><code>KREVIEW_ABLATE_CPU_SINGLE</code></td>
+<td><code>ablate_cpu_single.nf</code></td>
+<td>Selected matrix + labels</td>
+<td><code>*_ablation_cpu_results.json</code></td>
+<td><code>outdir/models/ablation/</code></td>
+</tr>
+<tr>
+<td><code>KREVIEW_ABLATE_GPU_SINGLE</code></td>
+<td><code>ablate_gpu_single.nf</code></td>
+<td>Selected matrix + labels + eval_stats</td>
+<td><code>*_ablation_gpu_results.json</code></td>
+<td><code>outdir/models/ablation/</code></td>
+</tr>
+<tr>
+<td><code>KREVIEW_MERGE_ABLATION</code></td>
+<td><code>merge_ablation.nf</code></td>
+<td>CPU + GPU ablation JSONs</td>
+<td><code>*_best_subset.json</code></td>
+<td><code>outdir/models/ablation/</code></td>
+</tr>
+<tr>
 <td><code>KREVIEW_EVAL_CPU_SINGLE</code></td>
 <td><code>eval_cpu_single.nf</code></td>
-<td>Selected matrix</td>
+<td>Selected matrix + best_subset</td>
 <td><code>*_model_results.json</code> + <code>*.joblib</code></td>
 <td><code>outdir/models/cpu/</code></td>
 </tr>
 <tr>
 <td><code>KREVIEW_EVAL_GPU_SINGLE</code></td>
 <td><code>eval_gpu_single.nf</code></td>
-<td>Selected matrix + eval_stats</td>
+<td>Selected matrix + eval_stats + best_subset</td>
 <td><code>*_gpu_model_results.json</code> + <code>*.joblib</code></td>
 <td><code>outdir/models/gpu/</code></td>
 </tr>
@@ -1220,7 +1289,7 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 5, 2026 18:11:04 UTC"><span class="timeago" datetime="2026-06-05T18:11:04+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 5, 2026 18:11:04 UTC">2026-06-05</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 9, 2026 18:15:45 UTC"><span class="timeago" datetime="2026-06-09T18:15:45+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 9, 2026 18:15:45 UTC">2026-06-09</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">

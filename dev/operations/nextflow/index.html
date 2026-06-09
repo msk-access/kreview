@@ -28,7 +28,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
 <body data-md-color-accent="custom" data-md-color-primary="custom" data-md-color-scheme="default" dir="ltr">
 <input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox">
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
@@ -685,6 +685,18 @@
 </a>
 </li>
 <li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/scoreboard/">
+<span class="md-ellipsis">
+    
+  
+    Scoreboard
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
 <a class="md-nav__link" href="../../api-reference/feature-cards/">
 <span class="md-ellipsis">
     
@@ -838,15 +850,18 @@
 <ul>
 <li><code>nextflow/main.nf</code> — Entrypoint (routes <code>--workflow eval</code> or <code>--workflow label</code>)</li>
 <li><code>nextflow/nextflow.config</code> — Execution profiles, resource definitions, defaults</li>
-<li><code>nextflow/workflows/kreview_eval.nf</code> — Pipeline DAG (monolithic or multistage)</li>
+<li><code>nextflow/workflows/kreview_eval.nf</code> — Pipeline <abbr title="Directed Acyclic Graph">DAG</abbr> (monolithic or multistage)</li>
 <li><code>nextflow/workflows/kreview_label.nf</code> — Standalone label-only workflow</li>
 <li><code>nextflow/modules/local/kreview/</code> — Individual process modules:<ul>
 <li><code>run.nf</code> — Monolithic mode (backward compatible)</li>
 <li><code>label.nf</code> — <abbr title="Circulating Tumor DNA">ctDNA</abbr> labeling (runs once, shared across extractors)</li>
 <li><code>extract.nf</code> — Per-evaluator feature extraction (accepts <code>--labels</code>)</li>
-<li><code>select_single.nf</code> — Per-evaluator feature scoring + mRMR/hybrid-union selection</li>
+<li><code>select_single.nf</code> — Per-evaluator feature scoring + <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr>/hybrid-union selection</li>
 <li><code>eval_cpu_single.nf</code> — Per-evaluator CPU model evaluation (<abbr title="Logistic Regression">LR</abbr>, <abbr title="Random Forest">RF</abbr>, <abbr title="XGBoost">XGB</abbr>)</li>
 <li><code>eval_gpu_single.nf</code> — Per-evaluator GPU model evaluation (TabPFN, TabPFN-FT, TabICL, TabICL-FT) — all models in one process</li>
+<li><code>ablate_cpu_single.nf</code> — Nested <abbr title="Cross-Validation">CV</abbr> feature group ablation (CPU models, v0.0.20+)</li>
+<li><code>ablate_gpu_single.nf</code> — Nested <abbr title="Cross-Validation">CV</abbr> feature group ablation (GPU models, v0.0.20+)</li>
+<li><code>merge_ablation.nf</code> — Merge CPU + GPU ablation → <code>best_subset.json</code> (v0.0.20+)</li>
 <li><code>fuse.nf</code> — Super-matrix construction (all evaluators merged)</li>
 <li><code>scoreboard.nf</code> — Cross-evaluator scoreboard aggregation (v0.0.15)</li>
 <li><code>eval_multimodal.nf</code> — <strong>[LEGACY]</strong> Monolithic cross-evaluator stacking via <code>kreview eval multimodal run</code> (kept for standalone testing)</li>
@@ -862,7 +877,7 @@
 <p>The pipeline supports two modes controlled by <code>params.pipeline_mode</code>:</p>
 <ul>
 <li><strong><code>monolithic</code></strong> (default) — Single-process <code>KREVIEW_RUN</code> for backward compatibility.</li>
-<li><strong><code>multistage</code></strong> — Decomposed DAG with per-evaluator parallelism:</li>
+<li><strong><code>multistage</code></strong> — Decomposed <abbr title="Directed Acyclic Graph">DAG</abbr> with per-evaluator parallelism:</li>
 </ul>
 <div class="panzoom-box" data-key="none" id="panzoom0" oncontextmenu="return false;">
 <nav class="panzoom-nav">
@@ -886,10 +901,17 @@
 </nav>
 <pre class="mermaid"><code>graph LR
     classDef step fill:#8b5cf6,stroke:#5b21b6,color:#fff;
+    classDef opt fill:#f59e0b,stroke:#b45309,color:#fff;
     A["Label (1 job)"]:::step --&gt; B["Extract ×N"]:::step
     B --&gt; C["Select ×N"]:::step
-    C --&gt; D["Eval CPU ×N"]:::step
-    C --&gt; E["Eval GPU ×N"]:::step
+    C --&gt; ABL_CPU["Ablate CPU ×N"]:::opt
+    C --&gt; ABL_GPU["Ablate GPU ×N"]:::opt
+    ABL_CPU --&gt; ABL_MERGE["Merge Ablation ×N"]:::opt
+    ABL_GPU --&gt; ABL_MERGE
+    ABL_MERGE --&gt; D["Eval CPU ×N"]:::step
+    ABL_MERGE --&gt; E["Eval GPU ×N"]:::step
+    C --&gt; D
+    C --&gt; E
     C --&gt; F["Fuse (1 job)"]:::step
     D --&gt; S["Scoreboard"]:::step
     E --&gt; S
@@ -912,6 +934,10 @@ Use mouse to pan and zoom
 <p class="admonition-title">Decomposed Multimodal Pipeline (v0.0.18+)</p>
 <p>The multimodal pipeline is decomposed into 4 sequential stages: <code>prep</code> → <code>single ×M</code> → <code>ablation</code> → <code>merge</code>. The <code>single</code> stage is parallelized across models (CPU and GPU variants). This replaces the legacy monolithic <code>KREVIEW_EVAL_MULTIMODAL</code> process, which is kept for standalone testing via <code>kreview eval multimodal run</code>.</p>
 </div>
+<div class="admonition tip">
+<p class="admonition-title">Feature Group Ablation (v0.0.20+, optional)</p>
+<p>When <code>params.run_ablation = true</code>, the ABLATE stages (amber nodes) run between SELECT and EVAL. They use inner cross-validation (<code>sensitivity_at_100spec_healthy</code>) to identify the best feature group subset per model, producing a <code>best_subset.json</code> consumed by EVAL. When disabled (default), EVAL runs directly after SELECT.</p>
+</div>
 <p>For a detailed architecture overview with notebook-to-module mappings, see the <a href="../../developer/pipeline-architecture/">Pipeline Architecture</a> developer guide.</p>
 <p>The workflow transparently wraps the <code>kreview</code> Typer CLI, binding the computation natively to the <code>ghcr.io/msk-access/kreview:latest</code> container.</p>
 <hr>
@@ -933,27 +959,32 @@ Use mouse to pan and zoom
 <a href="#__codelineno-0-14" id="__codelineno-0-14" name="__codelineno-0-14"></a>│   └── fused/
 <a href="#__codelineno-0-15" id="__codelineno-0-15" name="__codelineno-0-15"></a>│       └── super_matrix.parquet                # All evaluators merged
 <a href="#__codelineno-0-16" id="__codelineno-0-16" name="__codelineno-0-16"></a>├── models/
-<a href="#__codelineno-0-17" id="__codelineno-0-17" name="__codelineno-0-17"></a>│   ├── cpu/                                    # Per-evaluator CPU model results
-<a href="#__codelineno-0-18" id="__codelineno-0-18" name="__codelineno-0-18"></a>│   │   ├── AtacOnTarget_model_results.json
-<a href="#__codelineno-0-19" id="__codelineno-0-19" name="__codelineno-0-19"></a>│   │   ├── AtacOnTarget_lr_model.joblib
-<a href="#__codelineno-0-20" id="__codelineno-0-20" name="__codelineno-0-20"></a>│   │   └── ...
-<a href="#__codelineno-0-21" id="__codelineno-0-21" name="__codelineno-0-21"></a>│   ├── gpu/                                    # Per-evaluator GPU model results
-<a href="#__codelineno-0-22" id="__codelineno-0-22" name="__codelineno-0-22"></a>│   │   ├── AtacOnTarget_gpu_model_results.json # All 4 GPU models in one JSON
-<a href="#__codelineno-0-23" id="__codelineno-0-23" name="__codelineno-0-23"></a>│   │   ├── FSCOnTarget_gpu_model_results.json
-<a href="#__codelineno-0-24" id="__codelineno-0-24" name="__codelineno-0-24"></a>│   │   └── ...
-<a href="#__codelineno-0-25" id="__codelineno-0-25" name="__codelineno-0-25"></a>│   └── multimodal/
-<a href="#__codelineno-0-26" id="__codelineno-0-26" name="__codelineno-0-26"></a>│       ├── stacking_matrix.parquet             # From prep
-<a href="#__codelineno-0-27" id="__codelineno-0-27" name="__codelineno-0-27"></a>│       ├── prep_metadata.json                  # From prep
-<a href="#__codelineno-0-28" id="__codelineno-0-28" name="__codelineno-0-28"></a>│       ├── stacking_rf_results.json            # From single (per-model)
-<a href="#__codelineno-0-29" id="__codelineno-0-29" name="__codelineno-0-29"></a>│       ├── stacking_xgb_results.json
-<a href="#__codelineno-0-30" id="__codelineno-0-30" name="__codelineno-0-30"></a>│       ├── stacking_tabpfn_ft_results.json
-<a href="#__codelineno-0-31" id="__codelineno-0-31" name="__codelineno-0-31"></a>│       ├── ablation_results.json               # From ablation
-<a href="#__codelineno-0-32" id="__codelineno-0-32" name="__codelineno-0-32"></a>│       └── multimodal_model_results.json       # From merge (final)
-<a href="#__codelineno-0-33" id="__codelineno-0-33" name="__codelineno-0-33"></a>├── scoreboard_combined__all.parquet            # Cross-evaluator ranking (v0.0.15)
-<a href="#__codelineno-0-34" id="__codelineno-0-34" name="__codelineno-0-34"></a>├── scoreboard_combined__all.csv
-<a href="#__codelineno-0-35" id="__codelineno-0-35" name="__codelineno-0-35"></a>└── reports/
-<a href="#__codelineno-0-36" id="__codelineno-0-36" name="__codelineno-0-36"></a>    ├── AtacOnTarget_dashboard.html
-<a href="#__codelineno-0-37" id="__codelineno-0-37" name="__codelineno-0-37"></a>    └── ...
+<a href="#__codelineno-0-17" id="__codelineno-0-17" name="__codelineno-0-17"></a>│   ├── ablation/                               # Feature group ablation (v0.0.20+)
+<a href="#__codelineno-0-18" id="__codelineno-0-18" name="__codelineno-0-18"></a>│   │   ├── AtacOnTarget_ablation_cpu_results.json  # Per-fold best subsets (CPU)
+<a href="#__codelineno-0-19" id="__codelineno-0-19" name="__codelineno-0-19"></a>│   │   ├── AtacOnTarget_ablation_gpu_results.json  # Per-fold best subsets (GPU)
+<a href="#__codelineno-0-20" id="__codelineno-0-20" name="__codelineno-0-20"></a>│   │   ├── AtacOnTarget_best_subset.json           # Merged winning features
+<a href="#__codelineno-0-21" id="__codelineno-0-21" name="__codelineno-0-21"></a>│   │   └── ...
+<a href="#__codelineno-0-22" id="__codelineno-0-22" name="__codelineno-0-22"></a>│   ├── cpu/                                    # Per-evaluator CPU model results
+<a href="#__codelineno-0-23" id="__codelineno-0-23" name="__codelineno-0-23"></a>│   │   ├── AtacOnTarget_model_results.json
+<a href="#__codelineno-0-24" id="__codelineno-0-24" name="__codelineno-0-24"></a>│   │   ├── AtacOnTarget_lr_model.joblib
+<a href="#__codelineno-0-25" id="__codelineno-0-25" name="__codelineno-0-25"></a>│   │   └── ...
+<a href="#__codelineno-0-26" id="__codelineno-0-26" name="__codelineno-0-26"></a>│   ├── gpu/                                    # Per-evaluator GPU model results
+<a href="#__codelineno-0-27" id="__codelineno-0-27" name="__codelineno-0-27"></a>│   │   ├── AtacOnTarget_gpu_model_results.json # All 4 GPU models in one JSON
+<a href="#__codelineno-0-28" id="__codelineno-0-28" name="__codelineno-0-28"></a>│   │   ├── FSCOnTarget_gpu_model_results.json
+<a href="#__codelineno-0-29" id="__codelineno-0-29" name="__codelineno-0-29"></a>│   │   └── ...
+<a href="#__codelineno-0-30" id="__codelineno-0-30" name="__codelineno-0-30"></a>│   └── multimodal/
+<a href="#__codelineno-0-31" id="__codelineno-0-31" name="__codelineno-0-31"></a>│       ├── stacking_matrix.parquet             # From prep
+<a href="#__codelineno-0-32" id="__codelineno-0-32" name="__codelineno-0-32"></a>│       ├── prep_metadata.json                  # From prep
+<a href="#__codelineno-0-33" id="__codelineno-0-33" name="__codelineno-0-33"></a>│       ├── stacking_rf_results.json            # From single (per-model)
+<a href="#__codelineno-0-34" id="__codelineno-0-34" name="__codelineno-0-34"></a>│       ├── stacking_xgb_results.json
+<a href="#__codelineno-0-35" id="__codelineno-0-35" name="__codelineno-0-35"></a>│       ├── stacking_tabpfn_ft_results.json
+<a href="#__codelineno-0-36" id="__codelineno-0-36" name="__codelineno-0-36"></a>│       ├── ablation_results.json               # From ablation
+<a href="#__codelineno-0-37" id="__codelineno-0-37" name="__codelineno-0-37"></a>│       └── multimodal_model_results.json       # From merge (final)
+<a href="#__codelineno-0-38" id="__codelineno-0-38" name="__codelineno-0-38"></a>├── scoreboard_combined__all.parquet            # Cross-evaluator ranking (v0.0.15)
+<a href="#__codelineno-0-39" id="__codelineno-0-39" name="__codelineno-0-39"></a>├── scoreboard_combined__all.csv
+<a href="#__codelineno-0-40" id="__codelineno-0-40" name="__codelineno-0-40"></a>└── reports/
+<a href="#__codelineno-0-41" id="__codelineno-0-41" name="__codelineno-0-41"></a>    ├── AtacOnTarget_dashboard.html
+<a href="#__codelineno-0-42" id="__codelineno-0-42" name="__codelineno-0-42"></a>    └── ...
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Inspecting Parquet Files on the CLI</p>
@@ -976,11 +1007,13 @@ Use mouse to pan and zoom
 <a href="#__codelineno-2-10" id="__codelineno-2-10" name="__codelineno-2-10"></a><span class="w">  </span>--run_multimodal_eval<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
 <a href="#__codelineno-2-11" id="__codelineno-2-11" name="__codelineno-2-11"></a><span class="w">  </span>--multimodal_selection<span class="w"> </span>boruta_shap<span class="w"> </span><span class="se">\</span>
 <a href="#__codelineno-2-12" id="__codelineno-2-12" name="__codelineno-2-12"></a><span class="w">  </span>--multimodal_gpu_models<span class="w"> </span><span class="s2">"tabpfn_ft,tabicl_ft"</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-13" id="__codelineno-2-13" name="__codelineno-2-13"></a><span class="w">  </span>--ch_hotspot_maf<span class="w"> </span>/path/to/ch_hotspots.maf<span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-14" id="__codelineno-2-14" name="__codelineno-2-14"></a><span class="w">  </span>--max_gpu_features<span class="w"> </span><span class="m">150</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-15" id="__codelineno-2-15" name="__codelineno-2-15"></a><span class="w">  </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-16" id="__codelineno-2-16" name="__codelineno-2-16"></a><span class="w">  </span>--deterministic<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-17" id="__codelineno-2-17" name="__codelineno-2-17"></a><span class="w">  </span>-profile<span class="w"> </span>iris
+<a href="#__codelineno-2-13" id="__codelineno-2-13" name="__codelineno-2-13"></a><span class="w">  </span>--run_ablation<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-14" id="__codelineno-2-14" name="__codelineno-2-14"></a><span class="w">  </span>--ablation_inner_folds<span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-15" id="__codelineno-2-15" name="__codelineno-2-15"></a><span class="w">  </span>--ch_hotspot_maf<span class="w"> </span>/path/to/ch_hotspots.maf<span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-16" id="__codelineno-2-16" name="__codelineno-2-16"></a><span class="w">  </span>--max_gpu_features<span class="w"> </span><span class="m">150</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-17" id="__codelineno-2-17" name="__codelineno-2-17"></a><span class="w">  </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-18" id="__codelineno-2-18" name="__codelineno-2-18"></a><span class="w">  </span>--deterministic<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-19" id="__codelineno-2-19" name="__codelineno-2-19"></a><span class="w">  </span>-profile<span class="w"> </span>iris
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Targeted Nextflow Execution</p>
@@ -991,13 +1024,13 @@ Use mouse to pan and zoom
 </code></pre></div><p></p>
 </div>
 <hr>
-<h2 id="profiling-scaling-slurm">Profiling &amp; Scaling (SLURM)</h2>
-<p>Because <code>kreview</code> accesses thousands of files aggressively using DuckDB, network filesystem socket limits (<code>Ulimit N</code>) behave entirely differently between a desktop Mac and a remote <abbr title="High-Performance Computing">HPC</abbr> SLURM cluster.</p>
+<h2 id="profiling-scaling-slurm">Profiling &amp; Scaling (<abbr title="Simple Linux Utility for Resource Management">SLURM</abbr>)</h2>
+<p>Because <code>kreview</code> accesses thousands of files aggressively using DuckDB, network filesystem socket limits (<code>Ulimit N</code>) behave entirely differently between a desktop Mac and a remote <abbr title="High-Performance Computing">HPC</abbr> <abbr title="Simple Linux Utility for Resource Management">SLURM</abbr> cluster.</p>
 <h3 id="1-local-docker">1. Local (Docker)</h3>
 <p><code>nextflow run ... -profile docker</code> </p>
 <p>When operating locally, <code>nextflow.config</code> strictly maps <code>docker.runOptions = '-v /:/'</code> to guarantee absolute URI paths don't break the container's volume map. It safely hardcaps <code>--chunk-size</code> at <code>50</code> to defend local Posix max-file limits.</p>
-<h3 id="2-high-performance-computing-slurm">2. High-Performance Computing (SLURM)</h3>
-<p>Two SLURM profiles are available:</p>
+<h3 id="2-high-performance-computing-slurm">2. High-Performance Computing (<abbr title="Simple Linux Utility for Resource Management">SLURM</abbr>)</h3>
+<p>Two <abbr title="Simple Linux Utility for Resource Management">SLURM</abbr> profiles are available:</p>
 <table>
 <thead>
 <tr>
@@ -1010,7 +1043,7 @@ Use mouse to pan and zoom
 <tr>
 <td><code>slurm</code></td>
 <td>Generic</td>
-<td>Default SLURM submission</td>
+<td>Default <abbr title="Simple Linux Utility for Resource Management">SLURM</abbr> submission</td>
 </tr>
 <tr>
 <td><code>iris</code></td>
@@ -1041,7 +1074,7 @@ Singularity images are cached to <code>~/.singularity_cache/</code> on the login
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 5, 2026 18:11:04 UTC"><span class="timeago" datetime="2026-06-05T18:11:04+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 5, 2026 18:11:04 UTC">2026-06-05</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 9, 2026 18:15:45 UTC"><span class="timeago" datetime="2026-06-09T18:15:45+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 9, 2026 18:15:45 UTC">2026-06-09</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">

@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1195,6 +1195,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#multimodal-dashboard-v0020" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multimodal Dashboard (v0.0.20+)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#accessibility" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1726,6 +1737,8 @@
       
         
       
+        
+      
     
     
     
@@ -1872,6 +1885,34 @@
     
   
     Evaluation Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/scoreboard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoreboard
   
 
     
@@ -2434,6 +2475,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#multimodal-dashboard-v0020" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multimodal Dashboard (v0.0.20+)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#accessibility" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2550,8 +2602,8 @@
 </tr>
 <tr>
 <td>Best <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> [95% <abbr title="Continuous Integration">CI</abbr>]</td>
-<td><code>auc_rf</code>, <code>auc_rf_ci_lower/upper</code></td>
-<td>Key discriminative metric with uncertainty</td>
+<td><code>auc_{best_m}</code>, <code>auc_{best_m}_ci_lower/upper</code></td>
+<td>Key discriminative metric with uncertainty (dynamically selected best model)</td>
 </tr>
 <tr>
 <td>Sensitivity @ Optimal</td>
@@ -2578,6 +2630,11 @@
 <td><abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> threshold logic</td>
 <td>Quick interpretation (Strong ≥0.80, Moderate ≥0.70, Weak &lt;0.70)</td>
 </tr>
+<tr>
+<td>Nested <abbr title="Cross-Validation">CV</abbr></td>
+<td><code>nested_cv</code> flag</td>
+<td>Whether ablation-based nested <abbr title="Cross-Validation">CV</abbr> was used for feature selection (v0.0.20+)</td>
+</tr>
 </tbody>
 </table>
 <h3 id="why-these-metrics">Why these metrics</h3>
@@ -2589,12 +2646,12 @@
 <li><strong>Verdict</strong> uses conservative thresholds — an <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> below 0.70 has limited clinical utility for binary classification.</li>
 </ul>
 <h3 id="roc-sparkline-calibration"><abbr title="Receiver Operating Characteristic">ROC</abbr> Sparkline + Calibration</h3>
-<p>The mini-<abbr title="Receiver Operating Characteristic">ROC</abbr> curve provides a visual sanity check. The calibration reliability diagram (<abbr title="Random Forest">RF</abbr>) shows whether predicted probabilities are trustworthy — tree-based models tend to push probabilities toward 0.5.</p>
+<p>The mini-<abbr title="Receiver Operating Characteristic">ROC</abbr> curve provides a visual sanity check. The calibration reliability diagram (all discovered models) shows whether predicted probabilities are trustworthy — tree-based models tend to push probabilities toward 0.5.</p>
 <h3 id="scoreboard">Scoreboard</h3>
-<p>If multiple evaluators have been run, the scoreboard table surfaces the top performers for cross-evaluator comparison. Columns include <code>best_model</code>, <code>best_auc</code>, <code>holdout_auc</code>, <code>auc_drop</code>, <code>sensitivity</code>, <code>specificity</code>, <code>sens_at_100spec</code>, <code>sens_at_95spec</code>, <code>selection_method</code>, <code>n_features</code>, <code>n_samples</code>, <code>holdout_n_train</code>, and <code>holdout_n_test</code>. Columns that are absent from the scoreboard DataFrame (e.g., pre-v0.0.16 results) are automatically hidden.</p>
+<p>If multiple evaluators have been run, the scoreboard table surfaces the top performers for cross-evaluator comparison. Columns include <code>best_model</code>, <code>best_auc</code>, <code>holdout_auc</code>, <code>auc_drop</code>, <code>sensitivity</code>, <code>specificity</code>, <code>sens_at_100spec</code>, <code>sens_at_95spec</code>, <code>best_sens_100spec_healthy</code>, <code>selection_method</code>, <code>n_features</code>, <code>best_subset_size</code>, <code>nested_cv</code>, <code>n_samples</code>, <code>holdout_n_train</code>, and <code>holdout_n_test</code>. Columns that are absent from the scoreboard DataFrame (e.g., pre-v0.0.16 results) are automatically hidden.</p>
 <hr>
 <h2 id="page-2-model-validation">Page 2: Model Validation</h2>
-<p>Nine tabs, each answering a specific validation question:</p>
+<p>Eleven tabs, each answering a specific validation question:</p>
 <h3 id="performance-metrics">Performance Metrics</h3>
 <p><strong>Question</strong>: How do the trained models compare on clinical metrics?</p>
 <ul>
@@ -2608,14 +2665,14 @@
 <li>Full <abbr title="Receiver Operating Characteristic">ROC</abbr> curves with 95% bootstrap confidence intervals in the legend</li>
 <li>Compare model families on the same axes</li>
 </ul>
-<h3 id="precision-recall-pr">Precision-Recall (PR)</h3>
+<h3 id="precision-recall-pr">Precision-Recall (<abbr title="Precision-Recall">PR</abbr>)</h3>
 <p><strong>Question</strong>: Does the model perform well under class imbalance?</p>
 <ul>
-<li>PR curves are more informative than <abbr title="Receiver Operating Characteristic">ROC</abbr> when the positive class is rare</li>
+<li><abbr title="Precision-Recall">PR</abbr> curves are more informative than <abbr title="Receiver Operating Characteristic">ROC</abbr> when the positive class is rare</li>
 <li>The horizontal dashed line shows prevalence — any model performing near prevalence is no better than random</li>
-<li>Average Precision (AP) summarizes PR performance as a single number</li>
+<li>Average Precision (AP) summarizes <abbr title="Precision-Recall">PR</abbr> performance as a single number</li>
 </ul>
-<h3 id="decision-curve-analysis-dca">Decision Curve Analysis (DCA)</h3>
+<h3 id="decision-curve-analysis-dca">Decision Curve Analysis (<abbr title="Decision Curve Analysis">DCA</abbr>)</h3>
 <p><strong>Question</strong>: At what probability thresholds does the model provide net clinical benefit?</p>
 <ul>
 <li>Shows net benefit of using the model vs treating all patients or treating none</li>
@@ -2625,9 +2682,10 @@
 <h3 id="threshold-sensitivity">Threshold Sensitivity</h3>
 <p><strong>Question</strong>: How sensitive are clinical metrics to threshold choice?</p>
 <ul>
-<li>Plots sensitivity, specificity, and PPV across 50 thresholds (0.01–0.99)</li>
+<li>Plots sensitivity, specificity, and <abbr title="Positive Predictive Value">PPV</abbr> across 50 thresholds (0.01–0.99)</li>
 <li>The optimal Youden's J threshold is marked with a dashed line</li>
 <li>Allows clinicians to choose an operating point based on their risk tolerance</li>
+<li>The classification report also uses this Youden's J threshold (consistent with confusion matrices)</li>
 </ul>
 <h3 id="fold-variability">Fold Variability</h3>
 <p><strong>Question</strong>: How stable is <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> across cross-validation folds?</p>
@@ -2657,9 +2715,10 @@
 <li>Includes support (sample count) per class</li>
 </ul>
 <h3 id="feature-importances">Feature Importances</h3>
-<p><strong>Question</strong>: Which sub-features does <abbr title="Random Forest">RF</abbr> consider most informative?</p>
+<p><strong>Question</strong>: Which sub-features does the best model (by <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>) consider most informative?</p>
 <ul>
-<li>Top 20 features by Gini importance from the fitted Random Forest</li>
+<li>Top 20 features by Gini importance from the fitted model with highest <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr></li>
+<li>Models are sorted by <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> descending; the first model supporting feature importances is shown</li>
 <li>Complements <abbr title="SHapley Additive exPlanations">SHAP</abbr> by showing a simpler, non-interaction-aware view</li>
 </ul>
 <hr>
@@ -2686,7 +2745,7 @@
 <li><strong>Derived feature types</strong> — detected via source code introspection (entropy, spectral, bimodality, etc.)</li>
 </ul>
 <h3 id="probability-densities">Probability Densities</h3>
-<p>KDE density plot of <abbr title="Random Forest">RF</abbr> predicted probabilities by <abbr title="Circulating Tumor DNA">ctDNA</abbr> label. Indicates label separation — a discriminative model shows non-overlapping peaks.</p>
+<p>KDE density plot of the best model's predicted probabilities by <abbr title="Circulating Tumor DNA">ctDNA</abbr> label. Indicates label separation — a discriminative model shows non-overlapping peaks.</p>
 <hr>
 <h2 id="page-4-biomarker-yield">Page 4: Biomarker Yield</h2>
 <h3 id="volcano-plot">Volcano Plot</h3>
@@ -2709,17 +2768,17 @@
 <tr>
 <td>🟢 Green</td>
 <td>Selected (Both)</td>
-<td>Top X% in <em>both</em> <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> and MI</td>
+<td>Top X% in <em>both</em> <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> and <abbr title="Mutual Information">MI</abbr></td>
 </tr>
 <tr>
 <td>🔵 Blue</td>
 <td>Selected (<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> Only)</td>
-<td>Top X% in <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> but not MI</td>
+<td>Top X% in <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> but not <abbr title="Mutual Information">MI</abbr></td>
 </tr>
 <tr>
 <td>🟠 Orange</td>
-<td>Selected (MI Only)</td>
-<td>Top X% in MI but not <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr></td>
+<td>Selected (<abbr title="Mutual Information">MI</abbr> Only)</td>
+<td>Top X% in <abbr title="Mutual Information">MI</abbr> but not <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr></td>
 </tr>
 <tr>
 <td>⚪ Gray</td>
@@ -2728,9 +2787,9 @@
 </tr>
 </tbody>
 </table>
-<p>This plot provides a visual audit trail for the selection method. Under <code>hybrid_union</code>, it shows exact 4-way overlaps (Both/<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>-only/MI-only/Dropped). Under <code>mrmr</code>, all selected features are colored cyan with a disclaimer noting that the <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>/MI axes are observational (mRMR internally uses F-statistic for relevance and Pearson correlation for redundancy).</p>
+<p>This plot provides a visual audit trail for the selection method. Under <code>hybrid_union</code>, it shows exact 4-way overlaps (Both/<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>-only/<abbr title="Mutual Information">MI</abbr>-only/Dropped). Under <code>mrmr</code>, all selected features are colored cyan with a disclaimer noting that the <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>/<abbr title="Mutual Information">MI</abbr> axes are observational (<abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> internally uses F-statistic for relevance and Pearson correlation for redundancy).</p>
 <h3 id="feature-1-violin">Feature #1 Violin</h3>
-<p>Distribution of the single best feature (by Cohen's d) across the four <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels. Box plot overlay shows medians and IQR.</p>
+<p>Distribution of the single best feature (by Univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>, with Cohen's d fallback for legacy results) across the four <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels. Box plot overlay shows medians and IQR.</p>
 <h3 id="vaf-scatter-tumor-burden-independence"><abbr title="Variant Allele Frequency">VAF</abbr> Scatter (Tumor Burden Independence)</h3>
 <p>Scatter plot of the top feature vs max <abbr title="Variant Allele Frequency">VAF</abbr> on log scale, colored by label. A LOWESS trendline reveals whether the feature independently predicts <abbr title="Circulating Tumor DNA">ctDNA</abbr> status or simply tracks mutation burden. Features strongly correlated with <abbr title="Variant Allele Frequency">VAF</abbr> (Spearman r &gt; 0.5) may be confounded.</p>
 <h3 id="statistical-ledger">Statistical Ledger</h3>
@@ -2797,6 +2856,16 @@
 <h2 id="sidebar-glossary">Sidebar: Glossary</h2>
 <p>Concise definitions of the five <abbr title="Circulating Tumor DNA">ctDNA</abbr> labels used in analysis, plus the <code>Undetermined</code> label (excluded from ML). Also documents the 80/20 train/test split for holdout evaluation. Kept minimal to avoid cognitive overload.</p>
 <hr>
+<h2 id="multimodal-dashboard-v0020">Multimodal Dashboard (v0.0.20+)</h2>
+<p>The multimodal template extends the single-evaluator dashboard with:</p>
+<ul>
+<li><strong>Title</strong>: "Kreview Multimodal Intelligence Dashboard" (distinct from single-evaluator)</li>
+<li><strong>Selection Strategy</strong> value box showing whether <code>mi</code> or <code>boruta_shap</code> was used</li>
+<li><strong>Stacking vs Raw comparison chart</strong>: grouped bar chart comparing <code>stacking_*</code> vs <code>raw_*</code> model AUCs with Δ annotations showing the lift from stacking</li>
+<li><strong>Extended model discovery</strong>: dynamically discovers <code>stacking_lr</code>, <code>stacking_rf</code>, <code>raw_lr</code>, <code>raw_xgb</code>, etc.</li>
+<li><strong>Nested <abbr title="Cross-Validation">CV</abbr> indicator</strong>: shows whether ablation-based nested <abbr title="Cross-Validation">CV</abbr> was used</li>
+</ul>
+<hr>
 <h2 id="accessibility">Accessibility</h2>
 <ul>
 <li><strong>CVD-safe mode</strong>: Use <code>--cvd-safe</code> flag to switch to Okabe-Ito palette for red-green colorblind accessibility</li>
@@ -2825,7 +2894,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 5, 2026 18:11:04 UTC"><span class="timeago" datetime="2026-06-05T18:11:04+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 5, 2026 18:11:04 UTC">2026-06-05</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 9, 2026 18:15:45 UTC"><span class="timeago" datetime="2026-06-09T18:15:45+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 9, 2026 18:15:45 UTC">2026-06-09</span>
   </span>
 
     

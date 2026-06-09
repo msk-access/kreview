@@ -28,7 +28,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
 <body data-md-color-accent="custom" data-md-color-primary="custom" data-md-color-scheme="default" dir="ltr">
 <input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox">
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
@@ -818,6 +818,18 @@
 </a>
 </li>
 <li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/scoreboard/">
+<span class="md-ellipsis">
+    
+  
+    Scoreboard
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
 <a class="md-nav__link" href="../../api-reference/feature-cards/">
 <span class="md-ellipsis">
     
@@ -1240,11 +1252,11 @@ Use mouse to pan and zoom
 </table>
 <p>These metrics are saved to <code>*_eval_stats.parquet</code> and surfaced in the dashboard's <a href="../dashboard-guide/#page-5-cohort-qc">Cohort &amp; <abbr title="Quality Control">QC</abbr> page</a>.</p>
 <h2 id="feature-selection-scoring-v009">Feature Selection Scoring (v0.0.9+)</h2>
-<p>After descriptive statistics are computed, kreview scores every feature using complementary methods to decide which features enter the downstream ML models. The default strategy is <strong>mRMR</strong>.</p>
-<h3 id="minimum-redundancy-maximum-relevance-mrmr-default">Minimum Redundancy Maximum Relevance (mRMR) [Default]</h3>
+<p>After descriptive statistics are computed, kreview scores every feature using complementary methods to decide which features enter the downstream ML models. The default strategy is <strong><abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr></strong>.</p>
+<h3 id="minimum-redundancy-maximum-relevance-mrmr-default">Minimum Redundancy Maximum Relevance (<abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr>) [Default]</h3>
 <p>The <code>strategy="mrmr"</code> method (via <a href="https://github.com/smazzanti/mrmr"><code>mrmr-selection</code></a>) iteratively selects features that maximize correlation with the target label (<strong>relevance</strong>) while minimizing correlation with already-selected features (<strong>redundancy</strong>).</p>
 <h4 id="optimization-objective">Optimization Objective</h4>
-<p>At each step <span class="arithmatex">\(i\)</span>, mRMR selects the feature <span class="arithmatex">\(f_i\)</span> that maximizes:</p>
+<p>At each step <span class="arithmatex">\(i\)</span>, <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> selects the feature <span class="arithmatex">\(f_i\)</span> that maximizes:</p>
 <div class="arithmatex">\[f_i = \arg\max_{f \in \mathcal{F} \setminus S} \left[ \text{Relevance}(f, y) - \frac{1}{|S|} \sum_{s \in S} \text{Redundancy}(f, s) \right]\]</div>
 <p>where:</p>
 <ul>
@@ -1253,7 +1265,7 @@ Use mouse to pan and zoom
 <li><span class="arithmatex">\(y\)</span> is the binary <abbr title="Circulating Tumor DNA">ctDNA</abbr> label</li>
 </ul>
 <h4 id="relevance-and-redundancy-metrics">Relevance and Redundancy Metrics</h4>
-<p>kreview's mRMR implementation uses:</p>
+<p>kreview's <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> implementation uses:</p>
 <table>
 <thead>
 <tr>
@@ -1291,13 +1303,13 @@ Use mouse to pan and zoom
 <a href="#__codelineno-1-9" id="__codelineno-1-9" name="__codelineno-1-9"></a>5. Apply variance guard: drop any selected feature with std = 0.
 <a href="#__codelineno-1-10" id="__codelineno-1-10" name="__codelineno-1-10"></a>6. Return selected feature set + QC metadata.
 </code></pre></div>
-<h4 id="why-mrmr-over-hybrid-union">Why mRMR Over Hybrid Union?</h4>
+<h4 id="why-mrmr-over-hybrid-union">Why <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> Over Hybrid Union?</h4>
 <table>
 <thead>
 <tr>
 <th>Scenario</th>
 <th>Hybrid Union</th>
-<th>mRMR</th>
+<th><abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr></th>
 </tr>
 </thead>
 <tbody>
@@ -1313,7 +1325,7 @@ Use mouse to pan and zoom
 </tr>
 <tr>
 <td>Non-linear predictors</td>
-<td>Only caught by MI arm</td>
+<td>Only caught by <abbr title="Mutual Information">MI</abbr> arm</td>
 <td>Caught if F-statistic separates groups</td>
 </tr>
 <tr>
@@ -1324,24 +1336,24 @@ Use mouse to pan and zoom
 </tbody>
 </table>
 <div class="admonition warning">
-<p class="admonition-title">Scatter Plot Interpretation Under mRMR</p>
-<p>The dashboard's Feature Selection scatter plot shows <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> (x-axis) vs MI (y-axis) for visual audit, but these axes are <strong>observational</strong> — mRMR does <strong>not</strong> use <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> or MI internally. It uses the F-statistic for relevance and Pearson correlation for redundancy. A feature with low <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> but high mRMR score is valid if it has strong F-statistic separation and low redundancy with other selected features.</p>
+<p class="admonition-title">Scatter Plot Interpretation Under <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr></p>
+<p>The dashboard's Feature Selection scatter plot shows <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> (x-axis) vs <abbr title="Mutual Information">MI</abbr> (y-axis) for visual audit, but these axes are <strong>observational</strong> — <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> does <strong>not</strong> use <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> or <abbr title="Mutual Information">MI</abbr> internally. It uses the F-statistic for relevance and Pearson correlation for redundancy. A feature with low <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> but high <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> score is valid if it has strong F-statistic separation and low redundancy with other selected features.</p>
 </div>
 <hr>
 <h3 id="hybrid-union-selection-legacyfallback">Hybrid Union Selection [Legacy/Fallback]</h3>
 <p>The <code>strategy="hybrid_union"</code> method determines the feature set by:</p>
 <div class="arithmatex">\[\text{Selected} = \text{Top}_{X\%}(\text{AUC}) \cup \text{Top}_{X\%}(\text{MI})\]</div>
-<p>where <span class="arithmatex">\(X\)</span> is controlled by <code>--top-percentile</code> (default: 10%). The <strong>union</strong> ensures that features strong in <em>either</em> metric are retained — a feature with high <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> but low MI (linear predictor) or high MI but low <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> (non-linear predictor) will both be included.</p>
+<p>where <span class="arithmatex">\(X\)</span> is controlled by <code>--top-percentile</code> (default: 10%). The <strong>union</strong> ensures that features strong in <em>either</em> metric are retained — a feature with high <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> but low <abbr title="Mutual Information">MI</abbr> (linear predictor) or high <abbr title="Mutual Information">MI</abbr> but low <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> (non-linear predictor) will both be included.</p>
 <div class="admonition tip">
 <p class="admonition-title">Selection <abbr title="Quality Control">QC</abbr> Metadata</p>
 <p>The <code>selection_qc</code> block in <code>model_results.json</code> records method-specific audit trails:</p>
-<p><strong>mRMR keys:</strong></p>
+<p><strong><abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> keys:</strong></p>
 <ul>
 <li><code>method</code>: <code>"mrmr"</code></li>
 <li><code>total_input_features</code>: Count of all numeric features before selection</li>
 <li><code>target_percentile</code>: The <code>--top-percentile</code> value used</li>
 <li><code>n_keep_requested</code>: Number of features requested (<span class="arithmatex">\(K\)</span>)</li>
-<li><code>n_mrmr_selected</code>: Number returned by the mRMR algorithm</li>
+<li><code>n_mrmr_selected</code>: Number returned by the <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> algorithm</li>
 <li><code>n_after_variance_guard</code>: Final count after dropping zero-variance features</li>
 <li><code>n_variance_dropped</code>: Count of zero-variance features removed</li>
 <li><code>impute_strategy</code>: Imputation method used (<code>median</code>/<code>mean</code>/<code>zero</code>)</li>
@@ -1351,9 +1363,9 @@ Use mouse to pan and zoom
 <li><code>method</code>: <code>"hybrid_union"</code></li>
 <li><code>total_input_features</code>: Count of all numeric features before selection</li>
 <li><code>n_selected_union</code>: Total features in the union set</li>
-<li><code>n_overlap_both</code>: Features in top-X% of <em>both</em> <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> and MI</li>
+<li><code>n_overlap_both</code>: Features in top-X% of <em>both</em> <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> and <abbr title="Mutual Information">MI</abbr></li>
 <li><code>n_auc_only</code>: Features exclusive to the <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> arm</li>
-<li><code>n_mi_only</code>: Features exclusive to the MI arm</li>
+<li><code>n_mi_only</code>: Features exclusive to the <abbr title="Mutual Information">MI</abbr> arm</li>
 <li><code>n_keep_per_metric</code>: Number of features per metric arm (<span class="arithmatex">\(K\)</span>)</li>
 </ul>
 </div>
@@ -1421,7 +1433,7 @@ Use mouse to pan and zoom
 <p><strong>Statistical Testing</strong>: Over 50 trials (<code>n_trials=50</code>), each feature's <abbr title="SHapley Additive exPlanations">SHAP</abbr> importance is compared against the maximum shadow feature importance. Features that consistently exceed this threshold are <strong>Accepted</strong>; those that don't are <strong>Rejected</strong>. Features with borderline performance remain <strong>Tentative</strong> and are ultimately rejected.</p>
 </li>
 <li>
-<p><strong>Graceful Fallback</strong>: If Boruta-<abbr title="SHapley Additive exPlanations">SHAP</abbr> rejects all features (e.g., extremely noisy super-matrix), the pipeline falls back to MI-based top-<span class="arithmatex">\(K\)</span> selection automatically.</p>
+<p><strong>Graceful Fallback</strong>: If Boruta-<abbr title="SHapley Additive exPlanations">SHAP</abbr> rejects all features (e.g., extremely noisy super-matrix), the pipeline falls back to <abbr title="Mutual Information">MI</abbr>-based top-<span class="arithmatex">\(K\)</span> selection automatically.</p>
 </li>
 </ol>
 <h4 id="kreviews-configuration">kreview's Configuration</h4>
