@@ -3051,6 +3051,56 @@ def gpu_models(
         # OOF labels for downstream multimodal alignment
         results["oof_labels"] = y.tolist()
 
+        # ── Subgroup Analysis (matching cpu_models pattern) ──
+        # Use OOF predictions from successful GPU models for unbiased metrics
+        oof_preds = {}
+        for model_name in models:
+            probs_key = f"{model_name}_oof_probs"
+            if probs_key in results:
+                thresh = results.get(f"{model_name}_optimal_threshold", 0.5)
+                probs_arr = np.array(results[probs_key])
+                oof_preds[model_name] = (probs_arr >= thresh).astype(int)
+
+        if oof_preds:
+            # Cancer type subgroup analysis
+            if cancer_types is not None:
+                c_stats = []
+                c_series = pd.Series(cancer_types)
+                top_10 = c_series.value_counts().nlargest(10).index
+                for c_type in top_10:
+                    mask = cancer_types == c_type
+                    n_samp = mask.sum()
+                    if n_samp < 5:
+                        continue
+                    res_sub = _subgroup_metrics(mask, y, oof_preds)
+                    if res_sub:
+                        c_stats.append({
+                            "cancer_type": c_type,
+                            "n_samples": int(n_samp),
+                            "n_positives": int(y[mask].sum()),
+                            **res_sub,
+                        })
+                results["cancer_type_stats"] = c_stats
+
+            # Assay subgroup analysis
+            if assays is not None:
+                a_stats = []
+                a_series = pd.Series(assays)
+                for a_type in a_series.dropna().unique():
+                    mask = assays == a_type
+                    n_samp = mask.sum()
+                    if n_samp < 5:
+                        continue
+                    res_sub = _subgroup_metrics(mask, y, oof_preds)
+                    if res_sub:
+                        a_stats.append({
+                            "assay": a_type,
+                            "n_samples": int(n_samp),
+                            "n_positives": int(y[mask].sum()),
+                            **res_sub,
+                        })
+                results["assay_stats"] = a_stats
+
         # Detect when ALL GPU models failed — the results dict will have
         # oof_labels but no auc_* keys, which is indistinguishable from
         # success without this explicit check.
