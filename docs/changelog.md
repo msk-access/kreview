@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-06-09
+
+### Added
+- **Feature Group Ablation**: `kreview eval ablate {cpu,gpu,merge}` CLI commands for nested CV feature group selection. Identifies suffix-based feature groups, evaluates all subsets via inner CV, and picks the optimal subset per model per fold using `sensitivity_at_100spec_healthy`.
+- **Nested CV Pipeline**: Per-model per-fold feature subsets flow from ablation → merge → eval via `--best-subset`. Supports both CPU (LR/RF/XGB) and GPU (TabPFN/TabICL) models.
+- **Nextflow Ablation Stages**: 3 new modules (`ablate_cpu_single.nf`, `ablate_gpu_single.nf`, `merge_ablation.nf`) wired into `kreview_eval.nf` behind `params.run_ablation` flag. All stages run in parallel per evaluator.
+- **Scoreboard Columns**: `nested_cv` flag and `best_sens_100spec_healthy` (best sensitivity across ALL models) added to `build_scoreboard()`.
+- **Bootstrap CIs**: `_compute_oof_metrics()` produces 95% bootstrap CIs for AUC, sensitivity@100%spec, and all clinical metrics.
+- **GPU Subgroup Stats**: `gpu_models()` now reports `assay_stats` and `cancer_type_stats` for subgroup analysis.
+- **Test Suite**: `tests/test_ablation.py` with 17 tests covering feature grouping, subset generation, OOF metrics, backward compatibility, and scoreboard.
+
+### Changed
+- `eval cpu` and `eval gpu` accept optional `--best-subset` for nested CV with per-fold feature subsets.
+- `eval_cpu_single.nf` and `eval_gpu_single.nf` accept optional `best_subset` input channel (backward compatible via sentinel file).
+- `nextflow.config`: new params `run_ablation` (default: false), `ablation_inner_folds` (default: 3).
+
 ## [0.0.19] - 2026-06-08
 
 ### Fixed

@@ -27,12 +27,13 @@ This mirrors clinical decision-making: start with a verdict, then inspect the ev
 |-----------|-----------|---------|
 | Cohort Size | Matrix row count | Establishes sample power |
 | Positive Rate | Label distribution | Shows class balance and clinical prevalence |
-| Best AUC [95% CI] | `auc_rf`, `auc_rf_ci_lower/upper` | Key discriminative metric with uncertainty |
+| Best AUC [95% CI] | `auc_{best_m}`, `auc_{best_m}_ci_lower/upper` | Key discriminative metric with uncertainty (dynamically selected best model) |
 | Sensitivity @ Optimal | `{best_m}_classification_report["1"]["recall"]` | True positive detection rate at optimal cutoff |
 | Specificity @ Optimal | `{best_m}_classification_report["0"]["recall"]` | True negative rejection rate at optimal cutoff |
 | Sens @ 100% Spec | `{best_m}_sensitivity_at_100spec` | Sensitivity at zero false-positive rate (v0.0.16+) |
 | Holdout AUC | `holdout_{best_m}_auc` | AUC on unseen 20% test set with CV–holdout delta (v0.0.16+) |
 | Verdict | AUC threshold logic | Quick interpretation (Strong ≥0.80, Moderate ≥0.70, Weak <0.70) |
+| Nested CV | `nested_cv` flag | Whether ablation-based nested CV was used for feature selection (v0.0.20+) |
 
 ### Why these metrics
 
@@ -44,17 +45,17 @@ This mirrors clinical decision-making: start with a verdict, then inspect the ev
 
 ### ROC Sparkline + Calibration
 
-The mini-ROC curve provides a visual sanity check. The calibration reliability diagram (RF) shows whether predicted probabilities are trustworthy — tree-based models tend to push probabilities toward 0.5.
+The mini-ROC curve provides a visual sanity check. The calibration reliability diagram (all discovered models) shows whether predicted probabilities are trustworthy — tree-based models tend to push probabilities toward 0.5.
 
 ### Scoreboard
 
-If multiple evaluators have been run, the scoreboard table surfaces the top performers for cross-evaluator comparison. Columns include `best_model`, `best_auc`, `holdout_auc`, `auc_drop`, `sensitivity`, `specificity`, `sens_at_100spec`, `sens_at_95spec`, `selection_method`, `n_features`, `n_samples`, `holdout_n_train`, and `holdout_n_test`. Columns that are absent from the scoreboard DataFrame (e.g., pre-v0.0.16 results) are automatically hidden.
+If multiple evaluators have been run, the scoreboard table surfaces the top performers for cross-evaluator comparison. Columns include `best_model`, `best_auc`, `holdout_auc`, `auc_drop`, `sensitivity`, `specificity`, `sens_at_100spec`, `sens_at_95spec`, `best_sens_100spec_healthy`, `selection_method`, `n_features`, `best_subset_size`, `nested_cv`, `n_samples`, `holdout_n_train`, and `holdout_n_test`. Columns that are absent from the scoreboard DataFrame (e.g., pre-v0.0.16 results) are automatically hidden.
 
 ---
 
 ## Page 2: Model Validation
 
-Nine tabs, each answering a specific validation question:
+Eleven tabs, each answering a specific validation question:
 
 ### Performance Metrics
 **Question**: How do the trained models compare on clinical metrics?
@@ -89,6 +90,7 @@ Nine tabs, each answering a specific validation question:
 - Plots sensitivity, specificity, and PPV across 50 thresholds (0.01–0.99)
 - The optimal Youden's J threshold is marked with a dashed line
 - Allows clinicians to choose an operating point based on their risk tolerance
+- The classification report also uses this Youden's J threshold (consistent with confusion matrices)
 
 ### Fold Variability
 **Question**: How stable is AUC across cross-validation folds?
@@ -118,9 +120,10 @@ Nine tabs, each answering a specific validation question:
 - Includes support (sample count) per class
 
 ### Feature Importances
-**Question**: Which sub-features does RF consider most informative?
+**Question**: Which sub-features does the best model (by AUC) consider most informative?
 
-- Top 20 features by Gini importance from the fitted Random Forest
+- Top 20 features by Gini importance from the fitted model with highest AUC
+- Models are sorted by AUC descending; the first model supporting feature importances is shown
 - Complements SHAP by showing a simpler, non-interaction-aware view
 
 ---
@@ -153,7 +156,7 @@ Auto-generated metadata cards for the top-5 features, sourced from the evaluator
 - **Derived feature types** — detected via source code introspection (entropy, spectral, bimodality, etc.)
 
 ### Probability Densities
-KDE density plot of RF predicted probabilities by ctDNA label. Indicates label separation — a discriminative model shows non-overlapping peaks.
+KDE density plot of the best model's predicted probabilities by ctDNA label. Indicates label separation — a discriminative model shows non-overlapping peaks.
 
 ---
 
@@ -178,7 +181,7 @@ Scatter plot of Univariate AUC (x-axis) vs Mutual Information (y-axis) for all f
 This plot provides a visual audit trail for the selection method. Under `hybrid_union`, it shows exact 4-way overlaps (Both/AUC-only/MI-only/Dropped). Under `mrmr`, all selected features are colored cyan with a disclaimer noting that the AUC/MI axes are observational (mRMR internally uses F-statistic for relevance and Pearson correlation for redundancy).
 
 ### Feature #1 Violin
-Distribution of the single best feature (by Cohen's d) across the four ctDNA labels. Box plot overlay shows medians and IQR.
+Distribution of the single best feature (by Univariate AUC, with Cohen's d fallback for legacy results) across the four ctDNA labels. Box plot overlay shows medians and IQR.
 
 ### VAF Scatter (Tumor Burden Independence)
 Scatter plot of the top feature vs max VAF on log scale, colored by label. A LOWESS trendline reveals whether the feature independently predicts ctDNA status or simply tracks mutation burden. Features strongly correlated with VAF (Spearman r > 0.5) may be confounded.
@@ -221,6 +224,18 @@ A model with AUC=0.95 is meaningless if 30% of features are missing or if label 
 ## Sidebar: Glossary
 
 Concise definitions of the five ctDNA labels used in analysis, plus the `Undetermined` label (excluded from ML). Also documents the 80/20 train/test split for holdout evaluation. Kept minimal to avoid cognitive overload.
+
+---
+
+## Multimodal Dashboard (v0.0.20+)
+
+The multimodal template extends the single-evaluator dashboard with:
+
+- **Title**: "Kreview Multimodal Intelligence Dashboard" (distinct from single-evaluator)
+- **Selection Strategy** value box showing whether `mi` or `boruta_shap` was used
+- **Stacking vs Raw comparison chart**: grouped bar chart comparing `stacking_*` vs `raw_*` model AUCs with Δ annotations showing the lift from stacking
+- **Extended model discovery**: dynamically discovers `stacking_lr`, `stacking_rf`, `raw_lr`, `raw_xgb`, etc.
+- **Nested CV indicator**: shows whether ablation-based nested CV was used
 
 ---
 

@@ -5,7 +5,7 @@ format:
     theme:
       - cyborg
       - custom.scss
-    embed-resources: false
+    embed-resources: true
     html-math-method: katex
     include-in-header: 
       text: |
@@ -306,8 +306,8 @@ scoreboard_path = Path(matrix_path).parent / "scoreboard_combined__all.parquet"
 if scoreboard_path.exists():
     try:
         scoreboard_df = pd.read_parquet(scoreboard_path)
-    except Exception:
-        pass
+    except Exception as e:
+        display(Markdown(f"> Scoreboard could not be loaded: {e}"))
 ```
 
 # Glossary {.sidebar}
@@ -451,6 +451,21 @@ else:
 dict(value=verdict, color=v_color, icon="graph-up")
 ```
 
+```{python}
+#| content: valuebox
+#| title: "Nested CV"
+_ncv = "No"
+_ncv_color = "secondary"
+if mres and mres.get("nested_cv"):
+    _ncv = "Yes"
+    _ncv_color = "info"
+    # Show refit feature count for best model if available
+    _refit = mres.get(f"{best_m}_refit_features") if best_m else None
+    if _refit:
+        _ncv = f"Yes ({len(_refit)} feats)"
+dict(value=_ncv, color=_ncv_color, icon="layers")
+```
+
 ## Row {height="40%"}
 
 ### Column {width="50%"}
@@ -538,7 +553,9 @@ if scoreboard_df is not None:
         "holdout_auc", "auc_drop",
         "sensitivity", "specificity",
         "sens_at_100spec", "sens_at_95spec",
-        "selection_method", "n_features", "n_samples",
+        "best_sens_100spec_healthy",
+        "selection_method", "n_features", "best_subset_size",
+        "nested_cv", "n_samples",
         "holdout_n_train", "holdout_n_test",
     ]
     avail = [c for c in display_cols if c in scoreboard_df.columns]
@@ -565,7 +582,7 @@ if eval_df is not None and "univariate_auc" in eval_df.columns:
         top_20_df, x="univariate_auc", y="feature_column",
         orientation='h',
         color="univariate_auc",
-        color_continuous_scale="Purpor"
+        color_continuous_scale="Purples"
     )
     _ = fig_bar.update_layout(
         **LAYOUT_DEFAULTS,
@@ -581,7 +598,7 @@ elif eval_df is not None and "cohens_d_true_vs_healthy" in eval_df.columns:
     fig_bar = px.bar(
         top_20_df, x="cohens_d_true_vs_healthy", y="feature_column",
         orientation='h', color="cohens_d_true_vs_healthy",
-        color_continuous_scale="Purpor"
+        color_continuous_scale="Purples"
     )
     _ = fig_bar.update_layout(
         **LAYOUT_DEFAULTS, showlegend=False,
@@ -923,12 +940,13 @@ if oof_y is not None and len(oof_preds) > 0:
             fig_cm = make_subplots(rows=1, cols=len(cms), subplot_titles=titles)
             labels = ["Negative (0)", "Positive (1)"]
             
+            _cm_scales = ["Blues", "Reds", "Oranges", "Greens", "Purples", "Greys", "YlOrBr"]
             for i, cm in enumerate(cms):
                 z_text = [[str(y) for y in x] for x in cm]
                 trace = go.Heatmap(
                     z=cm, x=labels, y=labels,
                     text=z_text, texttemplate="%{text}",
-                    colorscale="Blues" if i==0 else ("Reds" if i==1 else "Oranges"),
+                    colorscale=_cm_scales[i % len(_cm_scales)],
                     showscale=False
                 )
                 _ = fig_cm.add_trace(trace, row=1, col=i+1)
@@ -1044,7 +1062,9 @@ if oof_y is not None and len(oof_preds) > 0:
     from sklearn.metrics import classification_report, precision_recall_curve, average_precision_score
     for prefix, name in DYNAMIC_MODELS:
         if name in oof_preds:
-            d = classification_report(oof_y, (oof_preds[name] > 0.5).astype(int), output_dict=True)
+            # R4 fix: use per-model Youden J optimal threshold (consistent with confusion matrices)
+            _cls_thresh = mres.get(f"{prefix}_optimal_threshold", 0.5) if mres else 0.5
+            d = classification_report(oof_y, (oof_preds[name] > _cls_thresh).astype(int), output_dict=True)
             t = pd.DataFrame(d).transpose()
             t["Model"] = name
             t.index.name = "Class/Metric"
@@ -1065,7 +1085,9 @@ if oof_y is not None and len(oof_preds) > 0:
 #| echo: false
 has_imp = False
 if mres is not None:
-    for pfx, name in DYNAMIC_MODELS:
+    # R11 fix: iterate models sorted by AUC descending to show the best model's importances
+    _sorted_models = sorted(DYNAMIC_MODELS, key=lambda x: mres.get(f"auc_{x[0]}", 0), reverse=True)
+    for pfx, name in _sorted_models:
         imp = mres.get(f"{pfx}_feature_importances")
         if imp and isinstance(imp, dict):
             has_imp = True
@@ -1084,7 +1106,7 @@ if mres is not None:
                 xaxis_title="Importance", yaxis_title=""
             )
             show_plotly(fig_imp, filename=f"feature_importances_{pfx}")
-            break # Only show for the highest ranked model that supports it
+            break  # Show only the best model that supports feature importances
 
 if not has_imp:
     display(Markdown("> Feature importances not available."))
@@ -1101,7 +1123,14 @@ SHAP (Shapley Additive Explanations) values explain model behavior by indicating
 
 ```{python}
 #| echo: false
-# SHAP Helper functions (imports already loaded at top of file)
+# SHAP Helper functions
+# R17 fix: import shap with graceful fallback
+try:
+    import shap
+    _shap_available = True
+except ImportError:
+    _shap_available = False
+    display(Markdown("> ⚠ `shap` package is not installed. SHAP explainability tabs will be skipped."))
 
 def compute_shap_and_plot_beeswarm(model, X_sh, shap_df_samp, model_title="", n_display=10):
     """Compute SHAP values and render an interactive beeswarm plot.
@@ -1324,7 +1353,7 @@ for prefix, (sv, top, sl, sid, display_name) in shap_results.items():
     try:
         plot_shap_dependence(sv, top, X_shap.columns.tolist(), sl, sid, display_name)
     except Exception as e:
-        pass
+        display(Markdown(f"> SHAP dependence plot skipped for {display_name}: {e}"))
 ```
 
 ### Prediction Traces (Waterfalls)
@@ -1333,8 +1362,8 @@ for prefix, (sv, top, sl, sid, display_name) in shap_results.items():
 #| echo: false
 for prefix, (sv, top, sl, sid, display_name) in shap_results.items():
     try:
-        # Get preds. Fallback to model.predict_proba if oof_preds missing
-        preds = oof_preds.get(prefix)
+        # R3 fix: oof_preds is keyed by display name (e.g., "Random Forest"), not prefix ("rf")
+        preds = oof_preds.get(display_name)
         if preds is None:
             model_joblib = Path(matrix_path).parent / f"{feature_name}_{prefix}_model.joblib"
             if model_joblib.exists():
@@ -1345,7 +1374,7 @@ for prefix, (sv, top, sl, sid, display_name) in shap_results.items():
                     preds = model.predict(X_shap)
         plot_shap_waterfall(sv, preds, X_shap.columns.tolist(), sl, display_name)
     except Exception as e:
-        pass
+        display(Markdown(f"> SHAP waterfall skipped for {display_name}: {e}"))
 ```
 
 ### Feature Cards
@@ -1392,10 +1421,16 @@ try:
             if s is not None:
                 stab = f"Stability: {s:.0%}"
         
-        # Get direction
+        # R13 fix: per-feature LR coefficient direction (not global)
         direction = ""
-        if mres and "lr_coef_direction" in mres:
-            direction = f"LR Direction: {mres['lr_coef_direction']}"
+        if mres and "lr_feature_directions" in mres:
+            _dir_val = mres["lr_feature_directions"].get(feat)
+            if _dir_val:
+                direction = f"LR: {_dir_val}"
+        
+        # Build metadata line — only show separator if both parts present
+        _meta_parts = [p for p in [stab, direction] if p]
+        _meta_line = " · ".join(_meta_parts)
         
         if card:
             card_html += f'''
@@ -1404,7 +1439,7 @@ try:
                 <div style="font-size: 0.9rem; font-weight: 600; color: #e0e6ed; margin-bottom: 6px;">{feat}</div>
                 <div style="font-size: 0.78rem; color: #8b949e;">Source: {card["source_file"]}</div>
                 <div style="font-size: 0.78rem; color: #8b949e;">{d_val} {(" · " + miss_val) if miss_val else ""}</div>
-                <div style="font-size: 0.78rem; color: #8b949e;">{stab} {(" · " + direction) if direction else ""}</div>
+                {f'<div style="font-size: 0.78rem; color: #8b949e;">{_meta_line}</div>' if _meta_line else ""}
                 {"<div style='font-size: 0.7rem; color: #ff9b42; margin-top: 4px;'>Derived: " + ", ".join(card["derived_types"]) + "</div>" if card["has_derived"] else ""}
             </div>'''
         else:
@@ -1445,7 +1480,7 @@ if best_preds_all is not None and kde_labels is not None:
                                   show_hist=False, show_rug=False)
         _ = fig_kde.update_layout(
             **LAYOUT_DEFAULTS,
-            title="RF Predicted Probability Density by Label",
+            title=f"{dict(DYNAMIC_MODELS).get(best_m, best_m.upper() if best_m else 'Best Model')} Predicted Probability Density by Label",
             xaxis_title="Predicted Probability (ctDNA+)",
             yaxis_title="Density",
             height=600
@@ -1771,7 +1806,7 @@ if "GENE_PANEL" in df.columns:
     panel_counts = df["GENE_PANEL"].value_counts()
     fig_panel = px.bar(
         x=panel_counts.values, y=panel_counts.index, orientation="h",
-        color=panel_counts.values, color_continuous_scale="Purpor"
+        color=panel_counts.values, color_continuous_scale="Purples"
     )
     _ = fig_panel.update_layout(
         **LAYOUT_DEFAULTS, showlegend=False,

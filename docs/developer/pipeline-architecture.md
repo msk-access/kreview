@@ -11,10 +11,17 @@ The `kreview` pipeline is decomposed into independent stages that can run either
 ```mermaid
 graph LR
     classDef step fill:#8b5cf6,stroke:#5b21b6,color:#fff;
+    classDef opt fill:#f59e0b,stroke:#b45309,color:#fff;
     A["Label"]:::step --> B["Extract ×N"]:::step
     B --> C[Select]:::step
-    C --> D["Eval CPU"]:::step
-    C --> E["Eval GPU"]:::step
+    C --> ABL_CPU["Ablate CPU ×N"]:::opt
+    C --> ABL_GPU["Ablate GPU ×N"]:::opt
+    ABL_CPU --> ABL_MERGE["Merge Ablation ×N"]:::opt
+    ABL_GPU --> ABL_MERGE
+    ABL_MERGE --> D["Eval CPU"]:::step
+    ABL_MERGE --> E["Eval GPU"]:::step
+    C --> D
+    C --> E
     C --> F[Fuse]:::step
     D --> S[Scoreboard]:::step
     E --> S
@@ -36,6 +43,9 @@ graph LR
     The multimodal pipeline is **decomposed**: `prep` builds the stacking matrix, `single` trains per-model stacking classifiers (parallelized across models), `ablation` runs feature ablation, and `merge` aggregates final results.
     The legacy monolithic `kreview eval multimodal run` can also execute the full pipeline as a single step.
 
+!!! tip "Feature Group Ablation (v0.0.20+, optional)"
+    When `params.run_ablation = true`, the ABLATE stages (shown in amber) run between SELECT and EVAL. They use nested inner CV to identify the best feature group subset per model, producing a `best_subset.json` that EVAL consumes via `--best-subset`. When `run_ablation = false` (default), EVAL runs directly after SELECT with all selected features.
+
 ---
 
 ## Command → Module → Notebook Mapping
@@ -47,6 +57,9 @@ Every module in `kreview` is auto-generated from an nbdev notebook in `nbs/`. **
 | `kreview label` | `cli.py:label()` | `nbs/90_cli.ipynb` | Generate ctDNA labels |
 | `kreview extract` | `cli.py:extract()` | `nbs/90_cli.ipynb` | Label + extract feature matrices |
 | `kreview select` | `cli_select.py:select()` | `nbs/92_cli_select.ipynb` | Score features + mRMR/hybrid-union selection |
+| `kreview eval ablate cpu` | `cli_eval.py:eval_ablate_cpu()` | `nbs/91_cli_eval.ipynb` | Nested CV feature group ablation (CPU) |
+| `kreview eval ablate gpu` | `cli_eval.py:eval_ablate_gpu()` | `nbs/91_cli_eval.ipynb` | Nested CV feature group ablation (GPU) |
+| `kreview eval ablate merge` | `cli_eval.py:eval_ablate_merge()` | `nbs/91_cli_eval.ipynb` | Merge CPU + GPU ablation → `best_subset.json` |
 | `kreview eval cpu` | `cli_eval.py:eval_cpu()` | `nbs/91_cli_eval.ipynb` | CPU model evaluation (LR, RF, XGB) |
 | `kreview eval gpu` | `cli_eval.py:eval_gpu()` | `nbs/91_cli_eval.ipynb` | GPU model evaluation (TabPFN, TabPFN-FT, TabICL, TabICL-FT) |
 | `kreview fuse` | `cli.py:fuse()` | `nbs/90_cli.ipynb` | Fuse per-evaluator matrices → super-matrix |
@@ -64,7 +77,7 @@ Every module in `kreview` is auto-generated from an nbdev notebook in `nbs/`. **
 | Module | Source Notebook | Functions | Used By |
 |--------|-----------------|-----------|---------|
 | `selection.py` | `nbs/04_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()`, `MODEL_LABELS`, `POSITIVE_LABELS` | `kreview run`, `kreview select`, report templates |
-| `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()`, `load_model_results()`, `load_all_model_results()`, `multimodal_prep()`, `multimodal_single()`, `multimodal_ablation()`, `multimodal_merge()` | `kreview run`, `kreview eval cpu/gpu`, `kreview eval multimodal *`, `selection.py`, `scoreboard.py`, report templates |
+| `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()`, `load_model_results()`, `load_all_model_results()`, `identify_feature_groups()`, `generate_subsets()`, `ablate_feature_groups()`, `merge_ablation()`, `_compute_oof_metrics()`, `multimodal_prep()`, `multimodal_single()`, `multimodal_ablation()`, `multimodal_merge()` | `kreview run`, `kreview eval cpu/gpu`, `kreview eval ablate *`, `kreview eval multimodal *`, `selection.py`, `scoreboard.py`, report templates |
 | `scoreboard.py` | Standalone | `build_scoreboard()` | `kreview report`, `KREVIEW_SCOREBOARD` |
 | `core.py` | `nbs/00_core.ipynb` | `LABEL_META_COLS`, `Paths`, `LabelConfig` | All commands |
 | `registry.py` | `nbs/03_registry.ipynb` | `get_all_evaluators()` | `kreview run`, `kreview extract`, `kreview features-list` |
@@ -97,6 +110,9 @@ Extract:  → {evaluator}_matrix.parquet  (full features)
 Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
           → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)
           → {evaluator}_selection_qc.json  (selection audit trail)
+Ablate CPU:  → {evaluator}_ablation_cpu_results.json  (per-fold best subsets for LR/RF/XGB)
+Ablate GPU:  → {evaluator}_ablation_gpu_results.json  (per-fold best subsets for TabPFN/TabICL)
+Merge Ablation: → {evaluator}_best_subset.json  (merged per-model-per-fold winning features + fold_assignment)
 Eval CPU: → {evaluator}_model_results.json  (AUCs, OOF probs)
           → {evaluator}_{model}_model.joblib  (trained models)
 Eval GPU: → {evaluator}_gpu_model_results.json  (all GPU model AUCs + OOF probs in one JSON)
@@ -119,19 +135,22 @@ See [Nextflow Integration](../operations/nextflow.md) for full HPC execution doc
 In Nextflow multistage mode (`params.pipeline_mode = 'multistage'`), the DAG executes as:
 
 ```
-LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── EVAL_CPU ────┬── MULTIMODAL_PREP
-                                           ├── EVAL_GPU ────┤
-                                           └── FUSE ────────┘
-                                                    ↓
-                                         MULTIMODAL_SINGLE ×M
-                                                    ↓
-                                         MULTIMODAL_ABLATION
-                                                    ↓
-                                          MULTIMODAL_MERGE
-                                                    ↓
-                                          REPORT_MULTIMODAL
-                                                    \── REPORT (parallel)
+LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── [ABLATE_CPU ×N] ──┬── EVAL_CPU ────┬── MULTIMODAL_PREP
+                                          ├── [ABLATE_GPU ×N] ──┤      (optional)  ├── EVAL_GPU ────┤
+                                          │  [MERGE_ABLATION] ──┘                  └── FUSE ────────┘
+                                          │                                               ↓
+                                          │                                    MULTIMODAL_SINGLE ×M
+                                          │                                               ↓
+                                          │                                    MULTIMODAL_ABLATION
+                                          │                                               ↓
+                                          │                                     MULTIMODAL_MERGE
+                                          │                                               ↓
+                                          │                                     REPORT_MULTIMODAL
+                                          └── SCOREBOARD ───────── REPORT (parallel)
 ```
+
+!!! info "Optional Ablation Stages (v0.0.20+)"
+    The `[ABLATE_CPU]`, `[ABLATE_GPU]`, and `[MERGE_ABLATION]` stages are optional and controlled by `params.run_ablation` (default: `false`). When disabled, EVAL runs directly after SELECT with all selected features. When enabled, MERGE produces a `best_subset.json` consumed by EVAL via `--best-subset`.
 
 !!! info "Legacy Monolithic Module"
     The original `KREVIEW_EVAL_MULTIMODAL` module (`eval_multimodal.nf`) is kept for standalone testing. It uses `kreview eval multimodal run` to execute the full pipeline in a single process.
@@ -143,8 +162,11 @@ Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 | `KREVIEW_LABEL` | `label.nf` | Samplesheets + cBioPortal | `labels.parquet` | `outdir/labels/` |
 | `KREVIEW_EXTRACT` | `extract.nf` | Samplesheets + labels.parquet | `*_matrix.parquet` | `outdir/matrices/raw/` |
 | `KREVIEW_SELECT_SINGLE` | `select_single.nf` | Raw matrix | Selected matrix + stats + QC | `outdir/matrices/selected/` |
-| `KREVIEW_EVAL_CPU_SINGLE` | `eval_cpu_single.nf` | Selected matrix | `*_model_results.json` + `*.joblib` | `outdir/models/cpu/` |
-| `KREVIEW_EVAL_GPU_SINGLE` | `eval_gpu_single.nf` | Selected matrix + eval_stats | `*_gpu_model_results.json` + `*.joblib` | `outdir/models/gpu/` |
+| `KREVIEW_ABLATE_CPU_SINGLE` | `ablate_cpu_single.nf` | Selected matrix + labels | `*_ablation_cpu_results.json` | `outdir/models/ablation/` |
+| `KREVIEW_ABLATE_GPU_SINGLE` | `ablate_gpu_single.nf` | Selected matrix + labels + eval_stats | `*_ablation_gpu_results.json` | `outdir/models/ablation/` |
+| `KREVIEW_MERGE_ABLATION` | `merge_ablation.nf` | CPU + GPU ablation JSONs | `*_best_subset.json` | `outdir/models/ablation/` |
+| `KREVIEW_EVAL_CPU_SINGLE` | `eval_cpu_single.nf` | Selected matrix + best_subset | `*_model_results.json` + `*.joblib` | `outdir/models/cpu/` |
+| `KREVIEW_EVAL_GPU_SINGLE` | `eval_gpu_single.nf` | Selected matrix + eval_stats + best_subset | `*_gpu_model_results.json` + `*.joblib` | `outdir/models/gpu/` |
 | `KREVIEW_FUSE` | `fuse.nf` | All selected matrices | `super_matrix.parquet` | `outdir/matrices/fused/` |
 | `KREVIEW_SCOREBOARD` | `scoreboard.nf` | Collected CPU + GPU JSONs | `scoreboard_combined__all.parquet` | `outdir/` |
 | `KREVIEW_MULTIMODAL_PREP` | `multimodal_prep.nf` | Eval results + super_matrix | `stacking_matrix.parquet` + `prep_metadata.json` | `outdir/models/multimodal/` |

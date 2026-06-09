@@ -22,6 +22,7 @@
 - **5-Tier ctDNA Taxonomy**: MSK-IMPACT paired-inference to label `True ctDNA+`, `Possible ctDNA+`, `Possible ctDNA−`, `Healthy Normal`, and `Insufficient Data`. Optional CH hotspot demotion via `--ch-hotspot-maf`.
 - **DuckDB Dynamic Data Lake**: In-memory `read_parquet` bindings with chunked I/O and exponential backoff retry. Builds a merged SQL-queryable `kreview_lake.duckdb` on demand.
 - **Multi-Model Evaluation**: Logistic Regression, Random Forest, and XGBoost (CPU) plus TabPFN and TabICL (GPU) with Stratified K-Fold CV, SHAP explainability, and subgroup analysis.
+- **Nested CV Feature Ablation**: Automated feature group subset selection via inner-loop cross-validation, eliminating non-informative feature groups before final evaluation. Uses `sensitivity_at_100spec_healthy` as the optimization metric.
 - **Feature Selection**: [mRMR](https://github.com/smazzanti/mrmr) (Minimum Redundancy Maximum Relevance) as default strategy — iteratively selects features maximizing target relevance while minimizing inter-feature redundancy. Legacy `hybrid_union` (AUC ∪ MI) also available.
 - **Multimodal Stacking**: Cross-evaluator fusion via super-matrix with Mutual Information or [Boruta-SHAP](https://github.com/Ekeany/Boruta-Shap) selection, followed by stacking ensemble + ablation analysis.
 - **Interactive Dashboards**: Plotly-native HTML reports with ROC curves, violin plots, SHAP beeswarm/waterfall, mRMR scatter plots, per-cancer-type sensitivity tables, and Decision Curve Analysis.
@@ -34,16 +35,19 @@
 graph LR
     A[Label] --> B["Extract ×N"]
     B --> C[Select]
-    C --> D["Eval CPU"]
-    C --> E["Eval GPU"]
-    C --> F[Fuse]
-    D --> G[Scoreboard]
-    E --> G
-    D --> I["Eval Multimodal"]
-    E --> I
+    C --> D["Ablate (opt)"]
+    D --> E["Eval CPU"]
+    D --> F["Eval GPU"]
+    C --> E
+    C --> F
+    C --> G[Fuse]
+    E --> H[Scoreboard]
+    F --> H
+    E --> I["Eval Multimodal"]
     F --> I
-    G --> H[Report]
-    I --> J["Report Multimodal"]
+    G --> I
+    H --> J[Report]
+    I --> K["Report Multimodal"]
 ```
 
 The pipeline supports two modes:
@@ -117,6 +121,7 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --pipeline_mode multistage \
   --run_gpu_eval true \
   --gpu_models "tabpfn,tabicl" \
+  --run_ablation true \
   --run_multimodal_eval true \
   -profile iris
 ```
@@ -134,6 +139,7 @@ open output/reports/ATAC_dashboard.html
 |----------|-------|--------|---------|
 | `mrmr` | Single-evaluator | F-statistic relevance + Pearson redundancy penalty | ✅ |
 | `hybrid_union` | Single-evaluator | Top-X% AUC ∪ Top-X% MI | Legacy |
+| Nested CV ablation | Single-evaluator | Inner CV on feature group subsets → best subset per model | Optional (`--run-ablation`) |
 | `mi` | Multimodal | Mutual Information top-K ranking | ✅ |
 | `boruta_shap` | Multimodal | SHAP importance vs shadow variables (50 trials) | Optional |
 

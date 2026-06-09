@@ -4,12 +4,12 @@
 // Runs `kreview eval gpu` on a SINGLE evaluator matrix using
 // TabPFN and/or TabICL foundation models.
 //
+// When best_subset is provided (from ablation), uses nested CV
+// with per-fold feature subsets instead of all features.
+//
 // Model names encode their variant:
 //   tabpfn = zero-shot, tabpfn_ft = fine-tuned
 //   tabicl = zero-shot, tabicl_ft = fine-tuned
-//
-// Used in multistage mode to scatter GPU evaluation across
-// evaluators in parallel (×N jobs on gpushort partition).
 //
 // Container: Uses the GPU container (kreview:vX.Y.Z-gpu)
 //            via the 'process_gpu' label in nextflow.config.
@@ -18,6 +18,7 @@
 //
 // Data flow (multistage):
 //   KREVIEW_SELECT_SINGLE.out.matrix (per-evaluator)
+//     → [optional: ABLATE → MERGE_ABLATION]
 //     → KREVIEW_EVAL_GPU_SINGLE ×N (parallel, gpushort)
 //     → collect → KREVIEW_MULTIMODAL_PREP → ... → KREVIEW_MULTIMODAL_MERGE
 // ---------------------------------------------------------
@@ -30,6 +31,7 @@ process KREVIEW_EVAL_GPU_SINGLE {
     input:
     path(matrix)       // Single selected *_matrix.parquet
     path(eval_stats)   // Matching *_eval_stats.parquet for GPU feature capping
+    path(best_subset)  // *_best_subset.json (or NO_BEST_SUBSET sentinel)
 
     output:
     path "*_gpu_model_results.json", emit: gpu_results
@@ -42,6 +44,7 @@ process KREVIEW_EVAL_GPU_SINGLE {
     def epochs_arg       = params.gpu_finetune_epochs ?: 50
     def cv_folds         = params.cv_folds            ?: 5
     def max_gpu_feat_arg = params.max_gpu_features    ?: 150
+    def seed             = params.seed                ?: 42
     """
     set -euo pipefail
 
@@ -70,6 +73,13 @@ process KREVIEW_EVAL_GPU_SINGLE {
     export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
     ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set — TabPFN will be skipped if weights not cached"}
 
+    # Build best-subset flag
+    BEST_SUBSET_FLAG=""
+    if [ -f "${best_subset}" ] && [ "${best_subset}" != "NO_BEST_SUBSET" ]; then
+        BEST_SUBSET_FLAG="--best-subset ${best_subset}"
+        echo "Using best_subset: ${best_subset}"
+    fi
+
     # Run GPU eval — capture exit code instead of failing on error
     set +e
     PYTHONUNBUFFERED=1 kreview eval gpu \\
@@ -78,9 +88,10 @@ process KREVIEW_EVAL_GPU_SINGLE {
         --device ${device_arg} \\
         --finetune-epochs ${epochs_arg} \\
         --cv-folds ${cv_folds} \\
-        --seed ${params.seed ?: 42} \\
+        --seed ${seed} \\
         ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --max-gpu-features ${max_gpu_feat_arg} \\
+        \$BEST_SUBSET_FLAG \\
         --output .
     GPU_EXIT=\$?
     set -e
@@ -93,9 +104,6 @@ process KREVIEW_EVAL_GPU_SINGLE {
     done
 
     # Always produce output JSON — even on total failure.
-    # Nextflow collect() only receives outputs from exit-0 tasks.
-    # With errorStrategy 'ignore' + exit 1, the output channel never
-    # closes and downstream SCOREBOARD/MULTIMODAL hang forever.
     if ! ls *_gpu_model_results.json 1>/dev/null 2>&1; then
         echo "WARNING: GPU eval failed for ${evaluator} (exit=\$GPU_EXIT), emitting error JSON" >&2
         echo '{"evaluator": "${evaluator}", "error": "all_gpu_models_failed", "exit_code": '\$GPU_EXIT'}' \

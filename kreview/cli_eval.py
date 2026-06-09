@@ -7,6 +7,10 @@ __all__ = [
     "log",
     "eval_app",
     "multimodal_app",
+    "ablate_app",
+    "eval_ablate_cpu",
+    "eval_ablate_gpu",
+    "eval_ablate_merge",
     "eval_cpu",
     "eval_gpu",
     "eval_multimodal",
@@ -43,6 +47,144 @@ multimodal_app = typer.Typer(
     help="Cross-evaluator multimodal evaluation (stacking + ablation)",
 )
 eval_app.add_typer(multimodal_app, name="multimodal")
+
+# Ablation sub-command group: `kreview eval ablate {cpu,gpu,merge}`
+ablate_app = typer.Typer(
+    name="ablate",
+    help="Feature group ablation — finds optimal feature subset per evaluator",
+)
+eval_app.add_typer(ablate_app, name="ablate")
+
+
+@ablate_app.command("cpu")
+def eval_ablate_cpu(
+    matrix: Path = typer.Option(..., help="Path to selected matrix parquet"),
+    output: Path = typer.Option(".", help="Output directory for ablation JSON"),
+    n_outer_folds: int = typer.Option(5, help="Outer CV folds (must match eval)"),
+    n_inner_folds: int = typer.Option(3, help="Inner CV folds for subset selection"),
+    seed: int = typer.Option(42, help="Random seed"),
+):
+    """CPU feature group ablation (LR, RF, XGB) with nested CV.
+
+    Evaluates feature subsets across outer folds using inner CV
+    to find the best feature group combination per model.
+    Output: ``{evaluator}_ablation_cpu.json``
+    """
+    from kreview.eval_engine import ablate_feature_groups
+
+    print("╔══ ABLATE CPU ═══════════════════════════════════════╗", flush=True)
+    print(f"  Matrix:      {matrix}", flush=True)
+    print(f"  Outer folds: {n_outer_folds}", flush=True)
+    print(f"  Inner folds: {n_inner_folds}", flush=True)
+    print(f"  Seed:        {seed}", flush=True)
+
+    start = _time.time()
+    result = ablate_feature_groups(
+        matrix,
+        models=("lr", "rf", "xgb"),
+        n_outer_folds=n_outer_folds,
+        n_inner_folds=n_inner_folds,
+        random_state=seed,
+        output_path=output,
+    )
+
+    elapsed = _time.time() - start
+    if "error" in result:
+        print(f"  ⚠ ERROR: {result['error']}", flush=True)
+    elif result.get("passthrough"):
+        print("  ℹ Passthrough (single feature group)", flush=True)
+    else:
+        print(
+            f"  ✓ Ablation complete: {result.get('n_groups', 0)} groups, "
+            f"{len(result.get('per_fold_results', []))} folds",
+            flush=True,
+        )
+    print(f"  Time: {elapsed:.1f}s", flush=True)
+    print("╚════════════════════════════════════════════════════╝", flush=True)
+
+
+@ablate_app.command("gpu")
+def eval_ablate_gpu(
+    matrix: Path = typer.Option(..., help="Path to selected matrix parquet"),
+    output: Path = typer.Option(".", help="Output directory for ablation JSON"),
+    models: str = typer.Option("tabpfn,tabicl", help="Comma-separated GPU model names"),
+    n_outer_folds: int = typer.Option(
+        5, help="Outer CV folds (must match CPU ablation)"
+    ),
+    n_inner_folds: int = typer.Option(3, help="Inner CV folds for subset selection"),
+    seed: int = typer.Option(42, help="Random seed"),
+    device: str = typer.Option("cuda", help="PyTorch device"),
+    max_gpu_features: int = typer.Option(150, help="Feature cap for GPU models"),
+    eval_stats: Path = typer.Option(
+        None,
+        "--eval-stats",
+        help="Path to eval_stats parquet for score-based feature capping",
+    ),
+):
+    """GPU feature group ablation (TabPFN, TabICL) with nested CV.
+
+    Uses ZERO-SHOT inference only in the inner CV loop (no fine-tuning).
+    Output: ``{evaluator}_ablation_gpu.json``
+    """
+    model_tuple = tuple(m.strip() for m in models.split(","))
+    _validate_gpu_models(model_tuple)
+    from kreview.eval_engine import ablate_feature_groups
+
+    print("╔══ ABLATE GPU ═══════════════════════════════════════╗", flush=True)
+    print(f"  Matrix:      {matrix}", flush=True)
+    print(f"  Models:      {model_tuple}", flush=True)
+    print(f"  Device:      {device}", flush=True)
+
+    start = _time.time()
+    result = ablate_feature_groups(
+        matrix,
+        models=model_tuple,
+        n_outer_folds=n_outer_folds,
+        n_inner_folds=n_inner_folds,
+        random_state=seed,
+        output_path=output,
+        device=device,
+        max_gpu_features=max_gpu_features,
+        eval_stats_path=eval_stats,
+    )
+
+    elapsed = _time.time() - start
+    if "error" in result:
+        print(f"  ⚠ ERROR: {result['error']}", flush=True)
+    else:
+        print("  ✓ GPU ablation complete", flush=True)
+    print(f"  Time: {elapsed:.1f}s", flush=True)
+    print("╚════════════════════════════════════════════════════╝", flush=True)
+
+
+@ablate_app.command("merge")
+def eval_ablate_merge(
+    cpu_json: Path = typer.Option(..., help="Path to *_ablation_cpu.json"),
+    gpu_json: Path = typer.Option(None, help="Path to *_ablation_gpu.json (optional)"),
+    output: Path = typer.Option(".", help="Output directory for best_subset.json"),
+):
+    """Merge CPU + GPU ablation results into best_subset.json.
+
+    Produces a unified per-model per-fold feature list consumed by
+    ``kreview eval cpu --best-subset`` and ``kreview eval gpu --best-subset``.
+    """
+    from kreview.eval_engine import merge_ablation
+
+    print("╔══ ABLATE MERGE ═════════════════════════════════════╗", flush=True)
+    print(f"  CPU JSON: {cpu_json}", flush=True)
+    print(f"  GPU JSON: {gpu_json or 'None'}", flush=True)
+
+    result = merge_ablation(
+        cpu_json_path=cpu_json,
+        gpu_json_path=gpu_json,
+        output_path=output,
+    )
+
+    n_models = len(result.get("per_model_per_fold_features", {}))
+    print(f"  ✓ Merged: {n_models} models", flush=True)
+    if result.get("gpu_error"):
+        print("  ⚠ GPU ablation had errors — CPU-only results", flush=True)
+    print("╚════════════════════════════════════════════════════╝", flush=True)
 
 
 def _validate_gpu_models(models: tuple[str, ...], flag_name: str = "--models") -> None:
@@ -316,6 +458,11 @@ def eval_cpu(
         "--deterministic/--no-deterministic",
         help="Enable PyTorch deterministic mode (slower but reproducible).",
     ),
+    best_subset: Path = typer.Option(
+        None,
+        "--best-subset",
+        help="Path to *_best_subset.json from ablation merge (enables nested CV)",
+    ),
 ):
     """Per-evaluator evaluation using LR, RF, XGBoost (CPU).
 
@@ -406,9 +553,9 @@ def eval_cpu(
 
             if has_split:
                 X_train = model_df.loc[train_mask, feature_cols].values
-                y_train = y[train_mask.values]
+                y_train = y[train_mask.values]  # type: ignore[index]
                 X_test = model_df.loc[test_mask, feature_cols].values
-                y_test = y[test_mask.values]
+                y_test = y[test_mask.values]  # type: ignore[index]
                 train_labels = (
                     model_df.loc[train_mask, "label"].values
                     if "label" in model_df.columns
@@ -429,23 +576,47 @@ def eval_cpu(
                 )
                 test_labels = None
 
+            # ── Load ablation results if provided ──
+            per_fold_data = None
+            fold_assign = None
+            if best_subset is not None:
+                bs_path = best_subset
+                if bs_path.is_dir():
+                    bs_path = bs_path / f"{evaluator}_best_subset.json"
+                if bs_path.exists():
+                    with open(bs_path) as f:
+                        bs_data = json.load(f)
+                    if not bs_data.get("passthrough", False):
+                        per_fold_data = bs_data.get("per_model_per_fold_features")
+                        fold_assign = bs_data.get("fold_assignment")
+                        print(f"  Using best_subset: {bs_path.name}", flush=True)
+                    else:
+                        print(
+                            "  Passthrough (single group) — using all features",
+                            flush=True,
+                        )
+                else:
+                    print(f"  ⚠ best_subset not found: {bs_path}", flush=True)
+
             results, lr, rf, xgb = cpu_models(
                 X_train,
                 y_train,
                 feature_names=feature_cols,
                 cancer_types=(
-                    c_types[train_mask.values]
+                    c_types[train_mask.values]  # type: ignore[index]
                     if has_split and c_types is not None
                     else c_types
                 ),
                 assays=(
-                    a_types[train_mask.values]
+                    a_types[train_mask.values]  # type: ignore[index]
                     if has_split and a_types is not None
                     else a_types
                 ),
                 n_folds=cv_folds,
                 random_state=seed,
                 sample_labels=train_labels,
+                per_fold_features=per_fold_data,
+                fold_assignment=fold_assign,
             )
 
             # ── Holdout evaluation (v0.0.16+) ──
@@ -454,9 +625,22 @@ def eval_cpu(
 
                 for model_name, fitted_model in [("lr", lr), ("rf", rf), ("xgb", xgb)]:
                     if fitted_model is not None:
+                        # When nested CV is active, the refitted model uses a
+                        # feature subset. Slice X_test to match (GAP 1 fix).
+                        refit_feats = results.get(f"{model_name}_refit_features")
+                        if refit_feats and per_fold_data is not None:
+                            refit_idx = [
+                                feature_cols.index(f)
+                                for f in refit_feats
+                                if f in feature_cols
+                            ]
+                            X_test_model = X_test[:, refit_idx] if refit_idx else X_test
+                        else:
+                            X_test_model = X_test
+
                         holdout_res = evaluate_holdout(
                             fitted_model,
-                            X_test,
+                            X_test_model,
                             y_test,
                             model_name,
                             sample_labels=test_labels,
@@ -576,6 +760,11 @@ def eval_gpu(
             "Set to 0 to disable capping."
         ),
     ),
+    best_subset: Path = typer.Option(
+        None,
+        "--best-subset",
+        help="Path to *_best_subset.json from ablation merge (enables nested CV)",
+    ),
 ):
     """Per-evaluator evaluation using TabPFN, TabICL (GPU).
 
@@ -665,9 +854,9 @@ def eval_gpu(
 
             if has_split:
                 X_train = model_df.loc[train_mask, feature_cols].values
-                y_train = y[train_mask.values]
+                y_train = y[train_mask.values]  # type: ignore[index]
                 X_test = model_df.loc[test_mask, feature_cols].values
-                y_test = y[test_mask.values]
+                y_test = y[test_mask.values]  # type: ignore[index]
                 train_labels = (
                     model_df.loc[train_mask, "label"].values
                     if "label" in model_df.columns
@@ -708,17 +897,34 @@ def eval_gpu(
                             error=str(exc),
                         )
 
+            # ── Load ablation results if provided ──
+            per_fold_data = None
+            fold_assign = None
+            if best_subset is not None:
+                bs_path = best_subset
+                if bs_path.is_dir():
+                    bs_path = bs_path / f"{evaluator}_best_subset.json"
+                if bs_path.exists():
+                    with open(bs_path) as f:
+                        bs_data = json.load(f)
+                    if not bs_data.get("passthrough", False):
+                        per_fold_data = bs_data.get("per_model_per_fold_features")
+                        fold_assign = bs_data.get("fold_assignment")
+                        print(f"  Using best_subset: {bs_path.name}", flush=True)
+                else:
+                    print(f"  ⚠ best_subset not found: {bs_path}", flush=True)
+
             results, fitted = gpu_models(
                 X_train,
                 y_train,
                 feature_names=feature_cols,
                 cancer_types=(
-                    c_types[train_mask.values]
+                    c_types[train_mask.values]  # type: ignore[index]
                     if has_split and c_types is not None
                     else c_types
                 ),
                 assays=(
-                    a_types[train_mask.values]
+                    a_types[train_mask.values]  # type: ignore[index]
                     if has_split and a_types is not None
                     else a_types
                 ),
@@ -733,6 +939,8 @@ def eval_gpu(
                 sample_labels=train_labels,
                 max_gpu_features=gpu_cap,
                 eval_stats=_eval_stats,
+                per_fold_features=per_fold_data,
+                fold_assignment=fold_assign,
             )
 
             # ── Holdout evaluation (v0.0.16+) ──
@@ -745,9 +953,24 @@ def eval_gpu(
 
                 for model_name, fitted_model in fitted.items():
                     if fitted_model is not None:
+                        # When nested CV is active, the fitted GPU model uses
+                        # a feature subset. Slice X_test to match (GAP 1 fix).
+                        refit_feats = results.get(f"{model_name}_refit_features")
+                        if refit_feats and per_fold_data is not None:
+                            refit_idx = [
+                                feature_cols.index(f)
+                                for f in refit_feats
+                                if f in feature_cols
+                            ]
+                            X_test_model = (
+                                X_test[:, refit_idx] if refit_idx else X_test_gpu
+                            )
+                        else:
+                            X_test_model = X_test_gpu
+
                         holdout_res = evaluate_holdout(
                             fitted_model,
-                            X_test_gpu,
+                            X_test_model,
                             y_test,
                             model_name,
                             sample_labels=test_labels,

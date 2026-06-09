@@ -47,6 +47,10 @@ __all__ = [
     "plot_roc_curves",
     "plot_feature_importance",
     "decision_curve_analysis",
+    "identify_feature_groups",
+    "generate_subsets",
+    "ablate_feature_groups",
+    "merge_ablation",
     "evaluate_model",
     "cpu_models",
     "gpu_models",
@@ -764,6 +768,978 @@ def _subgroup_metrics(
     return res
 
 
+# ── Feature Group Ablation Utilities ──────────────────────────────────────────
+
+# Suffix → group name mapping for identify_feature_groups().
+# Order matters: longer suffixes checked first to avoid partial matches.
+# Source: all evaluator extract() methods in kreview/features/*.py
+_SUFFIX_TO_GROUP: list[tuple[str, str]] = [
+    # FSC gene ratios (check before generic _ratio)
+    ("_ultra_short_ratio", "ultra_short_ratio"),
+    ("_core_short_ratio", "core_short_ratio"),
+    ("_mono_nucl_ratio", "mono_nucl_ratio"),
+    ("_di_nucl_ratio", "di_nucl_ratio"),
+    ("_long_ratio", "long_ratio"),
+    # FSC gene depth
+    ("_normalized_depth", "normalized_depth"),
+    ("_normalized_depth_cv", "normalized_depth_cv"),
+    # TFBS / ATAC stats
+    ("_mean_size", "mean_size"),
+    ("_z_score", "z_score"),
+    # WPS / FragProfile stats (multi-word suffixes first)
+    ("_spectral_dominant_freq", "spectral_dominant_freq"),
+    ("_peak_valley", "peak_valley"),
+    ("_143_166_ratio", "143_166_ratio"),
+    ("_bimodality_index", "bimodality_index"),
+    ("_top10_concentration", "top10_concentration"),
+    ("_purine_pyrimidine_ratio", "purine_pyrimidine_ratio"),
+    ("_dnase1l3_score", "dnase1l3_score"),
+    ("_shannon_entropy", "shannon_entropy"),
+    ("_variance_across_genes", "variance_across_genes"),
+    ("_fsr_gw_median", "fsr_gw_median"),
+    ("_fsr_gw_std", "fsr_gw_std"),
+    # OCF
+    ("_OCF", "OCF"),
+    ("_ocf_z", "ocf_z"),
+    # Generic single-word suffixes (check last)
+    ("_entropy", "entropy"),
+    ("_count", "count"),
+    ("_mean", "mean"),
+    ("_median", "median"),
+    ("_std", "std"),
+    ("_cv", "cv"),
+    ("_mad", "mad"),
+]
+
+
+def identify_feature_groups(
+    columns: list[str],
+    meta_cols: set[str] | None = None,
+) -> dict[str, list[str]]:
+    """Map selected feature column names → feature groups by statistic type.
+
+    Groups are identified by suffix pattern matching against known kreview
+    evaluator output patterns (see ``_SUFFIX_TO_GROUP``).  Columns that don't
+    match any known suffix go into the ``"other"`` group.
+
+    Parameters
+    ----------
+    columns : list[str]
+        Feature column names from a selected matrix.
+    meta_cols : set[str] | None
+        Columns to exclude (e.g. ``LABEL_META_COLS``).  If *None*, uses
+        ``kreview.core.LABEL_META_COLS``.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        Mapping of group name → list of column names belonging to that group.
+    """
+    if meta_cols is None:
+        from kreview.core import LABEL_META_COLS
+
+        meta_cols = LABEL_META_COLS
+
+    groups: dict[str, list[str]] = {}
+    for col in columns:
+        if col in meta_cols:
+            continue
+        matched = False
+        for suffix, group_name in _SUFFIX_TO_GROUP:
+            if col.endswith(suffix):
+                groups.setdefault(group_name, []).append(col)
+                matched = True
+                break
+        if not matched:
+            # Columns starting with special prefixes get their own groups
+            if col.startswith("bpmotif_"):
+                groups.setdefault("breakpoint_motif", []).append(col)
+            elif col.startswith("mds_gw_"):
+                groups.setdefault("mds_genomewide", []).append(col)
+            elif col.startswith("global_"):
+                groups.setdefault("global_aggregate", []).append(col)
+            else:
+                groups.setdefault("other", []).append(col)
+
+    log.info(
+        "feature_groups_identified",
+        n_groups=len(groups),
+        group_sizes={k: len(v) for k, v in groups.items()},
+        n_columns=len(columns),
+        n_excluded_meta=sum(1 for c in columns if c in meta_cols),
+    )
+    return groups
+
+
+def generate_subsets(
+    groups: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    """Generate feature subsets for ablation from feature groups.
+
+    Returns a dict of named subsets:
+
+    - ``"ALL"``: all features from all groups
+    - ``"{group}"``: solo — only features from that group (one per group)
+    - ``"no_{group}"``: leave-one-out — everything except that group
+
+    If only 1 group exists, returns only ``{"ALL": all_features}`` since
+    ablation is meaningless with a single group.
+
+    Parameters
+    ----------
+    groups : dict[str, list[str]]
+        Output of :func:`identify_feature_groups`.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        Named subsets mapping subset name → list of feature column names.
+    """
+    all_features: list[str] = []
+    for cols in groups.values():
+        all_features.extend(cols)
+
+    subsets = {"ALL": sorted(all_features)}
+
+    if len(groups) <= 1:
+        log.info("single_feature_group_skip_ablation", n_features=len(all_features))
+        return subsets
+
+    for group_name, group_cols in groups.items():
+        # Solo: just this group
+        subsets[group_name] = sorted(group_cols)
+        # Leave-one-out: everything except this group
+        remaining = [c for c in all_features if c not in set(group_cols)]
+        subsets[f"no_{group_name}"] = sorted(remaining)
+
+    log.info(
+        "ablation_subsets_generated",
+        n_groups=len(groups),
+        n_subsets=len(subsets),
+        subset_sizes={k: len(v) for k, v in subsets.items()},
+    )
+    return subsets
+
+
+def _inner_cv_sensitivity(
+    model,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    sample_labels_train: np.ndarray,
+    n_inner_folds: int = 3,
+    random_state: int = 42,
+) -> float:
+    """Lightweight inner-CV sensitivity@100%spec_healthy for ablation.
+
+    Runs a stratified k-fold on the *training* portion of a single outer
+    fold.  Only computes the one metric used to rank subsets — no
+    classification report, SHAP, ROC curves, etc.
+
+    ~10× faster than :func:`evaluate_model` because it skips all
+    diagnostic outputs.
+
+    Parameters
+    ----------
+    model
+        Unfitted sklearn estimator (will be cloned per fold).
+    X_train : np.ndarray
+        Feature matrix for the training split of an outer fold.
+    y_train : np.ndarray
+        Binary labels (0/1) for the training split.
+    sample_labels_train : np.ndarray
+        Original 4-tier labels (e.g. ``"Healthy Normal"``) aligned
+        with ``X_train``, needed to identify healthy normals.
+    n_inner_folds : int
+        Number of inner CV folds (default 3).
+    random_state : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    float
+        Mean sensitivity@100%spec_healthy across inner folds.
+        Returns 0.0 if computation fails (e.g. too few samples).
+    """
+    from sklearn.base import clone
+
+    if len(np.unique(y_train)) < 2:
+        log.debug("inner_cv_single_class", n_samples=len(y_train))
+        return 0.0
+
+    # Need at least n_inner_folds samples per class
+    n_pos = int(y_train.sum())
+    n_neg = len(y_train) - n_pos
+    if n_pos < n_inner_folds or n_neg < n_inner_folds:
+        log.debug(
+            "inner_cv_insufficient_samples",
+            n_pos=n_pos,
+            n_neg=n_neg,
+            n_inner_folds=n_inner_folds,
+        )
+        return 0.0
+
+    inner_cv = StratifiedKFold(
+        n_splits=n_inner_folds, shuffle=True, random_state=random_state
+    )
+
+    fold_sensitivities = []
+    for fold_idx, (tr_idx, val_idx) in enumerate(inner_cv.split(X_train, y_train)):
+        try:
+            X_tr, X_val = X_train[tr_idx], X_train[val_idx]
+            y_tr, y_val = y_train[tr_idx], y_train[val_idx]
+            labels_val = sample_labels_train[val_idx]
+
+            m = clone(model)
+            m.fit(X_tr, y_tr)
+
+            if hasattr(m, "predict_proba"):
+                probs = m.predict_proba(X_val)[:, 1]
+            elif hasattr(m, "decision_function"):
+                probs = m.decision_function(X_val)
+            else:
+                log.warning("inner_cv_no_predict_proba", fold=fold_idx)
+                fold_sensitivities.append(0.0)
+                continue
+
+            # Compute sensitivity@100%spec_healthy
+            healthy_mask = np.array([lbl == "Healthy Normal" for lbl in labels_val])
+            if not healthy_mask.any():
+                # No healthy normals in this validation fold — skip
+                continue
+
+            max_healthy_prob = float(probs[healthy_mask].max())
+            pos_mask = y_val == 1
+            n_pos_val = int(pos_mask.sum())
+            if n_pos_val > 0:
+                detected = int((probs[pos_mask] > max_healthy_prob).sum())
+                fold_sensitivities.append(detected / n_pos_val)
+            else:
+                fold_sensitivities.append(0.0)
+
+        except Exception as e:
+            log.debug("inner_cv_fold_error", fold=fold_idx, error=str(e))
+            fold_sensitivities.append(0.0)
+
+    if not fold_sensitivities:
+        return 0.0
+
+    return float(np.mean(fold_sensitivities))
+
+
+def ablate_feature_groups(
+    matrix_path: Path | str,
+    models: tuple[str, ...] = ("lr", "rf", "xgb"),
+    n_outer_folds: int = 5,
+    n_inner_folds: int = 3,
+    random_state: int = 42,
+    output_path: Path | str | None = None,
+    device: str = "cpu",
+    max_gpu_features: int | None = None,
+    eval_stats_path: Path | str | None = None,
+) -> dict:
+    """Run feature group ablation with per-fold nested cross-validation.
+
+    For each outer fold, evaluates all feature subsets using inner CV
+    to find the best subset per model.  Results include per-fold winners
+    and the fold assignment array for downstream reproducibility.
+
+    **Data flow**:
+
+    1. Load matrix, filter to ``split == "train"`` (prevent holdout leakage).
+    2. Build binary target via :func:`kreview.selection.build_binary_target`.
+    3. Identify feature groups via :func:`identify_feature_groups`.
+    4. Generate subsets via :func:`generate_subsets`.
+    5. For each outer fold:
+       a. Split into outer-train / outer-val using StratifiedKFold.
+       b. For each model × subset:
+          - Run :func:`_inner_cv_sensitivity` on outer-train.
+          - Record sensitivity@100%spec_healthy score.
+       c. Identify winning subset per model for this fold.
+    6. Aggregate results across folds.
+
+    Parameters
+    ----------
+    matrix_path : Path | str
+        Path to ``*_matrix.parquet`` file.
+    models : tuple[str, ...]
+        Model names to evaluate. CPU: ``"lr"``, ``"rf"``, ``"xgb"``.
+        GPU: ``"tabpfn"``, ``"tabicl"`` (zero-shot only).
+    n_outer_folds : int
+        Number of outer CV folds (must match downstream EVAL step).
+    n_inner_folds : int
+        Number of inner CV folds for subset selection.
+    random_state : int
+        Random seed for reproducibility.
+    output_path : Path | str | None
+        Directory to write ablation JSON results.
+    device : str
+        PyTorch device for GPU models (default ``"cpu"``).
+    max_gpu_features : int | None
+        Feature cap for GPU models (TabPFN limit).
+    eval_stats_path : Path | str | None
+        Path to ``*_eval_stats.parquet`` for score-based feature capping.
+
+    Returns
+    -------
+    dict
+        Ablation results containing per-fold per-model scores, winners,
+        fold assignments, and feature group metadata.
+    """
+    from kreview.core import LABEL_META_COLS
+    from kreview.selection import build_binary_target, _impute
+
+    matrix_path = Path(matrix_path)
+    evaluator = matrix_path.stem.replace("_matrix", "")
+
+    log.info(
+        "ablation_start",
+        evaluator=evaluator,
+        models=models,
+        n_outer=n_outer_folds,
+        n_inner=n_inner_folds,
+    )
+
+    # ── 1. Load matrix and filter to train split ──
+    df = pd.read_parquet(matrix_path)
+    log.info("ablation_loaded", shape=df.shape, evaluator=evaluator)
+
+    if "split" in df.columns:
+        train_mask = df["split"] == "train"
+        n_excluded = int((~train_mask).sum())
+        df = df[train_mask].copy()
+        log.info("ablation_train_filter", n_train=len(df), n_holdout=n_excluded)
+    else:
+        log.warning(
+            "ablation_no_split_column",
+            evaluator=evaluator,
+            impact="using all samples — holdout leakage risk",
+        )
+
+    # ── 2. Build binary target ──
+    model_df, y = build_binary_target(df, label_col="label")
+    sample_labels = model_df["label"].values  # 4-tier labels for inner CV
+
+    # ── 3. Identify feature columns and groups ──
+    feature_cols = [
+        c
+        for c in model_df.select_dtypes(include=np.number).columns
+        if c not in LABEL_META_COLS
+    ]
+    if not feature_cols:
+        log.error("ablation_no_features", evaluator=evaluator)
+        return {"evaluator": evaluator, "error": "no_feature_columns"}
+
+    # Impute NaNs and drop zero-variance
+    model_df[feature_cols] = _impute(model_df[feature_cols], "median")
+    nonconst = [c for c in feature_cols if model_df[c].std() > 0]
+    if len(nonconst) < len(feature_cols):
+        log.info(
+            "ablation_dropped_zero_var", n_dropped=len(feature_cols) - len(nonconst)
+        )
+    feature_cols = nonconst
+
+    groups = identify_feature_groups(feature_cols)
+    subsets = generate_subsets(groups)
+
+    if len(subsets) == 1:
+        # Single group → passthrough, no ablation needed
+        log.info(
+            "ablation_passthrough", evaluator=evaluator, reason="single_feature_group"
+        )
+        result = {
+            "evaluator": evaluator,
+            "passthrough": True,
+            "n_features": len(feature_cols),
+            "n_groups": 1,
+            "groups": {k: len(v) for k, v in groups.items()},
+        }
+        if output_path:
+            _save_ablation_json(result, output_path, evaluator, models)
+        return result
+
+    # ── 4. Build model factories ──
+    model_factories = _build_ablation_model_factories(models, device)
+
+    # ── 5. Optional feature capping for GPU models ──
+    capped_features = None
+    if max_gpu_features and eval_stats_path:
+        capped_features = _load_feature_cap(
+            eval_stats_path, feature_cols, max_gpu_features
+        )
+
+    # ── 6. Outer CV loop ──
+    outer_cv = StratifiedKFold(
+        n_splits=n_outer_folds, shuffle=True, random_state=random_state
+    )
+    fold_assignment = np.full(len(y), -1, dtype=int)
+
+    per_fold_results = []
+    for fold_idx, (train_idx, val_idx) in enumerate(
+        outer_cv.split(model_df[feature_cols].values, y)
+    ):
+        fold_assignment[val_idx] = fold_idx
+        fold_result = {"fold": fold_idx, "models": {}}
+
+        X_full = model_df[feature_cols].values
+        y_full = y
+
+        X_outer_train = X_full[train_idx]
+        y_outer_train = y_full[train_idx]
+        labels_outer_train = sample_labels[train_idx]
+
+        log.info(
+            "ablation_outer_fold",
+            fold=fold_idx,
+            n_train=len(train_idx),
+            n_val=len(val_idx),
+        )
+
+        for model_name, model_factory in model_factories.items():
+            model_scores: dict[str, float] = {}
+
+            for subset_name, subset_cols in subsets.items():
+                # Map subset columns to indices in feature_cols
+                col_indices = [
+                    feature_cols.index(c) for c in subset_cols if c in feature_cols
+                ]
+                if not col_indices:
+                    model_scores[subset_name] = 0.0
+                    continue
+
+                # Apply GPU feature cap if needed
+                if (
+                    max_gpu_features
+                    and model_name in _GPU_MODEL_NAMES
+                    and len(col_indices) > max_gpu_features
+                ):
+                    if capped_features:
+                        # Score-based: keep only top features by univariate AUC
+                        cap_set = set(capped_features[:max_gpu_features])
+                        col_indices = [
+                            i for i in col_indices if feature_cols[i] in cap_set
+                        ]
+                    else:
+                        # Variance-based fallback: keep highest-variance features
+                        variances = np.var(X_outer_train[:, col_indices], axis=0)
+                        top_k = np.argsort(variances)[-max_gpu_features:]
+                        col_indices = [col_indices[i] for i in top_k]
+
+                X_subset = X_outer_train[:, col_indices]
+
+                try:
+                    score = _inner_cv_sensitivity(
+                        model_factory(),
+                        X_subset,
+                        y_outer_train,
+                        labels_outer_train,
+                        n_inner_folds=n_inner_folds,
+                        random_state=random_state + fold_idx,
+                    )
+                    model_scores[subset_name] = score
+                except Exception as e:
+                    log.warning(
+                        "ablation_inner_cv_error",
+                        model=model_name,
+                        subset=subset_name,
+                        fold=fold_idx,
+                        error=str(e),
+                    )
+                    model_scores[subset_name] = 0.0
+
+            # Determine winner for this model in this fold
+            if model_scores:
+                winner = max(model_scores, key=model_scores.get)
+            else:
+                winner = "ALL"
+
+            fold_result["models"][model_name] = {  # type: ignore[index]
+                "scores": model_scores,
+                "winner": winner,
+                "winner_score": model_scores.get(winner, 0.0),
+                "winner_features": subsets.get(winner, subsets["ALL"]),
+            }
+
+            log.info(
+                "ablation_fold_model_done",
+                fold=fold_idx,
+                model=model_name,
+                winner=winner,
+                winner_score=f"{model_scores.get(winner, 0.0):.4f}",
+                n_subsets_evaluated=len(model_scores),
+            )
+
+        per_fold_results.append(fold_result)
+
+    # ── 7. Build result dict ──
+    result = {
+        "evaluator": evaluator,
+        "passthrough": False,
+        "n_outer_folds": n_outer_folds,
+        "n_inner_folds": n_inner_folds,
+        "n_features_total": len(feature_cols),
+        "n_groups": len(groups),
+        "groups": {k: len(v) for k, v in groups.items()},
+        "group_details": {k: sorted(v) for k, v in groups.items()},
+        "subsets": {k: len(v) for k, v in subsets.items()},
+        "fold_assignment": fold_assignment.tolist(),
+        "per_fold_results": per_fold_results,
+        "models_evaluated": list(model_factories.keys()),
+        "random_state": random_state,
+    }
+
+    log.info(
+        "ablation_complete",
+        evaluator=evaluator,
+        n_folds=n_outer_folds,
+        n_models=len(model_factories),
+    )
+
+    # ── 8. Save output ──
+    if output_path:
+        _save_ablation_json(result, output_path, evaluator, models)
+
+    return result
+
+
+def _build_ablation_model_factories(
+    models: tuple[str, ...],
+    device: str = "cpu",
+) -> dict[str, Callable]:
+    """Create model factory functions for ablation.
+
+    Returns a dict mapping model name → zero-argument callable that returns
+    an unfitted estimator instance.
+
+    Parameters
+    ----------
+    models : tuple[str, ...]
+        Model names (e.g. ``("lr", "rf", "xgb")``).
+    device : str
+        PyTorch device for GPU models.
+
+    Returns
+    -------
+    dict[str, Callable]
+        Model name → factory function.
+    """
+    factories: dict[str, Callable] = {}
+
+    for name in models:
+        if name == "lr":
+            factories["lr"] = lambda: Pipeline(
+                [
+                    ("scaler", StandardScaler()),
+                    (
+                        "clf",
+                        LogisticRegression(
+                            max_iter=2000,
+                            solver="lbfgs",
+                            class_weight="balanced",
+                            random_state=42,
+                        ),
+                    ),
+                ]
+            )
+        elif name == "rf":
+            factories["rf"] = lambda: RandomForestClassifier(
+                n_estimators=500,
+                max_depth=8,
+                class_weight="balanced",
+                random_state=42,
+                n_jobs=-1,
+            )
+        elif name == "xgb":
+
+            def _xgb_factory():
+                try:
+                    from xgboost import XGBClassifier
+
+                    return XGBClassifier(
+                        n_estimators=300,
+                        max_depth=6,
+                        learning_rate=0.1,
+                        scale_pos_weight=1.0,
+                        use_label_encoder=False,
+                        eval_metric="logloss",
+                        random_state=42,
+                        n_jobs=-1,
+                        verbosity=0,
+                    )
+                except ImportError:
+                    log.warning("xgb_not_available", fallback="rf")
+                    return RandomForestClassifier(
+                        n_estimators=500,
+                        max_depth=8,
+                        class_weight="balanced",
+                        random_state=42,
+                        n_jobs=-1,
+                    )
+
+            factories["xgb"] = _xgb_factory
+        elif name in ("tabpfn", "tabicl"):
+            # Zero-shot only for inner CV ablation
+            _name = name
+            _device = device
+
+            def _gpu_factory(n=_name, d=_device):
+                return GPUModelCVAdapter(model_name=n, device=d)
+
+            factories[name] = _gpu_factory
+        else:
+            log.warning("unknown_ablation_model", name=name)
+
+    return factories
+
+
+def _load_feature_cap(
+    eval_stats_path: Path | str,
+    feature_cols: list[str],
+    max_features: int,
+) -> list[str] | None:
+    """Load eval_stats and return top features by univariate AUC for capping.
+
+    Parameters
+    ----------
+    eval_stats_path : Path | str
+        Path to ``*_eval_stats.parquet``.
+    feature_cols : list[str]
+        Available feature columns.
+    max_features : int
+        Maximum number of features to return.
+
+    Returns
+    -------
+    list[str] | None
+        Ordered list of top features, or None if loading fails.
+    """
+    try:
+        stats_df = pd.read_parquet(eval_stats_path)
+        if (
+            "feature_column" not in stats_df.columns
+            or "univariate_auc" not in stats_df.columns
+        ):
+            log.warning("eval_stats_missing_columns", path=str(eval_stats_path))
+            return None
+        available = stats_df[stats_df["feature_column"].isin(feature_cols)]
+        top = available.nlargest(max_features, "univariate_auc")[
+            "feature_column"
+        ].tolist()
+        log.info("feature_cap_loaded", n_capped=len(top), max_features=max_features)
+        return top
+    except Exception as e:
+        log.warning("eval_stats_load_failed", error=str(e))
+        return None
+
+
+def _save_ablation_json(
+    result: dict,
+    output_path: Path | str,
+    evaluator: str,
+    models: tuple[str, ...],
+) -> Path:
+    """Save ablation results to a JSON file.
+
+    File naming convention: ``{evaluator}_ablation_{type}.json`` where
+    type is ``cpu`` or ``gpu`` based on the model names.
+
+    Parameters
+    ----------
+    result : dict
+        Ablation results dict.
+    output_path : Path | str
+        Output directory.
+    evaluator : str
+        Evaluator name (e.g. ``"TfbsOnTarget"``).
+    models : tuple[str, ...]
+        Model names used (determines cpu/gpu suffix).
+
+    Returns
+    -------
+    Path
+        Path to the saved JSON file.
+    """
+    output_path = Path(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    is_gpu = any(m in _GPU_MODEL_NAMES for m in models)
+    suffix = "gpu" if is_gpu else "cpu"
+    filename = f"{evaluator}_ablation_{suffix}.json"
+    out_path = output_path / filename
+
+    with open(out_path, "w") as f:
+        json.dump(result, f, indent=2, default=str)
+
+    log.info("ablation_saved", path=str(out_path), size_bytes=out_path.stat().st_size)
+    return out_path
+
+
+def merge_ablation(
+    cpu_json_path: Path | str,
+    gpu_json_path: Path | str | None = None,
+    matrix_path: Path | str | None = None,
+    output_path: Path | str | None = None,
+) -> dict:
+    """Merge CPU and GPU ablation results into a unified best_subset.json.
+
+    For each model across all folds, determines the per-fold winning
+    feature subset.  The output JSON is consumed by downstream
+    ``kreview eval cpu`` / ``kreview eval gpu`` via ``--best-subset``.
+
+    Handles GPU error JSONs gracefully: if the GPU JSON contains an
+    ``"error"`` key (from a failed GPU ablation), the merge proceeds
+    with CPU-only results.
+
+    Parameters
+    ----------
+    cpu_json_path : Path | str
+        Path to ``*_ablation_cpu.json`` from :func:`ablate_feature_groups`.
+    gpu_json_path : Path | str | None
+        Path to ``*_ablation_gpu.json``.  ``None`` or a path to a
+        file containing ``"error"`` triggers CPU-only mode.
+    matrix_path : Path | str | None
+        Path to the original matrix parquet (for fold assignment
+        verification).
+    output_path : Path | str | None
+        Directory to write ``{evaluator}_best_subset.json``.
+
+    Returns
+    -------
+    dict
+        Merged result with ``per_model_per_fold_features`` and
+        ``fold_assignment``.
+    """
+    cpu_json_path = Path(cpu_json_path)
+    with open(cpu_json_path) as f:
+        cpu_result = json.load(f)
+
+    evaluator = cpu_result.get("evaluator", "unknown")
+
+    # Handle passthrough (single-group evaluators)
+    if cpu_result.get("passthrough", False):
+        log.info("merge_ablation_passthrough", evaluator=evaluator)
+        merged = {
+            "evaluator": evaluator,
+            "passthrough": True,
+            "per_model_per_fold_features": {},
+            "fold_assignment": cpu_result.get("fold_assignment", []),
+        }
+        if output_path:
+            _save_merged_json(merged, output_path, evaluator)
+        return merged
+
+    # Load GPU results (optional, may have errors)
+    gpu_result = None
+    gpu_error = False
+    if gpu_json_path:
+        gpu_json_path = Path(gpu_json_path)
+        if gpu_json_path.exists() and gpu_json_path.name != "NO_GPU_ABLATION":
+            try:
+                with open(gpu_json_path) as f:
+                    gpu_result = json.load(f)
+                if "error" in gpu_result:
+                    log.warning(
+                        "merge_ablation_gpu_error",
+                        evaluator=evaluator,
+                        error=gpu_result["error"],
+                    )
+                    gpu_error = True
+                    gpu_result = None
+            except Exception as e:
+                log.warning(
+                    "merge_ablation_gpu_load_failed", evaluator=evaluator, error=str(e)
+                )
+                gpu_error = True
+
+    # Combine per-fold results from CPU and GPU
+    n_folds = cpu_result.get("n_outer_folds", 5)
+    cpu_folds = cpu_result.get("per_fold_results", [])
+    gpu_folds = gpu_result.get("per_fold_results", []) if gpu_result else []
+
+    per_model_per_fold: dict[str, dict] = {}
+
+    for fold_idx in range(n_folds):
+        # CPU results for this fold
+        if fold_idx < len(cpu_folds):
+            for model_name, model_data in cpu_folds[fold_idx].get("models", {}).items():
+                if model_name not in per_model_per_fold:
+                    per_model_per_fold[model_name] = {"folds": {}}
+                per_model_per_fold[model_name]["folds"][str(fold_idx)] = {
+                    "winner": model_data["winner"],
+                    "winner_score": model_data["winner_score"],
+                    "features": model_data["winner_features"],
+                }
+
+        # GPU results for this fold
+        if not gpu_error and fold_idx < len(gpu_folds):
+            for model_name, model_data in gpu_folds[fold_idx].get("models", {}).items():
+                if model_name not in per_model_per_fold:
+                    per_model_per_fold[model_name] = {"folds": {}}
+                per_model_per_fold[model_name]["folds"][str(fold_idx)] = {
+                    "winner": model_data["winner"],
+                    "winner_score": model_data["winner_score"],
+                    "features": model_data["winner_features"],
+                }
+
+    merged = {
+        "evaluator": evaluator,
+        "passthrough": False,
+        "n_outer_folds": n_folds,
+        "fold_assignment": cpu_result.get("fold_assignment", []),
+        "per_model_per_fold_features": per_model_per_fold,
+        "groups": cpu_result.get("groups", {}),
+        "group_details": cpu_result.get("group_details", {}),
+        "gpu_error": gpu_error,
+        "models_merged": list(per_model_per_fold.keys()),
+    }
+
+    log.info(
+        "merge_ablation_complete",
+        evaluator=evaluator,
+        n_models=len(per_model_per_fold),
+        n_folds=n_folds,
+        gpu_error=gpu_error,
+    )
+
+    if output_path:
+        _save_merged_json(merged, output_path, evaluator)
+
+    return merged
+
+
+def _save_merged_json(
+    result: dict,
+    output_path: Path | str,
+    evaluator: str,
+) -> Path:
+    """Save merged ablation result as best_subset.json."""
+    output_path = Path(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+    out_path = output_path / f"{evaluator}_best_subset.json"
+    with open(out_path, "w") as f:
+        json.dump(result, f, indent=2, default=str)
+    log.info(
+        "best_subset_saved", path=str(out_path), size_bytes=out_path.stat().st_size
+    )
+    return out_path
+
+
+def _compute_oof_metrics(
+    y: np.ndarray,
+    oof_probs: np.ndarray,
+    name: str,
+    feature_names: list[str] | None = None,
+    sample_labels: np.ndarray | None = None,
+    random_state: int = 42,
+    fold_assignment: np.ndarray | None = None,
+) -> dict:
+    """Compute all standard metrics from stitched OOF probabilities.
+
+    Shared between the standard path (``cross_val_predict``) and the
+    nested CV path (manual fold iteration with per-fold features).
+    Produces the same keys that :func:`evaluate_model` would.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Binary labels (0/1).
+    oof_probs : np.ndarray
+        Out-of-fold predicted probabilities, one per sample.
+    name : str
+        Model name prefix (e.g. ``"lr"``, ``"rf"``).
+    feature_names : list[str] | None
+        Feature column names (for logging only).
+    sample_labels : np.ndarray | None
+        Original 4-tier labels for healthy-normal specificity.
+    random_state : int
+        Random seed for bootstrap CI.
+    fold_assignment : np.ndarray | None
+        Per-sample fold indices for per-fold AUC computation.
+
+    Returns
+    -------
+    dict
+        Standard metric keys including ``auc_{name}``, sensitivity at
+        fixed specificity, healthy-normal threshold, optimal threshold,
+        classification report, confusion matrix, fold AUCs, etc.
+    """
+    result = {}
+
+    # AUC
+    try:
+        result[f"auc_{name}"] = float(roc_auc_score(y, oof_probs))
+    except ValueError:
+        result[f"auc_{name}"] = 0.5
+    result[f"{name}_oof_probs"] = np.round(oof_probs, 6).tolist()
+
+    # Bootstrap CI
+    try:
+        ci_lo, ci_hi = _bootstrap_auc(y, oof_probs, seed=random_state)
+        result[f"auc_{name}_ci_lower"] = ci_lo
+        result[f"auc_{name}_ci_upper"] = ci_hi
+    except Exception:
+        result[f"auc_{name}_ci_lower"] = result[f"auc_{name}"]
+        result[f"auc_{name}_ci_upper"] = result[f"auc_{name}"]
+
+    # Sensitivity at fixed specificity (100%, 99%, 95%)
+    fpr, tpr, thresholds = roc_curve(y, oof_probs)
+    zero_fpr_mask = fpr == 0.0
+    if zero_fpr_mask.any():
+        sens_100 = float(tpr[zero_fpr_mask][-1])
+        thresh_100 = float(thresholds[zero_fpr_mask][-1])
+    else:
+        sens_100, thresh_100 = 0.0, float("inf")
+
+    result[f"{name}_sensitivity_at_100spec"] = sens_100
+    result[f"{name}_threshold_at_100spec"] = thresh_100
+    result[f"{name}_n_detected_at_100spec"] = int(round(sens_100 * y.sum()))
+    result[f"{name}_n_total_positive"] = int(y.sum())
+
+    for target_spec, label in [(0.99, "99spec"), (0.95, "95spec")]:
+        target_fpr = 1.0 - target_spec
+        valid = fpr <= target_fpr
+        result[f"{name}_sensitivity_at_{label}"] = (
+            float(tpr[valid][-1]) if valid.any() else 0.0
+        )
+
+    # Healthy-normal specificity
+    if sample_labels is not None:
+        healthy_mask = np.array([lbl == "Healthy Normal" for lbl in sample_labels])
+        if healthy_mask.any():
+            max_healthy = float(oof_probs[healthy_mask].max())
+            pos_mask = y == 1
+            n_pos = int(pos_mask.sum())
+            if n_pos > 0:
+                detected = int((oof_probs[pos_mask] > max_healthy).sum())
+            else:
+                detected = 0
+            result[f"{name}_sensitivity_at_100spec_healthy"] = detected / max(1, n_pos)
+            result[f"{name}_threshold_at_100spec_healthy"] = max_healthy
+            result[f"{name}_n_detected_at_100spec_healthy"] = detected
+
+    # Optimal threshold + classification metrics
+    threshold = _optimal_threshold(y, oof_probs)
+    result[f"{name}_optimal_threshold"] = threshold
+    cls_rep, cm = _classification_metrics(y, oof_probs, threshold=threshold)
+    result[f"{name}_classification_report"] = cls_rep
+    result[f"{name}_confusion_matrix"] = cm
+
+    # Per-fold AUC tracking
+    if fold_assignment is not None:
+        fold_aucs = []
+        for k in sorted(set(fold_assignment)):
+            mask = np.array(fold_assignment) == k
+            if len(np.unique(y[mask])) == 2:
+                try:
+                    fold_aucs.append(float(roc_auc_score(y[mask], oof_probs[mask])))
+                except ValueError:
+                    pass
+        if fold_aucs:
+            result[f"{name}_fold_aucs"] = fold_aucs
+            result[f"{name}_auc_std"] = float(np.std(fold_aucs))
+
+    return result
+
+
 # ── Universal Model Evaluator ─────────────────────────────────────────────────
 
 
@@ -1088,6 +2064,8 @@ def cpu_models(
     compute_shap: bool = False,
     shap_samples: int = 500,
     sample_labels: np.ndarray | None = None,
+    per_fold_features: dict | None = None,
+    fold_assignment: list | np.ndarray | None = None,
 ) -> tuple[dict, object, object, object]:
     """Train LR, RF, and XGB on a feature matrix with stratified CV.
 
@@ -1095,9 +2073,19 @@ def cpu_models(
     cross-model diagnostics (AUC deltas, top features, threshold sweep,
     DCA, feature stability, subgroup analysis).
 
+    When ``per_fold_features`` and ``fold_assignment`` are provided
+    (from nested CV ablation), bypasses ``evaluate_model()`` and uses
+    manual fold iteration with per-fold feature filtering.
+
     Args:
         sample_labels: Original 4-tier labels for computing healthy-normal
             specificity. Passed to ``evaluate_model()``.
+        per_fold_features: Dict from best_subset.json with per-model
+            per-fold feature lists. Structure:
+            ``{model_name: {"folds": {"0": {"features": [...]}, ...}}}``.
+            When ``None``, uses standard path (all features, all folds).
+        fold_assignment: Per-sample fold index array from ablation.
+            Must align with the samples in X/y.
 
     Returns (results_dict, lr_pipeline, rf_model, xgb_model).
 
@@ -1135,6 +2123,182 @@ def cpu_models(
 
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         results["cv_folds_actual"] = folds
+
+        # ── NESTED CV PATH: per-fold feature subsets from ablation ──
+        if per_fold_features is not None and fold_assignment is not None:
+            fold_arr = np.array(fold_assignment)
+            log.info(
+                "cpu_models_nested_cv",
+                n_folds=folds,
+                models=list(per_fold_features.keys()),
+            )
+
+            # Build model definitions matching standard path hyperparams
+            model_defs = {
+                "lr": lambda: Pipeline(
+                    [
+                        ("scaler", StandardScaler()),
+                        (
+                            "lr",
+                            LogisticRegression(
+                                max_iter=1000,
+                                random_state=random_state,
+                                class_weight="balanced",
+                            ),
+                        ),
+                    ]
+                ),
+                "rf": lambda: RandomForestClassifier(
+                    n_estimators=100,
+                    max_depth=5,
+                    min_samples_leaf=max(1, min(10, len(y) // 10)),
+                    random_state=random_state,
+                    class_weight="balanced",
+                ),
+            }
+            # XGB
+            try:
+                from xgboost import XGBClassifier as _XGB
+
+                pos_w = len(y[y == 0]) / max(1, len(y[y == 1]))
+                model_defs["xgb"] = lambda: _XGB(
+                    n_estimators=100,
+                    max_depth=5,
+                    learning_rate=0.1,
+                    random_state=random_state,
+                    eval_metric="logloss",
+                    scale_pos_weight=pos_w,
+                )
+            except Exception:
+                pass
+
+            lr_fitted, rf_fitted, xgb_fitted = None, None, None
+
+            for model_name, model_factory in model_defs.items():
+                if model_name not in per_fold_features:
+                    log.debug(
+                        "nested_cv_skip_model",
+                        model=model_name,
+                        reason="not_in_per_fold_features",
+                    )
+                    continue
+
+                model_fold_data = per_fold_features[model_name].get("folds", {})
+                oof_probs = np.full(len(y), np.nan)
+                last_fitted = None
+
+                for fold_k in sorted(set(fold_arr)):
+                    train_mask = fold_arr != fold_k
+                    test_mask = fold_arr == fold_k
+
+                    fold_key = str(fold_k)
+                    if fold_key in model_fold_data:
+                        fold_feats = model_fold_data[fold_key].get("features", [])
+                    else:
+                        # Fallback: use all features if this fold is missing
+                        fold_feats = feature_names if feature_names else []
+
+                    # Map feature names to column indices
+                    feat_idx = [
+                        feature_names.index(f)  # type: ignore[union-attr]
+                        for f in fold_feats
+                        if f in (feature_names or [])
+                    ]
+                    if not feat_idx:
+                        feat_idx = list(range(X.shape[1]))  # fallback to all
+
+                    X_tr = X[train_mask][:, feat_idx]
+                    X_te = X[test_mask][:, feat_idx]
+
+                    m = model_factory()
+                    m.fit(X_tr, y[train_mask])
+
+                    if hasattr(m, "predict_proba"):
+                        oof_probs[test_mask] = m.predict_proba(X_te)[:, 1]
+                    elif hasattr(m, "decision_function"):
+                        oof_probs[test_mask] = m.decision_function(X_te)
+
+                    last_fitted = m
+
+                # Verify full OOF coverage
+                nan_count = int(np.isnan(oof_probs).sum())
+                if nan_count > 0:
+                    log.warning("nested_cv_oof_gaps", model=model_name, n_nan=nan_count)
+                    oof_probs = np.nan_to_num(oof_probs, nan=0.5)
+
+                # Compute standard metrics from stitched OOF
+                model_res = _compute_oof_metrics(
+                    y,
+                    oof_probs,
+                    model_name,
+                    feature_names=feature_names,
+                    sample_labels=sample_labels,
+                    random_state=random_state,
+                    fold_assignment=fold_arr,
+                )
+                results.update(model_res)
+
+                # Refit on full data using most-common features
+                all_fold_feats = [
+                    model_fold_data[str(k)].get("features", [])
+                    for k in sorted(set(fold_arr))
+                    if str(k) in model_fold_data
+                ]
+                if all_fold_feats:
+                    from collections import Counter
+
+                    feat_counts = Counter(f for flist in all_fold_feats for f in flist)
+                    # Features appearing in majority of folds
+                    majority = len(all_fold_feats) // 2 + 1
+                    refit_feats = [
+                        f
+                        for f, c in feat_counts.most_common()
+                        if c >= majority and f in (feature_names or [])
+                    ]
+                    if not refit_feats:
+                        refit_feats = feature_names or []
+                else:
+                    refit_feats = feature_names or []
+
+                refit_idx = [
+                    feature_names.index(f)  # type: ignore[union-attr]
+                    for f in refit_feats
+                    if f in (feature_names or [])
+                ]
+                if refit_idx:
+                    final_model = model_factory()
+                    final_model.fit(X[:, refit_idx], y)
+                else:
+                    final_model = last_fitted
+
+                # Store refit feature names for holdout slicing (GAP 1 fix)
+                results[f"{model_name}_refit_features"] = refit_feats
+
+                if model_name == "lr":
+                    lr_fitted = final_model
+                elif model_name == "rf":
+                    rf_fitted = final_model
+                elif model_name == "xgb":
+                    xgb_fitted = final_model
+
+                log.info(
+                    "nested_cv_model_done",
+                    model=model_name,
+                    auc=f"{results.get(f'auc_{model_name}', 0):.4f}",
+                    n_refit_features=len(refit_feats),
+                )
+
+            # ── OOF labels ──
+            results["oof_labels"] = y.tolist()
+            results["nested_cv"] = True
+
+            # ── AUC deltas (same as standard path) ──
+            if "auc_rf" in results and "auc_lr" in results:
+                results["auc_delta_rf_lr"] = results["auc_rf"] - results["auc_lr"]
+            if "auc_xgb" in results and "auc_rf" in results:
+                results["auc_delta_xgb_rf"] = results["auc_xgb"] - results["auc_rf"]
+
+            return results, lr_fitted, rf_fitted, xgb_fitted
 
         # ── Logistic Regression (Pipeline prevents scaler leakage, C-01) ──
         lr_pipe = Pipeline(
@@ -1719,6 +2883,8 @@ def gpu_models(
     sample_labels: np.ndarray | None = None,
     max_gpu_features: int | None = None,
     eval_stats: pd.DataFrame | None = None,
+    per_fold_features: dict | None = None,
+    fold_assignment: list | np.ndarray | None = None,
 ) -> tuple[dict, dict[str, object]]:
     """Train GPU foundation models on a feature matrix.
 
@@ -1750,6 +2916,10 @@ def gpu_models(
         eval_stats: DataFrame from ``score_features()`` containing
             feature scoring columns. Used for intelligent feature
             capping when max_gpu_features is set.
+        per_fold_features: Dict from best_subset.json with per-model
+            per-fold feature lists (from ablation). When provided, uses
+            manual fold iteration with per-fold feature filtering.
+        fold_assignment: Per-sample fold index array from ablation.
 
     Returns:
         (results_dict, fitted_models_dict). fitted_models_dict maps
@@ -1826,6 +2996,112 @@ def gpu_models(
         cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
         results["cv_folds_actual"] = folds
 
+        # ── NESTED CV PATH: per-fold feature subsets from ablation ──
+        if per_fold_features is not None and fold_assignment is not None:
+            fold_arr = np.array(fold_assignment)
+            log.info(
+                "gpu_models_nested_cv",
+                n_folds=folds,
+                models=list(per_fold_features.keys()),
+            )
+
+            for model_name in models:
+                if model_name not in per_fold_features:
+                    log.debug("nested_cv_gpu_skip", model=model_name)
+                    continue
+
+                model_fold_data = per_fold_features[model_name].get("folds", {})
+                oof_probs = np.full(len(y), np.nan)
+                last_fitted = None
+
+                for fold_k in sorted(set(fold_arr)):
+                    train_mask = fold_arr != fold_k
+                    test_mask = fold_arr == fold_k
+
+                    fold_key = str(fold_k)
+                    if fold_key in model_fold_data:
+                        fold_feats = model_fold_data[fold_key].get("features", [])
+                    else:
+                        fold_feats = feature_names if feature_names else []
+
+                    feat_idx = [
+                        feature_names.index(f)  # type: ignore[union-attr]
+                        for f in fold_feats
+                        if f in (feature_names or [])
+                    ]
+                    if not feat_idx:
+                        feat_idx = list(range(X.shape[1]))
+
+                    # Apply GPU feature cap per-fold
+                    if max_gpu_features and len(feat_idx) > max_gpu_features:
+                        variances = np.var(X[train_mask][:, feat_idx], axis=0)
+                        top_k = np.argsort(variances)[-max_gpu_features:]
+                        feat_idx = [feat_idx[i] for i in top_k]
+
+                    X_tr = X[train_mask][:, feat_idx]
+                    X_te = X[test_mask][:, feat_idx]
+
+                    try:
+                        model = _build_gpu_model(
+                            model_name,
+                            device=device,
+                            finetune_epochs=finetune_epochs,
+                            finetune_lr=finetune_lr,
+                            random_state=random_state,
+                        )
+                        if model is None:
+                            continue
+                        model.fit(X_tr, y[train_mask])
+                        if hasattr(model, "predict_proba"):
+                            oof_probs[test_mask] = model.predict_proba(X_te)[:, 1]
+                        last_fitted = model
+                    except Exception as e:
+                        log.warning(
+                            "nested_cv_gpu_fold_error",
+                            model=model_name,
+                            fold=fold_k,
+                            error=str(e),
+                        )
+
+                nan_count = int(np.isnan(oof_probs).sum())
+                if nan_count > 0:
+                    log.warning(
+                        "nested_cv_gpu_oof_gaps", model=model_name, n_nan=nan_count
+                    )
+                    oof_probs = np.nan_to_num(oof_probs, nan=0.5)
+
+                model_res = _compute_oof_metrics(
+                    y,
+                    oof_probs,
+                    model_name,
+                    feature_names=feature_names,
+                    sample_labels=sample_labels,
+                    random_state=random_state,
+                    fold_assignment=fold_arr,
+                )
+                results.update(model_res)
+                if last_fitted is not None:
+                    fitted_models[model_name] = last_fitted
+
+                # Track features used by last fold's model for holdout (GAP 1)
+                last_fold_key = str(max(set(fold_arr)))
+                if last_fold_key in model_fold_data:
+                    last_feats = model_fold_data[last_fold_key].get("features", [])
+                else:
+                    last_feats = feature_names or []
+                results[f"{model_name}_refit_features"] = last_feats
+
+                log.info(
+                    "nested_cv_gpu_model_done",
+                    model=model_name,
+                    auc=f"{results.get(f'auc_{model_name}', 0):.4f}",
+                    n_refit_features=len(last_feats),
+                )
+
+            results["oof_labels"] = y.tolist()
+            results["nested_cv"] = True
+            return results, fitted_models
+
         for model_name in models:
             model = _build_gpu_model(
                 model_name,
@@ -1899,6 +3175,60 @@ def gpu_models(
 
         # OOF labels for downstream multimodal alignment
         results["oof_labels"] = y.tolist()
+
+        # ── Subgroup Analysis (matching cpu_models pattern) ──
+        # Use OOF predictions from successful GPU models for unbiased metrics
+        oof_preds = {}
+        for model_name in models:
+            probs_key = f"{model_name}_oof_probs"
+            if probs_key in results:
+                thresh = results.get(f"{model_name}_optimal_threshold", 0.5)
+                probs_arr = np.array(results[probs_key])
+                oof_preds[model_name] = (probs_arr >= thresh).astype(int)
+
+        if oof_preds:
+            # Cancer type subgroup analysis
+            if cancer_types is not None:
+                c_stats = []
+                c_series = pd.Series(cancer_types)
+                top_10 = c_series.value_counts().nlargest(10).index
+                for c_type in top_10:
+                    mask = cancer_types == c_type
+                    n_samp = mask.sum()
+                    if n_samp < 5:
+                        continue
+                    res_sub = _subgroup_metrics(mask, y, oof_preds)
+                    if res_sub:
+                        c_stats.append(
+                            {
+                                "cancer_type": c_type,
+                                "n_samples": int(n_samp),
+                                "n_positives": int(y[mask].sum()),
+                                **res_sub,
+                            }
+                        )
+                results["cancer_type_stats"] = c_stats
+
+            # Assay subgroup analysis
+            if assays is not None:
+                a_stats = []
+                a_series = pd.Series(assays)
+                for a_type in a_series.dropna().unique():
+                    mask = assays == a_type
+                    n_samp = mask.sum()
+                    if n_samp < 5:
+                        continue
+                    res_sub = _subgroup_metrics(mask, y, oof_preds)
+                    if res_sub:
+                        a_stats.append(
+                            {
+                                "assay": a_type,
+                                "n_samples": int(n_samp),
+                                "n_positives": int(y[mask].sum()),
+                                **res_sub,
+                            }
+                        )
+                results["assay_stats"] = a_stats
 
         # Detect when ALL GPU models failed — the results dict will have
         # oof_labels but no auc_* keys, which is indistinguishable from

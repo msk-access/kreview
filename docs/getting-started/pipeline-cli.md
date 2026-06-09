@@ -13,6 +13,9 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 | `kreview label` | Generate ctDNA labels only | 1 |
 | `kreview extract` | Label + extract feature matrices per evaluator | 2 |
 | `kreview select` | Score features (AUC/MI) + mRMR or hybrid union selection | 3 |
+| `kreview eval ablate cpu` | Nested CV feature group ablation (CPU models) | 3a (optional) |
+| `kreview eval ablate gpu` | Nested CV feature group ablation (GPU models) | 3b (optional) |
+| `kreview eval ablate merge` | Merge CPU + GPU ablation → `best_subset.json` | 3c (optional) |
 | `kreview eval cpu` | CPU model evaluation (LR, RF, XGB) | 4a (parallel) |
 | `kreview eval gpu` | GPU model evaluation (TabPFN, TabPFN-FT, TabICL, TabICL-FT) | 4b (parallel) |
 | `kreview fuse` | Fuse per-evaluator matrices → super-matrix | 4c (parallel) |
@@ -26,10 +29,13 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 | `kreview features-list` | List registered evaluators | — |
 
 !!! note "Steps 4a, 4b, and 4c are independent"
-    After feature selection, `eval cpu`, `eval gpu`, and `fuse` can run in **parallel**. They all converge at `eval multimodal`, which needs the OOF predictions from eval + the super-matrix from fuse.
+    After feature selection (and optional ablation), `eval cpu`, `eval gpu`, and `fuse` can run in **parallel**. They all converge at `eval multimodal`, which needs the OOF predictions from eval + the super-matrix from fuse.
 
 !!! info "Decomposed Multimodal (v0.0.18+)"
     `kreview eval multimodal run` executes the full multimodal pipeline as a single command. For HPC/Nextflow parallelization, use the decomposed subcommands: `prep` → `single` (×M models) → `ablation` → `merge`.
+
+!!! tip "Nested CV Feature Group Ablation (v0.0.20+)"
+    When `--run-ablation` is enabled, steps 3a–3c run between `select` and `eval`. The ablation uses inner cross-validation to identify the optimal feature group subset per model, producing a `best_subset.json` that is then consumed by `eval cpu --best-subset` and `eval gpu --best-subset`. This eliminates non-informative feature groups before final evaluation.
 
 ---
 
@@ -217,17 +223,29 @@ kreview select --matrices-dir output/ --top-percentile 50 --strategy mrmr --outp
 # Or overwrite in-place:
 # kreview select --matrices-dir output/ --top-percentile 50 --overwrite
 
-# Steps 3a/3b/3c can run in PARALLEL
-# 3a: CPU model evaluation
-kreview eval cpu --matrices-dir selected/ --output results/
-# 3b: GPU model evaluation (optional, uses eval_stats for feature capping)
+# Step 3 (optional): Feature group ablation — nested CV subset selection
+# 3a: CPU ablation (inner CV on LR, RF, XGB — parallelizable per evaluator)
+kreview eval ablate cpu --matrices-dir selected/ --output ablation/
+# 3b: GPU ablation (inner CV on TabPFN, TabICL — parallelizable per evaluator)
+kreview eval ablate gpu --matrices-dir selected/ --output ablation/ \
+    --eval-stats-dir selected/ --gpu-models "tabpfn,tabicl"
+# 3c: Merge CPU + GPU ablation → best_subset.json
+kreview eval ablate merge --cpu-json ablation/*_ablation_cpu_results.json \
+    --gpu-json ablation/*_ablation_gpu_results.json --output ablation/
+
+# Steps 4a/4b/4c can run in PARALLEL
+# 4a: CPU model evaluation (uses --best-subset if ablation ran)
+kreview eval cpu --matrices-dir selected/ --output results/ \
+    --best-subset ablation/best_subset.json
+# 4b: GPU model evaluation (uses --best-subset if ablation ran)
 kreview eval gpu --matrices-dir selected/ --output results/ \
     --eval-stats-dir selected/ --max-gpu-features 150 \
-    --gpu-models "tabpfn,tabpfn_ft,tabicl,tabicl_ft"
-# 3c: Fuse selected matrices → super-matrix
+    --gpu-models "tabpfn,tabpfn_ft,tabicl,tabicl_ft" \
+    --best-subset ablation/best_subset.json
+# 4c: Fuse selected matrices → super-matrix
 kreview fuse --output-dir selected/
 
-# Step 4: Multimodal evaluation (monolithic — runs all stages in one command)
+# Step 5: Multimodal evaluation (monolithic — runs all stages in one command)
 kreview eval multimodal run \
     --results-dir results/ \
     --super-matrix selected/super_matrix.parquet \
@@ -263,7 +281,7 @@ kreview eval multimodal merge \
     --prep-metadata results/multimodal/prep_metadata.json \
     --output results/multimodal/
 
-# Step 5: Report
+# Step 6: Report
 kreview report --results-dir results/
 ```
 

@@ -97,6 +97,33 @@ Common issues and their solutions.
     ```
     Then re-run `ablation` and `merge` to incorporate the recovered results.
 
+??? info "Ablation produces `NO_BEST_SUBSET` sentinel — ablation was skipped"
+
+    **Cause:** `params.run_ablation = false` (the default) in Nextflow. The pipeline emits sentinel files (`NO_BEST_SUBSET`) that EVAL processes detect and ignore.
+
+    **Fix:** This is expected behavior when ablation is disabled. To enable:
+    ```bash
+    nextflow run ... --run_ablation true --ablation_inner_folds 3
+    ```
+
+??? warning "GPU ablation failed but CPU continued — is that expected?"
+
+    **Cause:** GPU ablation processes use `set +e` to prevent pipeline-level failures. If GPU ablation fails (OOM, timeout, missing GPU), an error JSON is emitted instead of results. The `merge` step detects this and falls back to CPU-only ablation results.
+
+    **Fix:** This is by design — the pipeline prioritizes completion over GPU availability. Check the Nextflow log for the specific GPU failure. If GPU ablation is critical, increase memory/time limits in `nextflow.config`:
+    ```groovy
+    withName: 'KREVIEW_ABLATE_GPU_SINGLE' {
+        memory = { 128.GB * task.attempt }
+        time   = { task.attempt <= 1 ? 4.h : 8.h }
+    }
+    ```
+
+??? danger "Holdout AUC error after ablation — dimension mismatch"
+
+    **Cause:** This was a known bug (fixed in v0.0.20) where the holdout evaluation received the full feature matrix but the refitted model expected a feature subset from ablation.
+
+    **Fix:** Upgrade to kreview ≥ v0.0.20, which stores `{model}_refit_features` in the results and uses it to slice `X_test` correctly before holdout evaluation.
+
 ---
 
 ## Dashboard & Reports
