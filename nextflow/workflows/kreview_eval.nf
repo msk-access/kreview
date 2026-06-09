@@ -56,6 +56,11 @@ include { KREVIEW_SELECT_SINGLE   } from '../modules/local/kreview/select_single
 include { KREVIEW_EVAL_CPU_SINGLE } from '../modules/local/kreview/eval_cpu_single'
 include { KREVIEW_EVAL_GPU_SINGLE } from '../modules/local/kreview/eval_gpu_single'
 
+// Multistage — feature ablation (optional, params.run_ablation)
+include { KREVIEW_ABLATE_CPU_SINGLE } from '../modules/local/kreview/ablate_cpu_single'
+include { KREVIEW_ABLATE_GPU_SINGLE } from '../modules/local/kreview/ablate_gpu_single'
+include { KREVIEW_MERGE_ABLATION     } from '../modules/local/kreview/merge_ablation'
+
 // Multistage — collect-only modules (need all evaluator results)
 include { KREVIEW_REPORT_MULTIMODAL } from '../modules/local/kreview/report_multimodal'
 include { KREVIEW_SCOREBOARD        } from '../modules/local/kreview/scoreboard'
@@ -130,29 +135,114 @@ workflow KREVIEW_EVAL {
         // .flatten() converts collected list → channel of individual matrix files
         KREVIEW_SELECT_SINGLE(KREVIEW_EXTRACT.out.matrices.flatten())
 
-        // Step 4a: Per-evaluator CPU evaluation (×N, parallel)
-        KREVIEW_EVAL_CPU_SINGLE(KREVIEW_SELECT_SINGLE.out.matrix)
+        // Step 4a: Feature ablation [optional, params.run_ablation]
+        // Runs BEFORE eval to determine optimal feature subsets per fold.
+        ch_best_subset = Channel.empty()
+        if (params.run_ablation) {
+            // CPU ablation (parallel, one per evaluator)
+            KREVIEW_ABLATE_CPU_SINGLE(KREVIEW_SELECT_SINGLE.out.matrix)
+
+            // GPU ablation [optional, runs in parallel with CPU ablation]
+            if (params.run_gpu_eval) {
+                // Pair matrix + eval_stats by evaluator name
+                ch_gpu_ablate_input = KREVIEW_SELECT_SINGLE.out.matrix
+                    .map { f -> [f.baseName.replace('_matrix', ''), f] }
+                    .combine(
+                        KREVIEW_SELECT_SINGLE.out.eval_stats
+                            .map { f -> [f.baseName.replace('_eval_stats', ''), f] },
+                        by: 0
+                    )
+                    .map { key, matrix, stats -> [matrix, stats] }
+
+                KREVIEW_ABLATE_GPU_SINGLE(
+                    ch_gpu_ablate_input.map { it[0] },
+                    ch_gpu_ablate_input.map { it[1] }
+                )
+
+                // Pair CPU + GPU ablation results by evaluator name
+                ch_ablation_pairs = KREVIEW_ABLATE_CPU_SINGLE.out.ablation_json
+                    .map { f -> [f.baseName.replace('_ablation_cpu', ''), f] }
+                    .combine(
+                        KREVIEW_ABLATE_GPU_SINGLE.out.ablation_json
+                            .map { f -> [f.baseName.replace('_ablation_gpu', ''), f] },
+                        by: 0
+                    )
+                    .map { key, cpu_json, gpu_json -> [cpu_json, gpu_json] }
+
+                KREVIEW_MERGE_ABLATION(
+                    ch_ablation_pairs.map { it[0] },
+                    ch_ablation_pairs.map { it[1] }
+                )
+            } else {
+                // CPU-only ablation — pass sentinel for GPU
+                KREVIEW_MERGE_ABLATION(
+                    KREVIEW_ABLATE_CPU_SINGLE.out.ablation_json,
+                    Channel.value(file('NO_GPU_ABLATION'))
+                )
+            }
+
+            ch_best_subset = KREVIEW_MERGE_ABLATION.out.best_subset
+        }
+
+        // Step 4b: Per-evaluator CPU evaluation (×N, parallel)
+        // When ablation is enabled, pair matrix with best_subset by evaluator name
+        if (params.run_ablation) {
+            ch_cpu_eval_input = KREVIEW_SELECT_SINGLE.out.matrix
+                .map { f -> [f.baseName.replace('_matrix', ''), f] }
+                .combine(
+                    ch_best_subset
+                        .map { f -> [f.baseName.replace('_best_subset', ''), f] },
+                    by: 0
+                )
+                .map { key, matrix, bs -> [matrix, bs] }
+
+            KREVIEW_EVAL_CPU_SINGLE(
+                ch_cpu_eval_input.map { it[0] },
+                ch_cpu_eval_input.map { it[1] }
+            )
+        } else {
+            KREVIEW_EVAL_CPU_SINGLE(
+                KREVIEW_SELECT_SINGLE.out.matrix,
+                Channel.value(file('NO_BEST_SUBSET'))
+            )
+        }
         ch_json_stats = KREVIEW_EVAL_CPU_SINGLE.out.json_stats
         ch_cpu_joblib = KREVIEW_EVAL_CPU_SINGLE.out.joblib_models
 
-        // Step 4b: Per-evaluator GPU evaluation (×N, parallel, gpushort) [optional]
+        // Step 4c: Per-evaluator GPU evaluation (×N, parallel, gpushort) [optional]
         // Runs in parallel with CPU eval — they are independent.
         // Pairs each matrix with its eval_stats for intelligent feature capping.
         if (params.run_gpu_eval) {
-            // Pair matrix + eval_stats by evaluator name (basename matching)
-            ch_gpu_input = KREVIEW_SELECT_SINGLE.out.matrix
+            // Pair matrix + eval_stats + best_subset by evaluator name
+            ch_gpu_base = KREVIEW_SELECT_SINGLE.out.matrix
                 .map { f -> [f.baseName.replace('_matrix', ''), f] }
                 .combine(
                     KREVIEW_SELECT_SINGLE.out.eval_stats
                         .map { f -> [f.baseName.replace('_eval_stats', ''), f] },
                     by: 0
                 )
-                .map { key, matrix, stats -> [matrix, stats] }
 
-            KREVIEW_EVAL_GPU_SINGLE(ch_gpu_input.map { it[0] }, ch_gpu_input.map { it[1] })
+            if (params.run_ablation) {
+                ch_gpu_input = ch_gpu_base
+                    .combine(
+                        ch_best_subset
+                            .map { f -> [f.baseName.replace('_best_subset', ''), f] },
+                        by: 0
+                    )
+                    .map { key, matrix, stats, bs -> [matrix, stats, bs] }
+            } else {
+                ch_gpu_input = ch_gpu_base
+                    .map { key, matrix, stats -> [matrix, stats, file('NO_BEST_SUBSET')] }
+            }
+
+            KREVIEW_EVAL_GPU_SINGLE(
+                ch_gpu_input.map { it[0] },
+                ch_gpu_input.map { it[1] },
+                ch_gpu_input.map { it[2] }
+            )
         }
 
-        // Step 4c: Fuse selected matrices → super-matrix (1 job, needs all)
+        // Step 4d: Fuse selected matrices → super-matrix (1 job, needs all)
         ch_all_selected = KREVIEW_SELECT_SINGLE.out.matrix.collect()
         KREVIEW_FUSE(ch_all_selected)
 
