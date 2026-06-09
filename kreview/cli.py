@@ -913,9 +913,9 @@ def run(
             X_train = _impute(
                 model_df.loc[train_mask, top_feats], impute_strategy
             ).values
-            y_train = y[train_mask.values]
+            y_train = y[train_mask.values]  # type: ignore[index]
             X_test = _impute(model_df.loc[test_mask, top_feats], impute_strategy).values
-            y_test = y[test_mask.values]
+            y_test = y[test_mask.values]  # type: ignore[index]
             train_labels = (
                 model_df.loc[train_mask, "label"].values
                 if "label" in model_df.columns
@@ -960,12 +960,12 @@ def run(
                 y_train,
                 feature_names=top_feats,
                 cancer_types=(
-                    c_types[train_mask.values]
+                    c_types[train_mask.values]  # type: ignore[index]
                     if has_split and c_types is not None
                     else c_types
                 ),
                 assays=(
-                    a_types[train_mask.values]
+                    a_types[train_mask.values]  # type: ignore[index]
                     if has_split and a_types is not None
                     else a_types
                 ),
@@ -1022,12 +1022,12 @@ def run(
                         y_train,
                         feature_names=top_feats,
                         cancer_types=(
-                            c_types[train_mask.values]
+                            c_types[train_mask.values]  # type: ignore[index]
                             if has_split and c_types is not None
                             else c_types
                         ),
                         assays=(
-                            a_types[train_mask.values]
+                            a_types[train_mask.values]  # type: ignore[index]
                             if has_split and a_types is not None
                             else a_types
                         ),

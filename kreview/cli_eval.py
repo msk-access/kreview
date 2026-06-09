@@ -553,9 +553,9 @@ def eval_cpu(
 
             if has_split:
                 X_train = model_df.loc[train_mask, feature_cols].values
-                y_train = y[train_mask.values]
+                y_train = y[train_mask.values]  # type: ignore[index]
                 X_test = model_df.loc[test_mask, feature_cols].values
-                y_test = y[test_mask.values]
+                y_test = y[test_mask.values]  # type: ignore[index]
                 train_labels = (
                     model_df.loc[train_mask, "label"].values
                     if "label" in model_df.columns
@@ -603,12 +603,12 @@ def eval_cpu(
                 y_train,
                 feature_names=feature_cols,
                 cancer_types=(
-                    c_types[train_mask.values]
+                    c_types[train_mask.values]  # type: ignore[index]
                     if has_split and c_types is not None
                     else c_types
                 ),
                 assays=(
-                    a_types[train_mask.values]
+                    a_types[train_mask.values]  # type: ignore[index]
                     if has_split and a_types is not None
                     else a_types
                 ),
@@ -854,9 +854,9 @@ def eval_gpu(
 
             if has_split:
                 X_train = model_df.loc[train_mask, feature_cols].values
-                y_train = y[train_mask.values]
+                y_train = y[train_mask.values]  # type: ignore[index]
                 X_test = model_df.loc[test_mask, feature_cols].values
-                y_test = y[test_mask.values]
+                y_test = y[test_mask.values]  # type: ignore[index]
                 train_labels = (
                     model_df.loc[train_mask, "label"].values
                     if "label" in model_df.columns
@@ -919,12 +919,12 @@ def eval_gpu(
                 y_train,
                 feature_names=feature_cols,
                 cancer_types=(
-                    c_types[train_mask.values]
+                    c_types[train_mask.values]  # type: ignore[index]
                     if has_split and c_types is not None
                     else c_types
                 ),
                 assays=(
-                    a_types[train_mask.values]
+                    a_types[train_mask.values]  # type: ignore[index]
                     if has_split and a_types is not None
                     else a_types
                 ),

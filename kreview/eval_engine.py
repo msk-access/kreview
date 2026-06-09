@@ -1252,7 +1252,7 @@ def ablate_feature_groups(
             else:
                 winner = "ALL"
 
-            fold_result["models"][model_name] = {
+            fold_result["models"][model_name] = {  # type: ignore[index]
                 "scores": model_scores,
                 "winner": winner,
                 "winner_score": model_scores.get(winner, 0.0),
@@ -1304,7 +1304,7 @@ def ablate_feature_groups(
 def _build_ablation_model_factories(
     models: tuple[str, ...],
     device: str = "cpu",
-) -> dict[str, callable]:
+) -> dict[str, Callable]:
     """Create model factory functions for ablation.
 
     Returns a dict mapping model name → zero-argument callable that returns
@@ -1319,10 +1319,10 @@ def _build_ablation_model_factories(
 
     Returns
     -------
-    dict[str, callable]
+    dict[str, Callable]
         Model name → factory function.
     """
-    factories: dict[str, callable] = {}
+    factories: dict[str, Callable] = {}
 
     for name in models:
         if name == "lr":
@@ -2200,7 +2200,7 @@ def cpu_models(
 
                     # Map feature names to column indices
                     feat_idx = [
-                        feature_names.index(f)
+                        feature_names.index(f)  # type: ignore[union-attr]
                         for f in fold_feats
                         if f in (feature_names or [])
                     ]
@@ -2261,7 +2261,7 @@ def cpu_models(
                     refit_feats = feature_names or []
 
                 refit_idx = [
-                    feature_names.index(f)
+                    feature_names.index(f)  # type: ignore[union-attr]
                     for f in refit_feats
                     if f in (feature_names or [])
                 ]
@@ -3025,7 +3025,7 @@ def gpu_models(
                         fold_feats = feature_names if feature_names else []
 
                     feat_idx = [
-                        feature_names.index(f)
+                        feature_names.index(f)  # type: ignore[union-attr]
                         for f in fold_feats
                         if f in (feature_names or [])
                     ]
