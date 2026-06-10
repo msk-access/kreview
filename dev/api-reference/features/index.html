@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1845,6 +1845,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_sql
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2742,6 +2753,17 @@
     <span class="md-ellipsis">
       
         extract
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_sql
       
     </span>
   </a>
@@ -4303,6 +4325,18 @@ all genomic regions of that type:</p>
 <p>Output features (example): <code>TSS_wps_nuc_mean</code>, <code>CTCF_prot_frac_tf_peak_valley</code></p>
 
 
+<details class="extraction-paths" open="">
+  <summary>Extraction paths</summary>
+  <ul>
+<li><strong>SQL pushdown</strong> (<code>extract_sql()</code>): Uses DuckDB native <code>list_avg</code>,
+  <code>list_max</code>, <code>list_min</code> to aggregate 1.9B rows → ~158 rows inside
+  DuckDB. MAD is computed via a lightweight second query (exact).
+  Memory: &lt;1 GB vs 96+ GB for the Python path.</li>
+<li><strong>Python fallback</strong> (<code>extract()</code>): Per-sample chunked extraction
+  with numpy — used when SQL pushdown is unavailable or fails.</li>
+</ul>
+</details>
+
 <details class="note" open="">
   <summary>Note</summary>
   <p>Krewlyzer stores <abbr title="Window Protection Score">WPS</abbr> arrays as native <code>list&lt;float&gt;</code> in parquet,
@@ -4316,14 +4350,6 @@ numpy arrays directly via <code>_to_array()</code> — no string parsing needed.
 basic stats (r=0.91–1.00 with peak_valley/std). Nucleosome periodicity
 is captured at the chromosome level by <code>WPSBackgroundEvaluator</code>
 (NRL, periodicity_score). See <code>wps_fft_analysis.md</code> for details.</p>
-</details>
-
-<details class="note" open="">
-  <summary>Note</summary>
-  <p>SQL pushdown (<code>extract_sql()</code>) was removed because krewlyzer stores
-<abbr title="Window Protection Score">WPS</abbr> arrays as native <code>list&lt;float&gt;</code> (DuckDB <code>FLOAT[]</code>), not as
-string-encoded arrays. The SQL path used <code>trim(col, '[]')</code> which
-cannot parse native array types. See git history for the removed code.</p>
 </details>
 
 
@@ -4367,6 +4393,30 @@ cannot parse native array types. See git history for the removed code.</p>
 </ul>
 <p>Handles both numpy arrays (from native parquet <code>list&lt;float&gt;</code>)
 and string-encoded arrays (legacy format, via <code>parse_array()</code>).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">extract_sql</span><span class="p">()</span></code>
+
+</h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>DuckDB SQL pushdown for genome-wide <abbr title="Window Protection Score">WPS</abbr> extraction.</p>
+<p>Uses native list functions (list_avg, list_max, list_min) to aggregate
+1.9B rows → ~158 rows inside DuckDB. Memory: &lt;1 GB vs 96+ GB.</p>
+<p>Returns multi-row result (one per sample × region_type). The CLI
+pivots this to wide format matching extract() output naming.</p>
+<p>Note: MAD is NOT computed here — it's added by a lightweight Python
+post-step using a second DuckDB query on row-level means (exact).</p>
 
 
     </div>

@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1530,6 +1530,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#kreview.core.configure_duckdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        configure_duckdb
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.core.get_duckdb_conn" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1997,6 +2008,17 @@
     <span class="md-ellipsis">
       
         clear_cbioportal_caches
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.core.configure_duckdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        configure_duckdb
       
     </span>
   </a>
@@ -2563,6 +2585,74 @@
 <div class="doc doc-object doc-function">
 
 
+<h3 id="kreview.core.configure_duckdb" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">configure_duckdb</span><span class="p">(</span><span class="n">threads</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">memory</span><span class="o">=</span><span class="s1">'32GB'</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Set DuckDB connection parameters before first use.</p>
+<p>Must be called before any DuckDB operation (e.g., at CLI entry).
+If called after a connection exists, logs a warning and does NOT
+reconfigure — DuckDB connections are immutable once created.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>threads</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Max threads for DuckDB query execution (match <abbr title="Simple Linux Utility for Resource Management">SLURM</abbr> cpus).</p>
+              </div>
+            </td>
+            <td>
+                  <code>8</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>memory</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Memory limit string (e.g., '32GB', '16GB').</p>
+              </div>
+            </td>
+            <td>
+                  <code>'32GB'</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="kreview.core.get_duckdb_conn" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">get_duckdb_conn</span><span class="p">()</span></code>
 
@@ -2571,8 +2661,9 @@
 
     <div class="doc doc-contents ">
 
-        <p>Create a thread-local DuckDB connection with optimal settings.
-Configured natively for 4 threads and 4GB memory to prevent <abbr title="High-Performance Computing">HPC</abbr> OOMs.</p>
+        <p>Create a thread-local DuckDB connection with configurable settings.</p>
+<p>Defaults: 8 threads, 32GB memory. Override via <code>configure_duckdb()</code>
+or CLI <code>--duckdb-threads</code> / <code>--duckdb-memory</code> before first call.</p>
 
 
     </div>

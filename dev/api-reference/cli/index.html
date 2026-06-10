@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1901,6 +1901,11 @@ evaluator into <code>*_matrix.parquet</code> files. This is the first half of
 <a id="__codelineno-26-24" name="__codelineno-26-24" href="#__codelineno-26-24"></a>                                  When provided, skips the internal labeling
 <a id="__codelineno-26-25" name="__codelineno-26-25" href="#__codelineno-26-25"></a>                                  step entirely. Used by Nextflow multistage
 <a id="__codelineno-26-26" name="__codelineno-26-26" href="#__codelineno-26-26"></a>                                  to avoid re-running labeling per evaluator.
+<a id="__codelineno-26-27" name="__codelineno-26-27" href="#__codelineno-26-27"></a>  --duckdb-threads INTEGER        Max threads for DuckDB query execution
+<a id="__codelineno-26-28" name="__codelineno-26-28" href="#__codelineno-26-28"></a>                                  (match SLURM cpus).  [default: 8]
+<a id="__codelineno-26-29" name="__codelineno-26-29" href="#__codelineno-26-29"></a>  --duckdb-memory TEXT            DuckDB memory limit (e.g., '32GB', '16GB').
+<a id="__codelineno-26-30" name="__codelineno-26-30" href="#__codelineno-26-30"></a>                                  Controls peak memory for parquet
+<a id="__codelineno-26-31" name="__codelineno-26-31" href="#__codelineno-26-31"></a>                                  aggregation.  [default: 32GB]
 </code></pre></div>
 <h2 id="features-list">features-list</h2>
 <p>List all registered feature evaluators.</p>
@@ -2048,6 +2053,11 @@ block the remaining dashboards.</p>
 <a id="__codelineno-35-72" name="__codelineno-35-72" href="#__codelineno-35-72"></a>                                  count exceeds this, the top N are selected
 <a id="__codelineno-35-73" name="__codelineno-35-73" href="#__codelineno-35-73"></a>                                  by mutual information from eval_stats. Set
 <a id="__codelineno-35-74" name="__codelineno-35-74" href="#__codelineno-35-74"></a>                                  to 0 to disable capping.  [default: 150]
+<a id="__codelineno-35-75" name="__codelineno-35-75" href="#__codelineno-35-75"></a>  --duckdb-threads INTEGER        Max threads for DuckDB query execution
+<a id="__codelineno-35-76" name="__codelineno-35-76" href="#__codelineno-35-76"></a>                                  (match SLURM cpus).  [default: 8]
+<a id="__codelineno-35-77" name="__codelineno-35-77" href="#__codelineno-35-77"></a>  --duckdb-memory TEXT            DuckDB memory limit (e.g., '32GB', '16GB').
+<a id="__codelineno-35-78" name="__codelineno-35-78" href="#__codelineno-35-78"></a>                                  Controls peak memory for parquet
+<a id="__codelineno-35-79" name="__codelineno-35-79" href="#__codelineno-35-79"></a>                                  aggregation.  [default: 32GB]
 </code></pre></div>
 <h2 id="select">select</h2>
 <p>Score features and apply feature selection to extracted matrices.</p>
