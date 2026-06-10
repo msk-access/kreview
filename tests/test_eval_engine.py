@@ -2007,11 +2007,15 @@ class TestWPSGenomeSQLPushdown:
 
     def test_cli_duckdb_options(self):
         """CLI parses --duckdb-threads and --duckdb-memory without error."""
+        import re
+
         from typer.testing import CliRunner
         from kreview.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["extract", "--help"])
         assert result.exit_code == 0
-        assert "--duckdb-threads" in result.output
-        assert "--duckdb-memory" in result.output
+        # Strip ANSI escape codes — Rich/Typer injects color on some platforms
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--duckdb-threads" in clean
+        assert "--duckdb-memory" in clean
