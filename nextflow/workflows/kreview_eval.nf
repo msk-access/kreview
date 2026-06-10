@@ -137,7 +137,9 @@ workflow KREVIEW_EVAL {
 
         // Step 3: Per-evaluator feature selection (×N, parallel)
         // .flatten() converts collected list → channel of individual matrix files
-        KREVIEW_SELECT_SINGLE(KREVIEW_EXTRACT.out.matrices.flatten())
+        // .ifEmpty guard: if all extracts are ignored, flatten() produces empty
+        // channel — ifEmpty prevents deadlock in downstream .combine()/.collect()
+        KREVIEW_SELECT_SINGLE(KREVIEW_EXTRACT.out.matrices.flatten().ifEmpty(Channel.empty()))
 
         // Step 4a: Feature ablation [optional, params.run_ablation]
         // Runs BEFORE eval to determine optimal feature subsets per fold.
@@ -164,11 +166,14 @@ workflow KREVIEW_EVAL {
                 )
 
                 // Pair CPU + GPU ablation results by evaluator name
+                // .ifEmpty guard: if GPU ablation is ignored for all evaluators,
+                // combine() would deadlock waiting for items that never arrive.
                 ch_ablation_pairs = KREVIEW_ABLATE_CPU_SINGLE.out.ablation_json
                     .map { f -> [f.baseName.replace('_ablation_cpu', ''), f] }
                     .combine(
                         KREVIEW_ABLATE_GPU_SINGLE.out.ablation_json
-                            .map { f -> [f.baseName.replace('_ablation_gpu', ''), f] },
+                            .map { f -> [f.baseName.replace('_ablation_gpu', ''), f] }
+                            .ifEmpty(Channel.empty()),
                         by: 0
                     )
                     .map { key, cpu_json, gpu_json -> [cpu_json, gpu_json] }

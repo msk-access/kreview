@@ -60,6 +60,14 @@ class WPSGenomeEvaluator(FeatureEvaluator):
 
     Output features (example): ``TSS_wps_nuc_mean``, ``CTCF_prot_frac_tf_peak_valley``
 
+    Extraction paths:
+        - **SQL pushdown** (``extract_sql()``): Uses DuckDB native ``list_avg``,
+          ``list_max``, ``list_min`` to aggregate 1.9B rows → ~158 rows inside
+          DuckDB. MAD is computed via a lightweight second query (exact).
+          Memory: <1 GB vs 96+ GB for the Python path.
+        - **Python fallback** (``extract()``): Per-sample chunked extraction
+          with numpy — used when SQL pushdown is unavailable or fails.
+
     Note:
         Krewlyzer stores WPS arrays as native ``list<float>`` in parquet,
         not as string-encoded arrays. The ``extract()`` method handles
@@ -70,12 +78,6 @@ class WPSGenomeEvaluator(FeatureEvaluator):
         basic stats (r=0.91–1.00 with peak_valley/std). Nucleosome periodicity
         is captured at the chromosome level by ``WPSBackgroundEvaluator``
         (NRL, periodicity_score). See ``wps_fft_analysis.md`` for details.
-
-    Note:
-        SQL pushdown (``extract_sql()``) was removed because krewlyzer stores
-        WPS arrays as native ``list<float>`` (DuckDB ``FLOAT[]``), not as
-        string-encoded arrays. The SQL path used ``trim(col, '[]')`` which
-        cannot parse native array types. See git history for the removed code.
     """
 
     name = "WPSGenome"
@@ -94,8 +96,69 @@ class WPSGenomeEvaluator(FeatureEvaluator):
     ]
     max_chunk_rows = 2_000_000  # Aggressive chunking for genomewide WPS data
 
-    # Array column names used by extract()
+    # Array column names used by extract() and extract_sql()
     _array_cols = ("wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf")
+
+    # SQL pivot: multi-row results keyed by region_type → CLI pivots to wide format
+    sql_pivot_column = "region_type"
+
+    def extract_sql(self) -> str | None:
+        """DuckDB SQL pushdown for genome-wide WPS extraction.
+
+        Uses native list functions (list_avg, list_max, list_min) to aggregate
+        1.9B rows → ~158 rows inside DuckDB. Memory: <1 GB vs 96+ GB.
+
+        Returns multi-row result (one per sample × region_type). The CLI
+        pivots this to wide format matching extract() output naming.
+
+        Note: MAD is NOT computed here — it's added by a lightweight Python
+        post-step using a second DuckDB query on row-level means (exact).
+        """
+        return """
+            WITH per_region AS (
+                SELECT
+                    regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id,
+                    REPLACE(REPLACE(REPLACE(CAST(region_type AS VARCHAR),
+                        ' ', '_'), '-', '_'), '|', '_') AS region_type,
+                    list_avg(wps_nuc) AS wps_nuc_row_mean,
+                    (list_max(wps_nuc) - list_min(wps_nuc)) AS wps_nuc_row_pv,
+                    list_avg(wps_tf) AS wps_tf_row_mean,
+                    (list_max(wps_tf) - list_min(wps_tf)) AS wps_tf_row_pv,
+                    list_avg(prot_frac_nuc) AS prot_frac_nuc_row_mean,
+                    (list_max(prot_frac_nuc) - list_min(prot_frac_nuc))
+                        AS prot_frac_nuc_row_pv,
+                    list_avg(prot_frac_tf) AS prot_frac_tf_row_mean,
+                    (list_max(prot_frac_tf) - list_min(prot_frac_tf))
+                        AS prot_frac_tf_row_pv
+                FROM read_parquet(
+                    ?,
+                    filename=true,
+                    union_by_name=true,
+                    hive_partitioning=false
+                )
+                WHERE region_type IS NOT NULL
+            )
+            SELECT
+                sample_id,
+                region_type,
+                -- mean: average of per-region array means
+                AVG(wps_nuc_row_mean)       AS wps_nuc_mean,
+                AVG(wps_tf_row_mean)        AS wps_tf_mean,
+                AVG(prot_frac_nuc_row_mean) AS prot_frac_nuc_mean,
+                AVG(prot_frac_tf_row_mean)  AS prot_frac_tf_mean,
+                -- peak_valley: average of per-region (max - min)
+                AVG(wps_nuc_row_pv)         AS wps_nuc_peak_valley,
+                AVG(wps_tf_row_pv)          AS wps_tf_peak_valley,
+                AVG(prot_frac_nuc_row_pv)   AS prot_frac_nuc_peak_valley,
+                AVG(prot_frac_tf_row_pv)    AS prot_frac_tf_peak_valley,
+                -- std: std of per-region array means (variability)
+                STDDEV(wps_nuc_row_mean)       AS wps_nuc_std,
+                STDDEV(wps_tf_row_mean)        AS wps_tf_std,
+                STDDEV(prot_frac_nuc_row_mean) AS prot_frac_nuc_std,
+                STDDEV(prot_frac_tf_row_mean)  AS prot_frac_tf_std
+            FROM per_region
+            GROUP BY sample_id, region_type
+        """
 
     def extract(self, df: pd.DataFrame) -> dict[str, float]:
         """Extract WPS features aggregated per region_type.

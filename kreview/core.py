@@ -33,6 +33,7 @@ __all__ = [
     "load_clinical_sample",
     "load_clinical_patient",
     "clear_cbioportal_caches",
+    "configure_duckdb",
     "get_duckdb_conn",
     "discover_available_samples",
     "iter_feature_chunks",
@@ -287,16 +288,49 @@ import threading
 
 _thread_local = threading.local()
 
+# Module-level defaults (overridable via configure_duckdb before first connection)
+_DUCKDB_THREADS: int = 8
+_DUCKDB_MEMORY: str = "32GB"
+
+
+def configure_duckdb(threads: int = 8, memory: str = "32GB") -> None:
+    """Set DuckDB connection parameters before first use.
+
+    Must be called before any DuckDB operation (e.g., at CLI entry).
+    If called after a connection exists, logs a warning and does NOT
+    reconfigure — DuckDB connections are immutable once created.
+
+    Args:
+        threads: Max threads for DuckDB query execution (match SLURM cpus).
+        memory: Memory limit string (e.g., '32GB', '16GB').
+    """
+    global _DUCKDB_THREADS, _DUCKDB_MEMORY
+    if hasattr(_thread_local, "conn"):
+        log.warning(
+            "duckdb_already_initialized",
+            msg="configure_duckdb called after connection created; ignoring",
+        )
+        return
+    _DUCKDB_THREADS = threads
+    _DUCKDB_MEMORY = memory
+    log.info("duckdb_configured", threads=threads, memory=memory)
+
 
 def get_duckdb_conn() -> duckdb.DuckDBPyConnection:
-    """Create a thread-local DuckDB connection with optimal settings.
-    Configured natively for 4 threads and 4GB memory to prevent HPC OOMs.
+    """Create a thread-local DuckDB connection with configurable settings.
+
+    Defaults: 8 threads, 32GB memory. Override via ``configure_duckdb()``
+    or CLI ``--duckdb-threads`` / ``--duckdb-memory`` before first call.
     """
     if not hasattr(_thread_local, "conn"):
         conn = duckdb.connect()
-        conn.execute("SET threads TO 4")
-        conn.execute("SET memory_limit = '4GB'")
-        log.debug("duckdb_conn_initialized", threads=4, memory_limit="4GB")
+        conn.execute(f"SET threads TO {_DUCKDB_THREADS}")
+        conn.execute(f"SET memory_limit = '{_DUCKDB_MEMORY}'")
+        log.debug(
+            "duckdb_conn_initialized",
+            threads=_DUCKDB_THREADS,
+            memory_limit=_DUCKDB_MEMORY,
+        )
         _thread_local.conn = conn
     return _thread_local.conn
 

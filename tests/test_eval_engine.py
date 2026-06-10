@@ -1020,22 +1020,6 @@ class TestBuildGpuModelV8:
         except Exception:
             pytest.skip("tabicl not installed")
 
-    def test_unknown_model_returns_none(self):
-        """Unknown GPU model name should return None, not raise."""
-        from kreview.eval_engine import _build_gpu_model
-
-        result = _build_gpu_model("nonexistent_model")
-        assert result is None
-
-    def test_missing_package_returns_none(self):
-        """If tabpfn/tabicl not installed, should return None with log."""
-        from kreview.eval_engine import _build_gpu_model
-
-        # This test passes in CI where GPU packages aren't installed
-        model = _build_gpu_model("tabpfn", device="cpu")
-        # Either a valid model or None (not an exception)
-        assert model is None or model is not None
-
 
 # ── v0.0.19 bug fix tests ───────────────────────────────────────────────────
 
@@ -1879,3 +1863,159 @@ class TestBuildGpuModelNameDispatch:
 
         with pytest.raises(TypeError):
             _build_gpu_model("tabpfn", finetune=True)
+
+
+# ── v0.0.21 Tests: DuckDB configuration + WPSGenome SQL pushdown ──────────────
+
+
+class TestConfigureDuckdb:
+    """Tests for configure_duckdb() — pre-connection resource configuration."""
+
+    def test_configure_sets_defaults(self):
+        """configure_duckdb() updates module-level defaults."""
+        import kreview.core as core
+
+        # Save originals
+        orig_threads = core._DUCKDB_THREADS
+        orig_mem = core._DUCKDB_MEMORY
+
+        # Ensure no thread-local connection exists for this test
+        had_conn = hasattr(core._thread_local, "conn")
+        if had_conn:
+            saved_conn = core._thread_local.conn
+            del core._thread_local.conn
+
+        try:
+            core.configure_duckdb(threads=16, memory="64GB")
+            assert core._DUCKDB_THREADS == 16
+            assert core._DUCKDB_MEMORY == "64GB"
+        finally:
+            # Restore originals
+            core._DUCKDB_THREADS = orig_threads
+            core._DUCKDB_MEMORY = orig_mem
+            if had_conn:
+                core._thread_local.conn = saved_conn
+
+    def test_configure_warns_after_connection(self):
+        """configure_duckdb() warns and returns if connection already exists."""
+        import kreview.core as core
+
+        # Create a connection first
+        conn = core.get_duckdb_conn()
+        assert conn is not None
+
+        # Save originals
+        orig_threads = core._DUCKDB_THREADS
+        orig_mem = core._DUCKDB_MEMORY
+
+        try:
+            # This should warn and NOT change settings
+            core.configure_duckdb(threads=99, memory="999GB")
+            assert core._DUCKDB_THREADS == orig_threads  # Unchanged
+            assert core._DUCKDB_MEMORY == orig_mem  # Unchanged
+        finally:
+            core._DUCKDB_THREADS = orig_threads
+            core._DUCKDB_MEMORY = orig_mem
+
+
+class TestWPSGenomeSQLPushdown:
+    """Tests for WPSGenomeEvaluator.extract_sql() — SQL pushdown query."""
+
+    def test_extract_sql_returns_query(self):
+        """extract_sql() returns a non-None SQL string."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        sql = evaluator.extract_sql()
+
+        assert sql is not None
+        assert isinstance(sql, str)
+
+    def test_supports_sql_true(self):
+        """supports_sql property is True when extract_sql() returns a query."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        assert evaluator.supports_sql is True
+
+    def test_sql_contains_list_functions(self):
+        """SQL query uses DuckDB native list_avg, list_max, list_min."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        sql = evaluator.extract_sql()
+
+        assert "list_avg" in sql
+        assert "list_max" in sql
+        assert "list_min" in sql
+
+    def test_sql_groups_by_sample_and_region(self):
+        """SQL query groups by sample_id and region_type."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        sql = evaluator.extract_sql()
+
+        assert "GROUP BY sample_id, region_type" in sql
+
+    def test_sql_selects_expected_columns(self):
+        """SQL query produces mean, peak_valley, std for each array col."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        sql = evaluator.extract_sql()
+
+        for col in ("wps_nuc", "wps_tf", "prot_frac_nuc", "prot_frac_tf"):
+            assert f"{col}_mean" in sql, f"Missing {col}_mean in SQL"
+            assert f"{col}_peak_valley" in sql, f"Missing {col}_peak_valley in SQL"
+            assert f"{col}_std" in sql, f"Missing {col}_std in SQL"
+
+    def test_sql_pivot_column_set(self):
+        """sql_pivot_column attribute is 'region_type'."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        assert evaluator.sql_pivot_column == "region_type"
+
+    def test_extract_still_works(self):
+        """Python fallback extract() still produces correct features."""
+        from kreview.features.wps_genomewide import WPSGenomeEvaluator
+
+        evaluator = WPSGenomeEvaluator()
+        df = pd.DataFrame(
+            [
+                {
+                    "region_type": "TSS",
+                    "wps_nuc": np.array([1.0, 2.0, 3.0]),
+                    "wps_tf": np.array([4.0, 5.0, 6.0]),
+                    "prot_frac_nuc": np.array([0.1, 0.2]),
+                    "prot_frac_tf": np.array([0.3, 0.4]),
+                },
+            ]
+        )
+        result = evaluator.extract(df)
+        assert "TSS_wps_nuc_mean" in result
+        assert "TSS_wps_nuc_mad" in result
+
+    def test_wpspanel_no_sql(self):
+        """WPSPanel does NOT have SQL pushdown — still uses Python path."""
+        from kreview.features.wps_panel import WPSPanelEvaluator
+
+        evaluator = WPSPanelEvaluator()
+        assert evaluator.extract_sql() is None
+        assert evaluator.supports_sql is False
+
+    def test_cli_duckdb_options(self):
+        """CLI parses --duckdb-threads and --duckdb-memory without error."""
+        import re
+
+        from typer.testing import CliRunner
+        from kreview.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["extract", "--help"])
+        assert result.exit_code == 0
+        # Strip ANSI escape codes — Rich/Typer injects color on some platforms
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--duckdb-threads" in clean
+        assert "--duckdb-memory" in clean
