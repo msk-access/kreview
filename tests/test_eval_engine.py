@@ -1880,9 +1880,6 @@ class TestConfigureDuckdb:
         orig_mem = core._DUCKDB_MEMORY
 
         # Ensure no thread-local connection exists for this test
-        import threading
-
-        tl = threading.local()
         had_conn = hasattr(core._thread_local, "conn")
         if had_conn:
             saved_conn = core._thread_local.conn

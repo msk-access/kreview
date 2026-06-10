@@ -287,8 +287,9 @@ def _extract_evaluator(
                     aggfunc="first",
                 )
                 # Flatten MultiIndex: (wps_nuc_mean, TSS) → TSS_wps_nuc_mean
+                col_tuples: list[tuple[str, str]] = list(pivoted.columns)
                 pivoted.columns = [
-                    f"{pivot_val}_{metric}" for metric, pivot_val in pivoted.columns
+                    f"{pivot_val}_{metric}" for metric, pivot_val in col_tuples
                 ]
                 feat_matrix = pivoted.reset_index()
 
