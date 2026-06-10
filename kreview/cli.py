@@ -142,6 +142,98 @@ import time
 from .selection import _impute
 
 
+def _add_mad_features(
+    evaluator,
+    feat_matrix: pd.DataFrame,
+    paths,
+    all_sample_ids: list[str],
+    *,
+    _echo=print,
+) -> None:
+    """Compute exact MAD features via a second lightweight DuckDB query.
+
+    The main SQL query aggregated 1.9B rows → ~158 rows (mean, peak_valley,
+    std per sample × region_type). MAD requires the per-row array means
+    (not aggregated), so we run a second query returning just scalar means,
+    then compute: MAD = median(|row_mean_i − median(row_means)|).
+
+    Modifies ``feat_matrix`` in-place, adding ``{rt}_{col}_mad`` columns.
+
+    Memory: DuckDB streams row-level scalars; Python groups per (sample,
+    region_type). Peak memory: <100 MB for 79 samples × 250K regions.
+    """
+    from kreview.core import get_duckdb_conn, _discover_feature_paths
+
+    array_cols = getattr(evaluator, "_array_cols", None)
+    if not array_cols:
+        return
+
+    conn = get_duckdb_conn()
+    file_paths = _discover_feature_paths(
+        str(evaluator.source_file), paths.krewlyzer_dirs, set(all_sample_ids)
+    )
+    if not file_paths:
+        log.warning("mad_no_files", evaluator=evaluator.name)
+        return
+
+    # Build query: just sample_id, region_type, and per-row scalar means
+    mean_exprs = ", ".join(
+        f"list_avg({c}) AS {c}_row_mean" for c in array_cols
+    )
+    query = f"""
+        SELECT
+            regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id,
+            REPLACE(REPLACE(REPLACE(CAST(region_type AS VARCHAR),
+                ' ', '_'), '-', '_'), '|', '_') AS region_type,
+            {mean_exprs}
+        FROM read_parquet(?, filename=true, union_by_name=true,
+                          hive_partitioning=false)
+        WHERE region_type IS NOT NULL
+    """
+
+    t_mad = time.time()
+    try:
+        row_means_df = conn.execute(query, [file_paths]).df()
+    except Exception as exc:
+        log.warning(
+            "mad_query_failed", evaluator=evaluator.name, error=str(exc)
+        )
+        _echo(f"  WARNING: MAD query failed ({exc}), MAD features omitted")
+        return
+
+    # Compute MAD per (sample_id, region_type, column)
+    id_col = "sample_id" if "sample_id" in feat_matrix.columns else "SAMPLE_ID"
+    n_mad_cols = 0
+    for sample_id in feat_matrix[id_col].unique():
+        sample_rows = row_means_df[row_means_df["sample_id"] == sample_id]
+        for rt in sample_rows["region_type"].unique():
+            rt_rows = sample_rows[sample_rows["region_type"] == rt]
+            for col in array_cols:
+                mean_col = f"{col}_row_mean"
+                if mean_col not in rt_rows.columns:
+                    continue
+                vals = rt_rows[mean_col].dropna().values
+                if len(vals) == 0:
+                    continue
+                mad = float(np.median(np.abs(vals - np.median(vals))))
+                col_name = f"{rt}_{col}_mad"
+                mask = feat_matrix[id_col] == sample_id
+                feat_matrix.loc[mask, col_name] = mad
+                n_mad_cols += 1
+
+    del row_means_df  # Explicit release
+
+    mad_sec = time.time() - t_mad
+    n_unique_mad = len([c for c in feat_matrix.columns if c.endswith("_mad")])
+    _echo(f"  MAD computation: {n_unique_mad} features in {mad_sec:.1f}s")
+    log.info(
+        "mad_computed",
+        evaluator=evaluator.name,
+        n_mad_features=n_unique_mad,
+        elapsed_sec=round(mad_sec, 1),
+    )
+
+
 def _extract_evaluator(
     evaluator,
     paths,
@@ -180,7 +272,6 @@ def _extract_evaluator(
             set(all_sample_ids),
         )
         if not sql_df.empty:
-            feat_matrix = sql_df
             extract_sec = time.time() - t1
             n_samples = (
                 sql_df["sample_id"].nunique()
@@ -188,17 +279,51 @@ def _extract_evaluator(
                 else len(sql_df)
             )
 
-            if feat_matrix is not None:
-                _echo(
-                    f"  SQL pushdown complete: {n_samples} samples "
-                    f"in {extract_sec:.1f}s"
+            # ── Multi-row SQL pivot (e.g. WPSGenome: sample × region_type) ──
+            pivot_col = getattr(evaluator, "sql_pivot_column", None)
+            if pivot_col and pivot_col in sql_df.columns:
+                id_col = "sample_id"
+                value_cols = [
+                    c for c in sql_df.columns if c not in (id_col, pivot_col)
+                ]
+                pivoted = sql_df.pivot_table(
+                    index=id_col,
+                    columns=pivot_col,
+                    values=value_cols,
+                    aggfunc="first",
                 )
-                # Normalize sample_id column name for downstream merge
+                # Flatten MultiIndex: (wps_nuc_mean, TSS) → TSS_wps_nuc_mean
+                pivoted.columns = [
+                    f"{pivot_val}_{metric}"
+                    for metric, pivot_val in pivoted.columns
+                ]
+                feat_matrix = pivoted.reset_index()
+
+                # ── Exact MAD via second DuckDB query ──
+                _add_mad_features(
+                    evaluator, feat_matrix, paths, all_sample_ids, _echo=_echo
+                )
+
+                feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
+                _echo(
+                    f"  SQL pushdown complete: {n_samples} samples, "
+                    f"{len(feat_matrix.columns) - 1} features "
+                    f"(pivoted on {pivot_col}) in {extract_sec:.1f}s"
+                )
+            else:
+                # ── Single-row SQL (one row per sample, no pivot needed) ──
+                feat_matrix = sql_df
                 if (
                     "sample_id" in feat_matrix.columns
                     and "SAMPLE_ID" not in feat_matrix.columns
                 ):
-                    feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
+                    feat_matrix = feat_matrix.rename(
+                        columns={"sample_id": "SAMPLE_ID"}
+                    )
+                _echo(
+                    f"  SQL pushdown complete: {n_samples} samples "
+                    f"in {extract_sec:.1f}s"
+                )
         else:
             _echo(
                 f"  SQL pushdown returned empty result for '{evaluator.name}', "
@@ -557,11 +682,24 @@ def run(
             "Set to 0 to disable capping."
         ),
     ),
+    duckdb_threads: int = typer.Option(
+        8,
+        "--duckdb-threads",
+        help="Max threads for DuckDB query execution (match SLURM cpus).",
+    ),
+    duckdb_memory: str = typer.Option(
+        "32GB",
+        "--duckdb-memory",
+        help="DuckDB memory limit (e.g., '32GB', '16GB'). Controls peak memory for parquet aggregation.",
+    ),
 ):
     """Run full pipeline: label → extract → evaluate → report."""
-    from kreview.core import Paths, LabelConfig
+    from kreview.core import Paths, LabelConfig, configure_duckdb
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
+
+    # Configure DuckDB before any connection is created
+    configure_duckdb(threads=duckdb_threads, memory=duckdb_memory)
 
     from kreview.eval_engine import cpu_models
     from kreview.reproducibility import seed_everything
@@ -621,6 +759,8 @@ def run(
         _echo(f"  --finetune-epochs   : {finetune_epochs}")
     _echo(f"  --seed              : {seed}")
     _echo(f"  --deterministic     : {deterministic}")
+    _echo(f"  --duckdb-threads    : {duckdb_threads}")
+    _echo(f"  --duckdb-memory     : {duckdb_memory}")
     _echo("")
 
     # ── Parse GPU models ──
@@ -1504,6 +1644,16 @@ def extract(
             "multistage to avoid re-running labeling per evaluator."
         ),
     ),
+    duckdb_threads: int = typer.Option(
+        8,
+        "--duckdb-threads",
+        help="Max threads for DuckDB query execution (match SLURM cpus).",
+    ),
+    duckdb_memory: str = typer.Option(
+        "32GB",
+        "--duckdb-memory",
+        help="DuckDB memory limit (e.g., '32GB', '16GB'). Controls peak memory for parquet aggregation.",
+    ),
 ):
     """Label samples and extract feature matrices (no eval/model/report).
 
@@ -1511,9 +1661,12 @@ def extract(
     evaluator into ``*_matrix.parquet`` files. This is the first half of
     ``kreview run``, designed for parallelized Nextflow execution.
     """
-    from kreview.core import Paths, LabelConfig
+    from kreview.core import Paths, LabelConfig, configure_duckdb
     from kreview.labels import CtDNALabeler
     from kreview.registry import get_all_evaluators
+
+    # Configure DuckDB before any connection is created
+    configure_duckdb(threads=duckdb_threads, memory=duckdb_memory)
 
     print("=== kreview extract ===", flush=True)
     print("Configuration:", flush=True)
@@ -1528,6 +1681,8 @@ def extract(
     print(f"  --chunk-size        : {chunk_size}", flush=True)
     print(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}", flush=True)
     print(f"  --labels            : {labels_path or 'compute internally'}", flush=True)
+    print(f"  --duckdb-threads    : {duckdb_threads}", flush=True)
+    print(f"  --duckdb-memory     : {duckdb_memory}", flush=True)
     print("", flush=True)
 
     t0 = time.time()
