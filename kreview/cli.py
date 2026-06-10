@@ -177,9 +177,7 @@ def _add_mad_features(
         return
 
     # Build query: just sample_id, region_type, and per-row scalar means
-    mean_exprs = ", ".join(
-        f"list_avg({c}) AS {c}_row_mean" for c in array_cols
-    )
+    mean_exprs = ", ".join(f"list_avg({c}) AS {c}_row_mean" for c in array_cols)
     query = f"""
         SELECT
             regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id,
@@ -195,9 +193,7 @@ def _add_mad_features(
     try:
         row_means_df = conn.execute(query, [file_paths]).df()
     except Exception as exc:
-        log.warning(
-            "mad_query_failed", evaluator=evaluator.name, error=str(exc)
-        )
+        log.warning("mad_query_failed", evaluator=evaluator.name, error=str(exc))
         _echo(f"  WARNING: MAD query failed ({exc}), MAD features omitted")
         return
 
@@ -283,9 +279,7 @@ def _extract_evaluator(
             pivot_col = getattr(evaluator, "sql_pivot_column", None)
             if pivot_col and pivot_col in sql_df.columns:
                 id_col = "sample_id"
-                value_cols = [
-                    c for c in sql_df.columns if c not in (id_col, pivot_col)
-                ]
+                value_cols = [c for c in sql_df.columns if c not in (id_col, pivot_col)]
                 pivoted = sql_df.pivot_table(
                     index=id_col,
                     columns=pivot_col,
@@ -294,8 +288,7 @@ def _extract_evaluator(
                 )
                 # Flatten MultiIndex: (wps_nuc_mean, TSS) → TSS_wps_nuc_mean
                 pivoted.columns = [
-                    f"{pivot_val}_{metric}"
-                    for metric, pivot_val in pivoted.columns
+                    f"{pivot_val}_{metric}" for metric, pivot_val in pivoted.columns
                 ]
                 feat_matrix = pivoted.reset_index()
 
@@ -317,9 +310,7 @@ def _extract_evaluator(
                     "sample_id" in feat_matrix.columns
                     and "SAMPLE_ID" not in feat_matrix.columns
                 ):
-                    feat_matrix = feat_matrix.rename(
-                        columns={"sample_id": "SAMPLE_ID"}
-                    )
+                    feat_matrix = feat_matrix.rename(columns={"sample_id": "SAMPLE_ID"})
                 _echo(
                     f"  SQL pushdown complete: {n_samples} samples "
                     f"in {extract_sec:.1f}s"
