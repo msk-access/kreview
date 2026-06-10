@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-06-10
+
+### Performance
+- **WPSGenome SQL pushdown**: Uses DuckDB native `list_avg()`, `list_max()`, `list_min()`
+  to aggregate 1.9B rows inside DuckDB instead of materializing in pandas.
+  Reduces peak memory from 96+ GB to ~17 GB.
+- **DuckDB resource tuning**: Default threads 4→8, memory 4GB→32GB,
+  exposed via `--duckdb-threads` / `--duckdb-memory` CLI options.
+- **Nextflow KREVIEW_EXTRACT**: cpus 4→8, memory 32GB→64GB per attempt,
+  maxRetries 7→3 (SQL pushdown eliminates the memory ladder).
+
+### Added
+- `configure_duckdb()` API for pre-connection resource configuration.
+- `--duckdb-threads` and `--duckdb-memory` CLI options on `extract` and `run` commands.
+- `sql_pivot_column` evaluator property for multi-row SQL result pivoting.
+- Exact MAD hybrid computation via second lightweight DuckDB query.
+- Nextflow params: `duckdb_threads`, `duckdb_memory`.
+
+### Fixed
+- **Nextflow resilience**: Added explicit `errorStrategy` + `maxRetries` to 14
+  processes that relied on global defaults. One failed evaluator no longer
+  terminates the entire pipeline — it is ignored after 3 retries.
+- KREVIEW_FUSE uses `terminate` (not `ignore`) since downstream processes
+  depend on the super-matrix.
+- Added `ifEmpty` channel guards on EXTRACT→SELECT and GPU ablation `.combine()`
+  to prevent pipeline deadlocks when upstream processes are ignored.
+- Added missing `withName` config blocks for `KREVIEW_MULTIMODAL_SINGLE_CPU`,
+  `KREVIEW_MULTIMODAL_SINGLE_GPU`, and `KREVIEW_MULTIMODAL_MERGE`.
+
+### Changed
+- `get_duckdb_conn()` defaults: 8 threads, 32GB memory (was 4 threads, 4GB).
+
 ## [0.0.20] - 2026-06-09
 
 ### Added

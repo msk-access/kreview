@@ -53,6 +53,8 @@ process KREVIEW_EXTRACT {
         --min-fragments ${params.min_fragments ?: 2000} \\
         --min-variants ${params.min_variants ?: 1} \\
         --chunk-size ${params.chunk_size} \\
+        --duckdb-threads ${params.duckdb_threads ?: 8} \\
+        --duckdb-memory "${params.duckdb_memory ?: '32GB'}" \\
         ${ch_maf_flag} \\
         ${tier_flag} \\
         ${labels_flag} \\
