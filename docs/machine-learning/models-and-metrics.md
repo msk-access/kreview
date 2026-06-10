@@ -131,6 +131,41 @@ Serialized into the results JSON under `cancer_type_stats` and `assay_stats`.
 
 ---
 
+### 11. Nested CV Feature Group Ablation (v0.0.20+)
+
+When feature group ablation is enabled (`--run-ablation`), kreview runs a **nested cross-validation** loop to identify the optimal feature group subset before final evaluation:
+
+```
+Outer CV (5-fold):
+  For each outer fold k:
+    Inner CV (3-fold on train_k):
+      For each subset s in {ALL, solo_groups, leave-one-out}:
+        Score s using sensitivity_at_100spec_healthy
+      Winner_k = argmax(scores)
+    Store Winner_k features for fold k
+
+Final eval:
+  For each fold k: train on Winner_k features, predict OOF
+  Stitch OOF predictions → compute metrics with _compute_oof_metrics()
+  Refit on full data using majority-vote feature subset
+```
+
+**Key design choices:**
+
+- **Optimization metric**: `sensitivity_at_100spec_healthy` — clinically, this means "how many cancers are detected when zero healthy controls are false positive?"
+- **Subset generation**: `identify_feature_groups()` maps feature columns to suffix-based groups (e.g., `_mean_size`, `_count`). `generate_subsets()` creates ALL + solo + leave-one-out combinations.
+- **Per-fold communication**: Different folds may select different winning subsets. The nested CV path in `cpu_models()` and `gpu_models()` manually iterates folds instead of using `cross_val_predict()`.
+- **Majority-vote refit**: The final model is refit on the most commonly selected features across folds. This is stored as `{model}_refit_features` in the results JSON.
+- **Backward compatibility**: When `per_fold_features` is `None`, the standard `cross_val_predict()` path runs unchanged.
+
+Results carry a `nested_cv: true` flag, and the scoreboard surfaces `best_sens_100spec_healthy` (the best sensitivity across all models).
+
+| Metric | Key | Description |
+|--------|-----|-------------|
+| Nested CV flag | `nested_cv` | `true` when ablation was used |
+| Refit features | `{model}_refit_features` | Feature names used for final refit |
+| Best sensitivity | `best_sens_100spec_healthy` | Max sensitivity across models (scoreboard) |
+
 ## GPU Foundation Models (v0.0.13+)
 
 In addition to the CPU ensemble, kreview can optionally train **GPU-accelerated foundation models** when a CUDA-capable device is available. As of v0.0.18, four GPU model variants are supported (2 zero-shot + 2 fine-tuned).
@@ -320,6 +355,7 @@ To assess whether the same features are consistently ranked as important across 
 | Selection QC | `selection_qc` (method, overlap stats, feature counts) | 1 |
 | GPU OOF Probs | `{gpu_model}_oof_probs` | 4 |
 | GPU SHAP | `{gpu_model}_shap_values` (when `--shap` enabled) | 4 |
+| Nested CV | `nested_cv` (boolean), `{model}_refit_features` (list) | 2 + 3–7 |
 
 ---
 

@@ -25,3 +25,16 @@
 *[CV]: Cross-Validation
 *[CI]: Continuous Integration
 *[CD]: Continuous Deployment
+*[OOF]: Out-Of-Fold
+*[mRMR]: Minimum Redundancy Maximum Relevance
+*[MI]: Mutual Information
+*[DCA]: Decision Curve Analysis
+*[PR]: Precision-Recall
+*[PPV]: Positive Predictive Value
+*[FPR]: False Positive Rate
+*[TPR]: True Positive Rate
+*[DAG]: Directed Acyclic Graph
+*[NF]: Nextflow
+*[SLURM]: Simple Linux Utility for Resource Management
+*[OOM]: Out of Memory
+*[VRAM]: Video Random Access Memory

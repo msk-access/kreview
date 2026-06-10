@@ -66,6 +66,9 @@ def test_auc_std_present(self, cached_cpu_model_results):
 
 When writing new tests that require model fitting or complex DuckDB table generation, **always construct a module-scoped fixture** so that subsequent tests can run instantly.
 
+!!! example "Ablation Tests (v0.0.20+)"
+    `test_ablation.py` contains 17 tests covering `identify_feature_groups()`, `generate_subsets()`, `_inner_cv_sensitivity()`, `ablate_feature_groups()`, `merge_ablation()`, `_compute_oof_metrics()`, and the nested CV paths in `cpu_models()`. It uses a module-scoped `ablation_results` fixture that runs the full ablation pipeline once and caches the results for all downstream assertions.
+
 ---
 
 ## 🧪 Testing Auto-Generated Code

@@ -32,6 +32,9 @@
 #   - Select (×N):     4 CPUs + 16GB, max 2.5h (mRMR selection)
 #   - CPU Eval (×N):   4 CPUs + 32GB, max 2.5h (LR, RF, XGB)
 #   - GPU Eval (×N):   4 CPUs + 32GB + 1 GPU, max 2h (TabPFN, TabPFN-FT, TabICL, TabICL-FT)
+#   - Ablate CPU (×N): 4 CPUs + 32GB, max 2.5h (nested inner CV on LR/RF/XGB)
+#   - Ablate GPU (×N): 4 CPUs + 64GB + 1 GPU, max 2h (nested inner CV on TabPFN/TabICL)
+#   - Merge Abl (×N):  2 CPUs + 8GB, max 30min (JSON merge — lightweight)
 #   - Fuse:            2 CPUs + 16GB, max 2.5h (pandas join)
 #   - Scoreboard:      4 CPUs + 16GB (scoreboard aggregation)
 #   - Multimodal Prep:     4 CPUs + 32GB, max 1h (stacking matrix + feature selection)
@@ -119,6 +122,8 @@ nextflow run "${KREVIEW_REPO}" \
   --run_multimodal_eval     true \
   --multimodal_selection    boruta_shap \
   --multimodal_gpu_models   "${GPU_MODELS}" \
+  --run_ablation            true \
+  --ablation_inner_folds    3 \
   --top_percentile          10.0 \
   --ch_hotspot_maf          /data1/core006/cch/production/resources/cmo-ch/versions/v1.0/regions_of_interest/versions/v1.0/hotspot-list-ch-pd-v1.maf \
   --compute_univariate_auc  \
