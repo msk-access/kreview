@@ -250,7 +250,9 @@ def _add_mad_features(
         aggfunc="first",
     )
     # Flatten MultiIndex: (wps_nuc_mad, TSS) → TSS_wps_nuc_mad
-    pivoted.columns = [f"{rt}_{col}" for col, rt in pivoted.columns]
+    pivoted.columns = pd.Index(
+        [f"{rt}_{col}" for col, rt in pivoted.columns]  # type: ignore[has-type]
+    )
     pivoted = pivoted.reset_index()
 
     # ── Merge into feat_matrix in-place ──

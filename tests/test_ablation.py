@@ -283,9 +283,7 @@ class TestBuildAblationModelFactories:
         """GPU factory should return GPUModelCVAdapter (if deps installed) or None."""
         from kreview.eval_engine import _build_ablation_model_factories
 
-        factories = _build_ablation_model_factories(
-            ("tabpfn",), device="cpu"
-        )
+        factories = _build_ablation_model_factories(("tabpfn",), device="cpu")
         assert "tabpfn" in factories
         model = factories["tabpfn"]()
         # Either a valid adapter or None — never TypeError
@@ -295,9 +293,7 @@ class TestBuildAblationModelFactories:
         """GPU factory must not raise TypeError (the original bug)."""
         from kreview.eval_engine import _build_ablation_model_factories
 
-        factories = _build_ablation_model_factories(
-            ("tabpfn", "tabicl"), device="cpu"
-        )
+        factories = _build_ablation_model_factories(("tabpfn", "tabicl"), device="cpu")
         for name in ("tabpfn", "tabicl"):
             # The old code raised TypeError here:
             #   GPUModelCVAdapter(model_name=n, device=d)
@@ -318,4 +314,3 @@ class TestBuildAblationModelFactories:
         factories = _build_ablation_model_factories(("lr", "bogus_model"))
         assert "lr" in factories
         assert "bogus_model" not in factories
-
