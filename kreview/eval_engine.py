@@ -1227,8 +1227,14 @@ def ablate_feature_groups(
                 X_subset = X_outer_train[:, col_indices]
 
                 try:
+                    model_instance = model_factory()
+                    if model_instance is None:
+                        # GPU model unavailable (e.g., tabpfn not installed)
+                        # — skip silently, already warned in factory
+                        model_scores[subset_name] = 0.0
+                        continue
                     score = _inner_cv_sensitivity(
-                        model_factory(),
+                        model_instance,
                         X_subset,
                         y_outer_train,
                         labels_outer_train,
@@ -1377,12 +1383,20 @@ def _build_ablation_model_factories(
 
             factories["xgb"] = _xgb_factory
         elif name in ("tabpfn", "tabicl"):
-            # Zero-shot only for inner CV ablation
+            # Zero-shot only for inner CV ablation — use the shared builder
+            # which correctly wraps the model in GPUModelCVAdapter.
             _name = name
             _device = device
 
             def _gpu_factory(n=_name, d=_device):
-                return GPUModelCVAdapter(model_name=n, device=d)
+                model = _build_gpu_model(name=n, device=d)
+                if model is None:
+                    log.warning(
+                        "ablation_gpu_model_unavailable",
+                        model=n,
+                        hint="GPU library not installed — ablation will score 0.0",
+                    )
+                return model
 
             factories[name] = _gpu_factory
         else:

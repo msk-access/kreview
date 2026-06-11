@@ -257,3 +257,60 @@ class TestScoreboardAblation:
         assert "nested_cv" in df.columns
         assert df.iloc[0]["nested_cv"] == True  # noqa: E712 (np.bool_)
         assert "best_sens_100spec_healthy" in df.columns
+
+
+# ── Test: _build_ablation_model_factories ─────────────────────────────────────
+
+
+class TestBuildAblationModelFactories:
+    """Tests for _build_ablation_model_factories GPU factory fix.
+
+    Validates that GPU model factories use _build_gpu_model (not raw
+    GPUModelCVAdapter), and that CPU factories remain unchanged.
+    """
+
+    def test_cpu_factories_return_estimators(self):
+        """CPU factories (lr, rf, xgb) should return fittable estimators."""
+        from kreview.eval_engine import _build_ablation_model_factories
+
+        factories = _build_ablation_model_factories(("lr", "rf", "xgb"))
+        for name in ("lr", "rf", "xgb"):
+            model = factories[name]()
+            assert model is not None, f"{name} factory returned None"
+            assert hasattr(model, "fit"), f"{name} model has no .fit method"
+
+    def test_gpu_factory_returns_adapter_or_none(self):
+        """GPU factory should return GPUModelCVAdapter (if deps installed) or None."""
+        from kreview.eval_engine import _build_ablation_model_factories
+
+        factories = _build_ablation_model_factories(("tabpfn",), device="cpu")
+        assert "tabpfn" in factories
+        model = factories["tabpfn"]()
+        # Either a valid adapter or None — never TypeError
+        assert model is None or hasattr(model, "predict_proba")
+
+    def test_gpu_factory_does_not_raise_typeerror(self):
+        """GPU factory must not raise TypeError (the original bug)."""
+        from kreview.eval_engine import _build_ablation_model_factories
+
+        factories = _build_ablation_model_factories(("tabpfn", "tabicl"), device="cpu")
+        for name in ("tabpfn", "tabicl"):
+            # The old code raised TypeError here:
+            #   GPUModelCVAdapter(model_name=n, device=d)
+            # Now it should succeed (returning adapter or None)
+            try:
+                result = factories[name]()
+            except TypeError:
+                pytest.fail(
+                    f"{name} factory raised TypeError — "
+                    "likely still using old GPUModelCVAdapter(model_name=...) call"
+                )
+            assert result is None or hasattr(result, "predict_proba")
+
+    def test_unknown_model_not_in_factories(self):
+        """Unknown model names should be logged and excluded from factories."""
+        from kreview.eval_engine import _build_ablation_model_factories
+
+        factories = _build_ablation_model_factories(("lr", "bogus_model"))
+        assert "lr" in factories
+        assert "bogus_model" not in factories
