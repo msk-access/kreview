@@ -150,17 +150,19 @@ def _add_mad_features(
     *,
     _echo=print,
 ) -> None:
-    """Compute exact MAD features via a second lightweight DuckDB query.
+    """Compute exact MAD features natively inside DuckDB via window functions.
 
-    The main SQL query aggregated 1.9B rows → ~158 rows (mean, peak_valley,
-    std per sample × region_type). MAD requires the per-row array means
-    (not aggregated), so we run a second query returning just scalar means,
-    then compute: MAD = median(|row_mean_i − median(row_means)|).
+    The entire MAD calculation runs as a single DuckDB query using CTEs:
+
+    1. ``row_means``: compute ``list_avg()`` per row to get scalar means
+    2. ``medians``: add per-(sample, region_type) median via window partition
+    3. Final ``GROUP BY``: compute ``median(abs(row_mean - median))`` = MAD
+
+    This returns only ~158 aggregated rows (one per sample × region_type),
+    avoiding the previous approach that materialised ~446M row-level means
+    in pandas (causing OOM on large cohorts like 14,898 samples).
 
     Modifies ``feat_matrix`` in-place, adding ``{rt}_{col}_mad`` columns.
-
-    Memory: DuckDB streams row-level scalars; Python groups per (sample,
-    region_type). Peak memory: <100 MB for 79 samples × 250K regions.
     """
     from kreview.core import get_duckdb_conn, _discover_feature_paths
 
@@ -176,48 +178,99 @@ def _add_mad_features(
         log.warning("mad_no_files", evaluator=evaluator.name)
         return
 
-    # Build query: just sample_id, region_type, and per-row scalar means
+    # ── Build DuckDB-native MAD query ──
+    # CTE 1: per-row scalar means via list_avg()
     mean_exprs = ", ".join(f"list_avg({c}) AS {c}_row_mean" for c in array_cols)
+    # CTE 2: per-(sample, region_type) median via window partition
+    med_exprs = ", ".join(
+        f"median({c}_row_mean) OVER (PARTITION BY sample_id, region_type)"
+        f" AS med_{c}"
+        for c in array_cols
+    )
+    # Final: MAD = median(|row_mean - median|)
+    mad_exprs = ", ".join(
+        f"median(abs({c}_row_mean - med_{c})) AS {c}_mad" for c in array_cols
+    )
+    pass_through = ", ".join(f"{c}_row_mean" for c in array_cols)
+
     query = f"""
+        WITH row_means AS (
+            SELECT
+                regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id,
+                REPLACE(REPLACE(REPLACE(CAST(region_type AS VARCHAR),
+                    ' ', '_'), '-', '_'), '|', '_') AS region_type,
+                {mean_exprs}
+            FROM read_parquet(?, filename=true, union_by_name=true,
+                              hive_partitioning=false)
+            WHERE region_type IS NOT NULL
+        ),
+        medians AS (
+            SELECT
+                sample_id,
+                region_type,
+                {pass_through},
+                {med_exprs}
+            FROM row_means
+        )
         SELECT
-            regexp_extract(filename, '/([^/]+)/[^/]+$', 1) AS sample_id,
-            REPLACE(REPLACE(REPLACE(CAST(region_type AS VARCHAR),
-                ' ', '_'), '-', '_'), '|', '_') AS region_type,
-            {mean_exprs}
-        FROM read_parquet(?, filename=true, union_by_name=true,
-                          hive_partitioning=false)
-        WHERE region_type IS NOT NULL
+            sample_id,
+            region_type,
+            {mad_exprs}
+        FROM medians
+        GROUP BY sample_id, region_type
     """
 
     t_mad = time.time()
     try:
-        row_means_df = conn.execute(query, [file_paths]).df()
+        mad_df = conn.execute(query, [file_paths]).df()
     except Exception as exc:
         log.warning("mad_query_failed", evaluator=evaluator.name, error=str(exc))
         _echo(f"  WARNING: MAD query failed ({exc}), MAD features omitted")
         return
 
-    # Compute MAD per (sample_id, region_type, column)
-    id_col = "sample_id" if "sample_id" in feat_matrix.columns else "SAMPLE_ID"
-    n_mad_cols = 0
-    for sample_id in feat_matrix[id_col].unique():
-        sample_rows = row_means_df[row_means_df["sample_id"] == sample_id]
-        for rt in sample_rows["region_type"].unique():
-            rt_rows = sample_rows[sample_rows["region_type"] == rt]
-            for col in array_cols:
-                mean_col = f"{col}_row_mean"
-                if mean_col not in rt_rows.columns:
-                    continue
-                vals = rt_rows[mean_col].dropna().values
-                if len(vals) == 0:
-                    continue
-                mad = float(np.median(np.abs(vals - np.median(vals))))
-                col_name = f"{rt}_{col}_mad"
-                mask = feat_matrix[id_col] == sample_id
-                feat_matrix.loc[mask, col_name] = mad
-                n_mad_cols += 1
+    if mad_df.empty:
+        log.warning("mad_query_empty", evaluator=evaluator.name)
+        _echo("  WARNING: MAD query returned no rows, MAD features omitted")
+        return
 
-    del row_means_df  # Explicit release
+    log.debug(
+        "mad_query_complete",
+        evaluator=evaluator.name,
+        n_rows=len(mad_df),
+        elapsed_sec=round(time.time() - t_mad, 1),
+    )
+
+    # ── Pivot: sample_id × region_type → wide format ──
+    id_col = "sample_id" if "sample_id" in feat_matrix.columns else "SAMPLE_ID"
+    value_cols = [f"{c}_mad" for c in array_cols]
+    pivoted = mad_df.pivot_table(
+        index="sample_id",
+        columns="region_type",
+        values=value_cols,
+        aggfunc="first",
+    )
+    # Flatten MultiIndex: (wps_nuc_mad, TSS) → TSS_wps_nuc_mad
+    pivoted.columns = pd.Index(
+        [f"{rt}_{col}" for col, rt in pivoted.columns]  # type: ignore[has-type]
+    )
+    pivoted = pivoted.reset_index()
+
+    # ── Merge into feat_matrix in-place ──
+    feat_matrix[id_col] = feat_matrix[id_col].astype(str)
+    pivoted["sample_id"] = pivoted["sample_id"].astype(str)
+    merged = pd.merge(
+        feat_matrix,
+        pivoted,
+        left_on=id_col,
+        right_on="sample_id",
+        how="left",
+    )
+    if id_col != "sample_id" and "sample_id" in merged.columns:
+        merged = merged.drop(columns=["sample_id"])
+
+    for c in merged.columns:
+        if c not in feat_matrix.columns:
+            feat_matrix[c] = merged[c]
 
     mad_sec = time.time() - t_mad
     n_unique_mad = len([c for c in feat_matrix.columns if c.endswith("_mad")])
@@ -226,6 +279,7 @@ def _add_mad_features(
         "mad_computed",
         evaluator=evaluator.name,
         n_mad_features=n_unique_mad,
+        n_samples=len(pivoted),
         elapsed_sec=round(mad_sec, 1),
     )
 

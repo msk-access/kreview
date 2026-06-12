@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-06-11
+
+### Fixed
+- **WPSGenome MAD Memory Optimization**: Replaced the nested Python loop that materialized ~446M rows in memory with a DuckDB-native window function query, reducing peak memory usage to under 100MB and runtime to ~7s.
+- **GPU Ablation TypeError**: Fixed a bug where `_build_ablation_model_factories` called `GPUModelCVAdapter` directly with invalid `model_name` argument instead of using `_build_gpu_model` builder, causing GPU ablation to silently fail and default to `ALL`.
+
 ## [0.0.21] - 2026-06-10
 
 ### Performance
