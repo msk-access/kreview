@@ -28,6 +28,11 @@ process KREVIEW_REPORT_MULTIMODAL {
     def shap_features_arg = params.shap_features ?: 10
     """
     set -euo pipefail
+
+    # Set custom writable cache/data paths for Quarto on HPC/Read-only filesystems
+    export XDG_CACHE_HOME="\$PWD/.quarto_cache"
+    export XDG_DATA_HOME="\$PWD/.quarto_data"
+
     mkdir -p matrices reports
 
     # Stage super-matrix and multimodal results into expected directory layout

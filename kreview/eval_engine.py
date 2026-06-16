@@ -3722,13 +3722,14 @@ def _select_multimodal_features(
         # at module level. binom_test was deprecated in scipy 1.7 and removed
         # in scipy ≥1.12. Patch with the official replacement binomtest(),
         # wrapping .pvalue to match the old return type (bare float).
+        import scipy
         import scipy.stats as _ss
 
         if not hasattr(_ss, "binom_test"):
             _ss.binom_test = lambda x, n, p, alternative="two-sided": (
                 _ss.binomtest(x, n, p, alternative).pvalue
             )
-            log.info("scipy_binom_test_shimmed", scipy_version=_ss.__version__)
+            log.info("scipy_binom_test_shimmed", scipy_version=scipy.__version__)
 
         from BorutaShap import BorutaShap
         from xgboost import XGBClassifier

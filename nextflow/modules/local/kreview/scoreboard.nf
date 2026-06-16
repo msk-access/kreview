@@ -27,7 +27,7 @@ process KREVIEW_SCOREBOARD {
 
     # All JSONs are symlinked in the work directory by Nextflow — no staging needed.
     # Python load_all_model_results() natively discovers and merges CPU+GPU JSONs.
-    python3 -c "
+    python3 << 'EOF'
 import traceback, sys
 from kreview.scoreboard import build_scoreboard
 from pathlib import Path
@@ -43,7 +43,7 @@ except Exception as e:
 
 print(f'Scoreboard: {len(sb)} evaluators', flush=True)
 if len(sb) > 0:
-    print(f'  Best: {sb.iloc[0][\"evaluator\"]} (AUC={sb.iloc[0][\"best_auc\"]:.3f})', flush=True)
-"
+    print(f"  Best: {sb.iloc[0]['evaluator']} (AUC={sb.iloc[0]['best_auc']:.3f})", flush=True)
+EOF
     """
 }

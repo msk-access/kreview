@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-06-16
+
+### Fixed
+- **Scoreboard Nextflow Quote-Escaping**: Replaced `python3 -c "..."` with bash heredoc (`python3 << 'EOF'`) in `scoreboard.nf` to prevent Nextflow shell interpolation from stripping escaped quotes, which caused `NameError: name 'evaluator' is not defined` and `KREVIEW_SCOREBOARD` failing all retry attempts.
+- **scipy.stats Version Attribute**: Fixed `AttributeError` in the `binom_test` compatibility shim by importing `scipy` (top-level) instead of accessing `__version__` on `scipy.stats` (which has no such attribute). This caused `KREVIEW_MULTIMODAL_PREP` to crash when `--multimodal-selection boruta_shap` was used (scipy ≥1.12).
+- **Quarto HPC Cache Permissions**: Export `XDG_CACHE_HOME` and `XDG_DATA_HOME` to writable local paths in `report.nf` and `report_multimodal.nf`, preventing Quarto from failing on HPC compute nodes with read-only `~/.cache` directories.
+
 ## [0.0.22] - 2026-06-11
 
 ### Fixed
