@@ -35,6 +35,10 @@ process KREVIEW_REPORT {
     """
     set -euo pipefail
 
+    # Set custom writable cache/data paths for Quarto on HPC/Read-only filesystems
+    export XDG_CACHE_HOME="\$PWD/.quarto_cache"
+    export XDG_DATA_HOME="\$PWD/.quarto_data"
+
     mkdir -p matrices reports
 
     # Stage ALL files into one flat directory (report expects co-located files)
