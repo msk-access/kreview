@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -4999,7 +4999,7 @@ groups by evaluator name, and merges GPU keys into CPU dicts.</p>
 <li>
 <p><strong>Raw features</strong> (optional): If <code>super_matrix_path</code> is provided,
    trains directly on the fused feature matrix with
-   <code>multimodal_selection</code>-based feature selection (<abbr title="Mutual Information">MI</abbr> or Boruta-<abbr title="SHapley Additive exPlanations">SHAP</abbr>).</p>
+   <code>multimodal_selection</code>-based feature selection.</p>
 </li>
 <li>
 <p><strong>Ablation</strong>: Leave-one-evaluator-out analysis on the stacking
@@ -5188,7 +5188,8 @@ groups by evaluator name, and merges GPU keys into CPU dicts.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Feature selection strategy ('mi' or 'boruta_shap').</p>
+                <p>Feature selection strategy
+('mi', 'boruta_shap', 'leshy', or 'grootcv').</p>
               </div>
             </td>
             <td>
@@ -5296,7 +5297,7 @@ and writes outputs as parquet files + a metadata JSON.</p>
             <td>
               <div class="doc-md-description">
                 <p>Feature selection strategy for raw features
-(<code>"mi"</code> or <code>"boruta_shap"</code>).</p>
+('mi', 'boruta_shap', 'leshy', or 'grootcv').</p>
               </div>
             </td>
             <td>

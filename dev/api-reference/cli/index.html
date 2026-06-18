@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1795,11 +1795,13 @@ ablation into a single output matching the monolithic schema.</p>
 <a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>  --super-matrix PATH          Optional path to super_matrix.parquet for raw-
 <a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>                               feature strategy
 <a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>  --multimodal-selection TEXT  Feature selection for raw features: mi
-<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>                               (default) or boruta_shap  [default: mi]
-<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>  --top-percentile FLOAT       Top N%% features for MI selection  [default:
-<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>                               10.0]
-<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>  --seed INTEGER               Random seed  [default: 42]
-<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>  --output PATH                Output directory  [default: output/]
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>                               (default), boruta_shap, leshy, or grootcv.
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>                               leshy/grootcv require: pip install
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>                               kreview[arfs]  [default: mi]
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>  --top-percentile FLOAT       Top N%% features for MI selection  [default:
+<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>                               10.0]
+<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>  --seed INTEGER               Random seed  [default: 42]
+<a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a>  --output PATH                Output directory  [default: output/]
 </code></pre></div>
 <h4 id="run">run</h4>
 <p>Cross-evaluator multimodal evaluation with stacking and ablation.</p>
@@ -1825,20 +1827,21 @@ and combines them into a stacking matrix.  Three strategies are run:</p>
 <a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>                                  tabpfn_ft,tabicl_ft. Empty = CPU only.
 <a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a>  --top-percentile FLOAT          Top N%% features for MI selection (matches
 <a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a>                                  per-evaluator pipeline)  [default: 10.0]
-<a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a>  --multimodal-selection TEXT     Multimodal feature selection: mi (default,
-<a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a>                                  fast) or boruta_shap (interaction-aware)
-<a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a>                                  [default: mi]
-<a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
-<a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a>  --device TEXT                   PyTorch device: cuda, cpu  [default: cuda]
-<a id="__codelineno-22-17" name="__codelineno-22-17" href="#__codelineno-22-17"></a>  --finetune-epochs INTEGER       GPU fine-tuning epochs for _ft variants
-<a id="__codelineno-22-18" name="__codelineno-22-18" href="#__codelineno-22-18"></a>                                  [default: 50]
-<a id="__codelineno-22-19" name="__codelineno-22-19" href="#__codelineno-22-19"></a>  --finetune-lr FLOAT             GPU fine-tuning learning rate  [default:
-<a id="__codelineno-22-20" name="__codelineno-22-20" href="#__codelineno-22-20"></a>                                  1e-05]
-<a id="__codelineno-22-21" name="__codelineno-22-21" href="#__codelineno-22-21"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
-<a id="__codelineno-22-22" name="__codelineno-22-22" href="#__codelineno-22-22"></a>                                  42]
-<a id="__codelineno-22-23" name="__codelineno-22-23" href="#__codelineno-22-23"></a>  --deterministic / --no-deterministic
-<a id="__codelineno-22-24" name="__codelineno-22-24" href="#__codelineno-22-24"></a>                                  Enable PyTorch deterministic mode (slower
-<a id="__codelineno-22-25" name="__codelineno-22-25" href="#__codelineno-22-25"></a>                                  but reproducible).  [default: deterministic]
+<a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a>  --multimodal-selection TEXT     Multimodal feature selection: mi (default),
+<a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a>                                  boruta_shap, leshy, or grootcv.
+<a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a>                                  leshy/grootcv require: pip install
+<a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a>                                  kreview[arfs]  [default: mi]
+<a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a>  --cv-folds INTEGER              Cross-validation folds  [default: 5]
+<a id="__codelineno-22-17" name="__codelineno-22-17" href="#__codelineno-22-17"></a>  --device TEXT                   PyTorch device: cuda, cpu  [default: cuda]
+<a id="__codelineno-22-18" name="__codelineno-22-18" href="#__codelineno-22-18"></a>  --finetune-epochs INTEGER       GPU fine-tuning epochs for _ft variants
+<a id="__codelineno-22-19" name="__codelineno-22-19" href="#__codelineno-22-19"></a>                                  [default: 50]
+<a id="__codelineno-22-20" name="__codelineno-22-20" href="#__codelineno-22-20"></a>  --finetune-lr FLOAT             GPU fine-tuning learning rate  [default:
+<a id="__codelineno-22-21" name="__codelineno-22-21" href="#__codelineno-22-21"></a>                                  1e-05]
+<a id="__codelineno-22-22" name="__codelineno-22-22" href="#__codelineno-22-22"></a>  --seed INTEGER                  Random seed for reproducibility.  [default:
+<a id="__codelineno-22-23" name="__codelineno-22-23" href="#__codelineno-22-23"></a>                                  42]
+<a id="__codelineno-22-24" name="__codelineno-22-24" href="#__codelineno-22-24"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-22-25" name="__codelineno-22-25" href="#__codelineno-22-25"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-22-26" name="__codelineno-22-26" href="#__codelineno-22-26"></a>                                  but reproducible).  [default: deterministic]
 </code></pre></div>
 <h4 id="single">single</h4>
 <p>Stage 2: Train one model on the stacking (+ optional raw) matrix.</p>
@@ -2015,49 +2018,51 @@ block the remaining dashboards.</p>
 <a id="__codelineno-35-34" name="__codelineno-35-34" href="#__codelineno-35-34"></a>                                  models.  [default: 10.0]
 <a id="__codelineno-35-35" name="__codelineno-35-35" href="#__codelineno-35-35"></a>  --strategy TEXT                 Feature selection strategy: mrmr (default)
 <a id="__codelineno-35-36" name="__codelineno-35-36" href="#__codelineno-35-36"></a>                                  or hybrid_union  [default: mrmr]
-<a id="__codelineno-35-37" name="__codelineno-35-37" href="#__codelineno-35-37"></a>  --multimodal-selection TEXT     Multimodal selection: mi (default) or
-<a id="__codelineno-35-38" name="__codelineno-35-38" href="#__codelineno-35-38"></a>                                  boruta_shap  [default: mi]
-<a id="__codelineno-35-39" name="__codelineno-35-39" href="#__codelineno-35-39"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
-<a id="__codelineno-35-40" name="__codelineno-35-40" href="#__codelineno-35-40"></a>                                  computation in dashboards. Lower values
-<a id="__codelineno-35-41" name="__codelineno-35-41" href="#__codelineno-35-41"></a>                                  reduce memory usage.  [default: 500]
-<a id="__codelineno-35-42" name="__codelineno-35-42" href="#__codelineno-35-42"></a>  --shap-features INTEGER         Max features to visualize in SHAP
-<a id="__codelineno-35-43" name="__codelineno-35-43" href="#__codelineno-35-43"></a>                                  beeswarm/waterfall plots.  [default: 10]
-<a id="__codelineno-35-44" name="__codelineno-35-44" href="#__codelineno-35-44"></a>  --resume                        Skip models whose AUC results already exist
-<a id="__codelineno-35-45" name="__codelineno-35-45" href="#__codelineno-35-45"></a>                                  in the output JSON. Enables incremental
-<a id="__codelineno-35-46" name="__codelineno-35-46" href="#__codelineno-35-46"></a>                                  runs: first CPU, then GPU with --resume.
-<a id="__codelineno-35-47" name="__codelineno-35-47" href="#__codelineno-35-47"></a>  --compute-univariate-auc        Compute per-feature univariate LR AUC.
-<a id="__codelineno-35-48" name="__codelineno-35-48" href="#__codelineno-35-48"></a>                                  Required for hybrid selection (default:
-<a id="__codelineno-35-49" name="__codelineno-35-49" href="#__codelineno-35-49"></a>                                  True).  [default: True]
-<a id="__codelineno-35-50" name="__codelineno-35-50" href="#__codelineno-35-50"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
-<a id="__codelineno-35-51" name="__codelineno-35-51" href="#__codelineno-35-51"></a>                                  only demotion. Samples with only CH
-<a id="__codelineno-35-52" name="__codelineno-35-52" href="#__codelineno-35-52"></a>                                  mutations are demoted to Possible ctDNA−.
-<a id="__codelineno-35-53" name="__codelineno-35-53" href="#__codelineno-35-53"></a>  --gpu-models TEXT               Comma-separated GPU models:
-<a id="__codelineno-35-54" name="__codelineno-35-54" href="#__codelineno-35-54"></a>                                  tabpfn,tabpfn_ft,tabicl,tabicl_ft. Empty
-<a id="__codelineno-35-55" name="__codelineno-35-55" href="#__codelineno-35-55"></a>                                  (default) = CPU only. Requires torch + model
-<a id="__codelineno-35-56" name="__codelineno-35-56" href="#__codelineno-35-56"></a>                                  packages (pip install kreview[gpu]).
-<a id="__codelineno-35-57" name="__codelineno-35-57" href="#__codelineno-35-57"></a>  --finetune-epochs INTEGER       Number of fine-tuning epochs for _ft GPU
-<a id="__codelineno-35-58" name="__codelineno-35-58" href="#__codelineno-35-58"></a>                                  variants.  [default: 50]
-<a id="__codelineno-35-59" name="__codelineno-35-59" href="#__codelineno-35-59"></a>  --finetune-lr FLOAT             Learning rate for GPU model fine-tuning.
-<a id="__codelineno-35-60" name="__codelineno-35-60" href="#__codelineno-35-60"></a>                                  [default: 1e-05]
-<a id="__codelineno-35-61" name="__codelineno-35-61" href="#__codelineno-35-61"></a>  --device TEXT                   PyTorch device for GPU models: cuda, cpu.
-<a id="__codelineno-35-62" name="__codelineno-35-62" href="#__codelineno-35-62"></a>                                  [default: cuda]
-<a id="__codelineno-35-63" name="__codelineno-35-63" href="#__codelineno-35-63"></a>  --skip-gpu-joblib               Skip saving GPU model joblib files (can be
-<a id="__codelineno-35-64" name="__codelineno-35-64" href="#__codelineno-35-64"></a>                                  &gt;200MB each).
-<a id="__codelineno-35-65" name="__codelineno-35-65" href="#__codelineno-35-65"></a>  --seed INTEGER                  Random seed for reproducibility across all
-<a id="__codelineno-35-66" name="__codelineno-35-66" href="#__codelineno-35-66"></a>                                  models and CV splits.  [default: 42]
-<a id="__codelineno-35-67" name="__codelineno-35-67" href="#__codelineno-35-67"></a>  --deterministic / --no-deterministic
-<a id="__codelineno-35-68" name="__codelineno-35-68" href="#__codelineno-35-68"></a>                                  Enable PyTorch deterministic mode (slower
-<a id="__codelineno-35-69" name="__codelineno-35-69" href="#__codelineno-35-69"></a>                                  but reproducible). Default: True.  [default:
-<a id="__codelineno-35-70" name="__codelineno-35-70" href="#__codelineno-35-70"></a>                                  deterministic]
-<a id="__codelineno-35-71" name="__codelineno-35-71" href="#__codelineno-35-71"></a>  --max-gpu-features INTEGER      Maximum features for GPU models. If feature
-<a id="__codelineno-35-72" name="__codelineno-35-72" href="#__codelineno-35-72"></a>                                  count exceeds this, the top N are selected
-<a id="__codelineno-35-73" name="__codelineno-35-73" href="#__codelineno-35-73"></a>                                  by mutual information from eval_stats. Set
-<a id="__codelineno-35-74" name="__codelineno-35-74" href="#__codelineno-35-74"></a>                                  to 0 to disable capping.  [default: 150]
-<a id="__codelineno-35-75" name="__codelineno-35-75" href="#__codelineno-35-75"></a>  --duckdb-threads INTEGER        Max threads for DuckDB query execution
-<a id="__codelineno-35-76" name="__codelineno-35-76" href="#__codelineno-35-76"></a>                                  (match SLURM cpus).  [default: 8]
-<a id="__codelineno-35-77" name="__codelineno-35-77" href="#__codelineno-35-77"></a>  --duckdb-memory TEXT            DuckDB memory limit (e.g., '32GB', '16GB').
-<a id="__codelineno-35-78" name="__codelineno-35-78" href="#__codelineno-35-78"></a>                                  Controls peak memory for parquet
-<a id="__codelineno-35-79" name="__codelineno-35-79" href="#__codelineno-35-79"></a>                                  aggregation.  [default: 32GB]
+<a id="__codelineno-35-37" name="__codelineno-35-37" href="#__codelineno-35-37"></a>  --multimodal-selection TEXT     Multimodal feature selection: mi (default),
+<a id="__codelineno-35-38" name="__codelineno-35-38" href="#__codelineno-35-38"></a>                                  boruta_shap, leshy, or grootcv.
+<a id="__codelineno-35-39" name="__codelineno-35-39" href="#__codelineno-35-39"></a>                                  leshy/grootcv require: pip install
+<a id="__codelineno-35-40" name="__codelineno-35-40" href="#__codelineno-35-40"></a>                                  kreview[arfs]  [default: mi]
+<a id="__codelineno-35-41" name="__codelineno-35-41" href="#__codelineno-35-41"></a>  --shap-samples INTEGER          Max samples for SHAP explainability
+<a id="__codelineno-35-42" name="__codelineno-35-42" href="#__codelineno-35-42"></a>                                  computation in dashboards. Lower values
+<a id="__codelineno-35-43" name="__codelineno-35-43" href="#__codelineno-35-43"></a>                                  reduce memory usage.  [default: 500]
+<a id="__codelineno-35-44" name="__codelineno-35-44" href="#__codelineno-35-44"></a>  --shap-features INTEGER         Max features to visualize in SHAP
+<a id="__codelineno-35-45" name="__codelineno-35-45" href="#__codelineno-35-45"></a>                                  beeswarm/waterfall plots.  [default: 10]
+<a id="__codelineno-35-46" name="__codelineno-35-46" href="#__codelineno-35-46"></a>  --resume                        Skip models whose AUC results already exist
+<a id="__codelineno-35-47" name="__codelineno-35-47" href="#__codelineno-35-47"></a>                                  in the output JSON. Enables incremental
+<a id="__codelineno-35-48" name="__codelineno-35-48" href="#__codelineno-35-48"></a>                                  runs: first CPU, then GPU with --resume.
+<a id="__codelineno-35-49" name="__codelineno-35-49" href="#__codelineno-35-49"></a>  --compute-univariate-auc        Compute per-feature univariate LR AUC.
+<a id="__codelineno-35-50" name="__codelineno-35-50" href="#__codelineno-35-50"></a>                                  Required for hybrid selection (default:
+<a id="__codelineno-35-51" name="__codelineno-35-51" href="#__codelineno-35-51"></a>                                  True).  [default: True]
+<a id="__codelineno-35-52" name="__codelineno-35-52" href="#__codelineno-35-52"></a>  --ch-hotspot-maf PATH           Optional TSV of CH hotspot variants for CH-
+<a id="__codelineno-35-53" name="__codelineno-35-53" href="#__codelineno-35-53"></a>                                  only demotion. Samples with only CH
+<a id="__codelineno-35-54" name="__codelineno-35-54" href="#__codelineno-35-54"></a>                                  mutations are demoted to Possible ctDNA−.
+<a id="__codelineno-35-55" name="__codelineno-35-55" href="#__codelineno-35-55"></a>  --gpu-models TEXT               Comma-separated GPU models:
+<a id="__codelineno-35-56" name="__codelineno-35-56" href="#__codelineno-35-56"></a>                                  tabpfn,tabpfn_ft,tabicl,tabicl_ft. Empty
+<a id="__codelineno-35-57" name="__codelineno-35-57" href="#__codelineno-35-57"></a>                                  (default) = CPU only. Requires torch + model
+<a id="__codelineno-35-58" name="__codelineno-35-58" href="#__codelineno-35-58"></a>                                  packages (pip install kreview[gpu]).
+<a id="__codelineno-35-59" name="__codelineno-35-59" href="#__codelineno-35-59"></a>  --finetune-epochs INTEGER       Number of fine-tuning epochs for _ft GPU
+<a id="__codelineno-35-60" name="__codelineno-35-60" href="#__codelineno-35-60"></a>                                  variants.  [default: 50]
+<a id="__codelineno-35-61" name="__codelineno-35-61" href="#__codelineno-35-61"></a>  --finetune-lr FLOAT             Learning rate for GPU model fine-tuning.
+<a id="__codelineno-35-62" name="__codelineno-35-62" href="#__codelineno-35-62"></a>                                  [default: 1e-05]
+<a id="__codelineno-35-63" name="__codelineno-35-63" href="#__codelineno-35-63"></a>  --device TEXT                   PyTorch device for GPU models: cuda, cpu.
+<a id="__codelineno-35-64" name="__codelineno-35-64" href="#__codelineno-35-64"></a>                                  [default: cuda]
+<a id="__codelineno-35-65" name="__codelineno-35-65" href="#__codelineno-35-65"></a>  --skip-gpu-joblib               Skip saving GPU model joblib files (can be
+<a id="__codelineno-35-66" name="__codelineno-35-66" href="#__codelineno-35-66"></a>                                  &gt;200MB each).
+<a id="__codelineno-35-67" name="__codelineno-35-67" href="#__codelineno-35-67"></a>  --seed INTEGER                  Random seed for reproducibility across all
+<a id="__codelineno-35-68" name="__codelineno-35-68" href="#__codelineno-35-68"></a>                                  models and CV splits.  [default: 42]
+<a id="__codelineno-35-69" name="__codelineno-35-69" href="#__codelineno-35-69"></a>  --deterministic / --no-deterministic
+<a id="__codelineno-35-70" name="__codelineno-35-70" href="#__codelineno-35-70"></a>                                  Enable PyTorch deterministic mode (slower
+<a id="__codelineno-35-71" name="__codelineno-35-71" href="#__codelineno-35-71"></a>                                  but reproducible). Default: True.  [default:
+<a id="__codelineno-35-72" name="__codelineno-35-72" href="#__codelineno-35-72"></a>                                  deterministic]
+<a id="__codelineno-35-73" name="__codelineno-35-73" href="#__codelineno-35-73"></a>  --max-gpu-features INTEGER      Maximum features for GPU models. If feature
+<a id="__codelineno-35-74" name="__codelineno-35-74" href="#__codelineno-35-74"></a>                                  count exceeds this, the top N are selected
+<a id="__codelineno-35-75" name="__codelineno-35-75" href="#__codelineno-35-75"></a>                                  by mutual information from eval_stats. Set
+<a id="__codelineno-35-76" name="__codelineno-35-76" href="#__codelineno-35-76"></a>                                  to 0 to disable capping.  [default: 150]
+<a id="__codelineno-35-77" name="__codelineno-35-77" href="#__codelineno-35-77"></a>  --duckdb-threads INTEGER        Max threads for DuckDB query execution
+<a id="__codelineno-35-78" name="__codelineno-35-78" href="#__codelineno-35-78"></a>                                  (match SLURM cpus).  [default: 8]
+<a id="__codelineno-35-79" name="__codelineno-35-79" href="#__codelineno-35-79"></a>  --duckdb-memory TEXT            DuckDB memory limit (e.g., '32GB', '16GB').
+<a id="__codelineno-35-80" name="__codelineno-35-80" href="#__codelineno-35-80"></a>                                  Controls peak memory for parquet
+<a id="__codelineno-35-81" name="__codelineno-35-81" href="#__codelineno-35-81"></a>                                  aggregation.  [default: 32GB]
 </code></pre></div>
 <h2 id="select">select</h2>
 <p>Score features and apply feature selection to extracted matrices.</p>
