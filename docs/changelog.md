@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.24] - 2026-06-18
+
+### Added
+- **ARFS Feature Selection**: Added Leshy (Boruta+LightGBM/SHAP) and GrootCV (cross-validated SHAP importance) as `--multimodal-selection` options. Install via `pip install kreview[arfs]`.
+- **Strategy Validation**: `_select_multimodal_features()` now raises `ValueError` on unknown strategy names instead of silently falling through to MI ranking. Typos like `--multimodal-selection borta_shap` are caught immediately.
+- **MI-Reduction Helper**: Extracted `_mi_reduce_confirmed()` to deduplicate the >500-feature MI reduction logic across Boruta-SHAP, Leshy, and GrootCV strategies.
+- **Tests**: Added `test_invalid_strategy_raises`, `test_valid_strategies_constant`, `test_leshy_passes_through`, and `test_grootcv_passes_through` to `test_selection.py`.
+
+### Changed
+- **BorutaShap → BorutaShapPlus**: Migrated from `BorutaShap>=1.0.17` to `BorutaShapPlus>=0.1.3` with scipy `binom_test` and NumPy `np.NaN` compatibility shims.
+
+### Fixed
+- **Quarto EROFS on Read-Only Singularity**: Quarto 1.9+ creates a `.quarto/` project directory next to the QMD source. Inside read-only Singularity containers, this failed with `EROFS (error 30)`. Templates are now staged to a writable `.render_{feat_name}/` directory before `quarto render`.
+- **Report publishDir Double-Nesting**: Fixed `publishDir "${params.outdir}/reports"` → `"${params.outdir}"` in `report.nf` and `report_multimodal.nf` to prevent `results/reports/reports/` nesting.
+- **GrootCV Constructor**: Fixed invalid parameters (`estimator`, `n_iterations`, `cv`) → correct ARFS API (`objective="binary"`, `n_folds=5`, `n_iter=50`, `silent=True`).
+- **Leshy Constructor**: Fixed `n_iter` (not a valid param) → `max_iter=50`; added `n_estimators=1000`, `verbose=0`.
+- **Test Import**: Updated `test_selection.py` skip guard from `import BorutaShap` to `import BorutaShapPlus`.
+
 ## [0.0.23] - 2026-06-16
 
 ### Fixed

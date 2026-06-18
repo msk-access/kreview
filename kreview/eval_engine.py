@@ -3691,9 +3691,7 @@ def _mi_reduce_confirmed(
     from sklearn.feature_selection import mutual_info_classif
 
     n_keep = max(1, int(len(confirmed) * (top_percentile / 100.0)))
-    mi_scores = mutual_info_classif(
-        df[confirmed].values, y, random_state=random_state
-    )
+    mi_scores = mutual_info_classif(df[confirmed].values, y, random_state=random_state)
     mi_ranked = sorted(
         zip(confirmed, mi_scores),
         key=lambda x: x[1],
@@ -3847,7 +3845,9 @@ def _select_multimodal_features(
             )
 
             confirmed = _mi_reduce_confirmed(
-                df, confirmed, y,
+                df,
+                confirmed,
+                y,
                 top_percentile=top_percentile,
                 random_state=random_state,
                 strategy_name="boruta_shap",
@@ -3905,7 +3905,9 @@ def _select_multimodal_features(
             )
 
             confirmed = _mi_reduce_confirmed(
-                df, confirmed, y,
+                df,
+                confirmed,
+                y,
                 top_percentile=top_percentile,
                 random_state=random_state,
                 strategy_name="leshy",
@@ -3956,7 +3958,9 @@ def _select_multimodal_features(
             )
 
             confirmed = _mi_reduce_confirmed(
-                df, confirmed, y,
+                df,
+                confirmed,
+                y,
                 top_percentile=top_percentile,
                 random_state=random_state,
                 strategy_name="grootcv",
