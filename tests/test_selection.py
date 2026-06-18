@@ -392,12 +392,12 @@ class TestMultimodalFeatureSelection:
         try:
             from kreview.eval_engine import _select_multimodal_features
         except ImportError:
-            pytest.skip("BorutaShap not importable (scipy compatibility)")
-        # Boruta-SHAP may fail to import due to scipy.stats.binom_test removal
+            pytest.skip("BorutaShapPlus not importable (scipy compatibility)")
+        # BorutaShapPlus may fail to import due to scipy.stats.binom_test removal
         try:
-            import BorutaShap  # noqa: F401
+            import BorutaShapPlus  # noqa: F401
         except ImportError:
-            pytest.skip("BorutaShap not installed or scipy incompatible")
+            pytest.skip("BorutaShapPlus not installed or scipy incompatible")
         np.random.seed(42)
         n, p = 100, 10
         X = pd.DataFrame(np.random.randn(n, p), columns=[f"f{i}" for i in range(p)])
@@ -407,6 +407,74 @@ class TestMultimodalFeatureSelection:
 
         selected_df, names = _select_multimodal_features(
             X, y, top_percentile=50.0, strategy="boruta_shap"
+        )
+        assert len(names) > 0
+        assert len(names) <= p
+
+    def test_invalid_strategy_raises(self):
+        """Unknown strategy must raise ValueError, not silently fall through to MI."""
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        n, p = 50, 10
+        X = pd.DataFrame(np.random.randn(n, p), columns=[f"f{i}" for i in range(p)])
+        y = np.array([0] * 25 + [1] * 25)
+
+        with pytest.raises(ValueError, match="Unknown multimodal selection strategy"):
+            _select_multimodal_features(X, y, strategy="borta_shap")  # typo
+
+    def test_valid_strategies_constant(self):
+        """The _VALID_MULTIMODAL_STRATEGIES constant must list all 4 strategies."""
+        from kreview.eval_engine import _VALID_MULTIMODAL_STRATEGIES
+
+        assert _VALID_MULTIMODAL_STRATEGIES == {"mi", "boruta_shap", "leshy", "grootcv"}
+
+    def test_leshy_passes_through(self):
+        """Leshy strategy should not crash on small data."""
+        try:
+            import arfs  # noqa: F401
+        except ImportError:
+            pytest.skip("arfs not installed")
+        try:
+            import lightgbm  # noqa: F401
+        except ImportError:
+            pytest.skip("lightgbm not installed")
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        n, p = 100, 10
+        X = pd.DataFrame(np.random.randn(n, p), columns=[f"f{i}" for i in range(p)])
+        y = np.array([0] * 50 + [1] * 50)
+        # Add signal so Leshy finds at least one relevant feature
+        X.iloc[:50, 0] += 3.0
+
+        selected_df, names = _select_multimodal_features(
+            X, y, top_percentile=50.0, strategy="leshy"
+        )
+        assert len(names) > 0
+        assert len(names) <= p
+
+    def test_grootcv_passes_through(self):
+        """GrootCV strategy should not crash on small data."""
+        try:
+            import arfs  # noqa: F401
+        except ImportError:
+            pytest.skip("arfs not installed")
+        try:
+            import lightgbm  # noqa: F401
+        except ImportError:
+            pytest.skip("lightgbm not installed")
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        n, p = 100, 10
+        X = pd.DataFrame(np.random.randn(n, p), columns=[f"f{i}" for i in range(p)])
+        y = np.array([0] * 50 + [1] * 50)
+        # Add signal so GrootCV finds at least one relevant feature
+        X.iloc[:50, 0] += 3.0
+
+        selected_df, names = _select_multimodal_features(
+            X, y, top_percentile=50.0, strategy="grootcv"
         )
         assert len(names) > 0
         assert len(names) <= p

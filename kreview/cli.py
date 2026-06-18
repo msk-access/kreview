@@ -503,9 +503,22 @@ def _render_quarto_report(
     shap_features: int = 10,
     multimodal: bool = False,
 ) -> tuple[bool, str]:
-    """Render a Quarto HTML dashboard for a single feature matrix."""
-    import subprocess
+    """Render a Quarto HTML dashboard for a single feature matrix.
+
+    Quarto 1.9+ creates a ``.quarto/`` project directory next to the QMD
+    source file.  When running inside a read-only Singularity container the
+    installed package ``templates/`` directory is not writable, causing every
+    render to fail with ``EROFS (error 30)``.  To work around this we copy
+    all template assets into a writable *staging* directory under
+    ``report_dir`` before invoking ``quarto render``.
+    """
     import os
+    import shutil
+    import subprocess
+
+    import structlog
+
+    _log = structlog.get_logger()
 
     pkg_dir = Path(__file__).resolve().parent
     template_dir = pkg_dir / "templates"
@@ -515,6 +528,11 @@ def _render_quarto_report(
     template_file = template_dir / template_name
 
     if not template_file.exists():
+        _log.error(
+            "quarto_template_missing",
+            template=str(template_file),
+            multimodal=multimodal,
+        )
         return False, f"Template not found at {template_file}"
 
     env = os.environ.copy()
@@ -523,6 +541,23 @@ def _render_quarto_report(
     quarto_bin = _find_quarto()
     out_html = Path(report_dir) / f"{feat_name}_dashboard.html"
     log_file = Path(report_dir) / f"{feat_name}_render.log"
+
+    # ── Stage templates to a writable directory ──
+    # Quarto 1.9+ creates a .quarto/ project directory next to the QMD file.
+    # Inside read-only Singularity containers the package templates/ dir is
+    # not writable.  Copy all template assets to a writable staging directory
+    # so Quarto can create its project metadata without EROFS errors.
+    staging_dir = Path(report_dir) / f".render_{feat_name}"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    for item in template_dir.iterdir():
+        dest = staging_dir / item.name
+        if item.is_file():
+            shutil.copy2(item, dest)
+        elif item.is_dir() and item.name != ".quarto":
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(item, dest)
+
     cmd = [
         quarto_bin,
         "render",
@@ -553,14 +588,16 @@ def _render_quarto_report(
             text=True,
             check=True,
             timeout=600,
-            cwd=str(template_dir),
+            cwd=str(staging_dir),  # writable staging dir, not read-only template_dir
         )
+        shutil.rmtree(staging_dir, ignore_errors=True)
         return True, str(out_html)
     except subprocess.CalledProcessError as exc:
-        # Write full output to disk for debugging — truncated console output hides errors
+        # Write full output to disk for debugging
         with open(log_file, "w") as f:
             f.write(f"=== QUARTO RENDER DEBUG LOG: {feat_name} ===\n")
             f.write(f"CMD: {' '.join(cmd)}\n")
+            f.write(f"CWD: {staging_dir}\n")
             f.write(f"EXIT CODE: {exc.returncode}\n\n")
             f.write("=== STDOUT ===\n")
             f.write(exc.stdout or "(empty)")
@@ -586,8 +623,17 @@ def _render_quarto_report(
                     ]
                 ):
                     err_summary += f"  >> {line_s}\n"
+        _log.error(
+            "quarto_render_failed",
+            evaluator=feat_name,
+            exit_code=exc.returncode,
+            log_file=str(log_file),
+        )
+        shutil.rmtree(staging_dir, ignore_errors=True)
         return False, err_summary
     except subprocess.TimeoutExpired:
+        _log.error("quarto_render_timeout", evaluator=feat_name, timeout_s=600)
+        shutil.rmtree(staging_dir, ignore_errors=True)
         return False, "Timeout (>600s)"
 
 
@@ -654,7 +700,8 @@ def run(
     multimodal_selection: str = typer.Option(
         "mi",
         "--multimodal-selection",
-        help="Multimodal selection: mi (default) or boruta_shap",
+        help="Multimodal feature selection: mi (default), boruta_shap, leshy, "
+        "or grootcv. leshy/grootcv require: pip install kreview[arfs]",
     ),
     shap_samples: int = typer.Option(
         500,

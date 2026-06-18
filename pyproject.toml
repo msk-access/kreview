@@ -31,10 +31,14 @@ dependencies = [
     "xgboost>=2.0.0",
     "quarto-cli>=1.6.0",
     "mrmr-selection>=0.2.8",
-    "BorutaShap>=1.0.17"
+    "BorutaShapPlus>=0.1.3"
 ]
 
 [project.optional-dependencies]
+arfs = [
+    "arfs>=2.3.0",
+    "lightgbm>=4.0.0",
+]
 jupyter = [
     "papermill>=2.5.0",
     "jupyter>=1.0.0",

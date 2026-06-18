@@ -13,7 +13,7 @@
 process KREVIEW_REPORT_MULTIMODAL {
     tag "kreview-report-multimodal"
     label 'process_medium'
-    publishDir "${params.outdir}/reports", mode: 'copy'
+    publishDir "${params.outdir}", mode: 'copy'  // output glob includes reports/ prefix
 
     input:
     path(multimodal_json)    // multimodal_results.json from KREVIEW_MULTIMODAL_MERGE
