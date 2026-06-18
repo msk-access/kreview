@@ -3651,6 +3651,65 @@ def _build_stacking_matrix(
     return stacking_features, y
 
 
+# Valid feature selection strategies for multimodal evaluation.
+# Used by _select_multimodal_features() for early input validation.
+_VALID_MULTIMODAL_STRATEGIES = frozenset({"mi", "boruta_shap", "leshy", "grootcv"})
+
+
+def _mi_reduce_confirmed(
+    df: pd.DataFrame,
+    confirmed: list[str],
+    y: np.ndarray,
+    *,
+    top_percentile: float,
+    random_state: int,
+    strategy_name: str,
+    n_original: int,
+) -> list[str]:
+    """Apply MI-based reduction when a feature selector confirms >500 features.
+
+    All-relevant selectors (Boruta-SHAP, Leshy, GrootCV) can confirm hundreds
+    or thousands of features.  When the confirmed set exceeds 500, this helper
+    ranks features by mutual information and keeps only the top
+    ``top_percentile``% to keep downstream model training tractable.
+
+    Args:
+        df: Full feature DataFrame (superset of ``confirmed``).
+        confirmed: Feature names confirmed by the upstream selector.
+        y: Binary target array.
+        top_percentile: Percentage of confirmed features to retain.
+        random_state: Seed for ``mutual_info_classif``.
+        strategy_name: Name of the upstream selector (for logging).
+        n_original: Number of features originally confirmed (for logging).
+
+    Returns:
+        Reduced list of confirmed feature names (unchanged if ≤500).
+    """
+    if len(confirmed) <= 500:
+        return confirmed
+
+    from sklearn.feature_selection import mutual_info_classif
+
+    n_keep = max(1, int(len(confirmed) * (top_percentile / 100.0)))
+    mi_scores = mutual_info_classif(
+        df[confirmed].values, y, random_state=random_state
+    )
+    mi_ranked = sorted(
+        zip(confirmed, mi_scores),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    reduced = [name for name, _ in mi_ranked[:n_keep]]
+    log.info(
+        f"{strategy_name}_mi_reduction",
+        n_confirmed_by_selector=n_original,
+        n_after_mi=len(reduced),
+        top_percentile=top_percentile,
+        top_5=[(n, f"{s:.3f}") for n, s in mi_ranked[:5]],
+    )
+    return reduced
+
+
 def _select_multimodal_features(
     df: pd.DataFrame,
     y: np.ndarray,
@@ -3666,22 +3725,38 @@ def _select_multimodal_features(
         1. Drop columns with > ``max_nan_frac`` NaN
         2. Median-impute remaining NaNs
         3. Drop zero-variance columns
-        4. Rank by Boruta-SHAP (if ``strategy="boruta_shap"``) or
-           mutual information (default/fallback) → keep top percentile.
-           If Boruta-SHAP confirms >500 features, MI reduces within
-           the confirmed set to ``top_percentile``%.
+        4. Rank by the chosen ``strategy`` → keep top percentile.
+           If Boruta-SHAP/Leshy/GrootCV confirms >500 features, MI
+           reduces within the confirmed set to ``top_percentile``%.
 
     Args:
         df: Feature DataFrame (numeric columns only).
         y: Binary label array (same length as ``df``).
         max_nan_frac: Maximum fraction of NaN allowed per column.
         top_percentile: Percentage of features to retain after MI ranking.
-        strategy: ``"mi"`` (default) or ``"boruta_shap"``.
+        strategy: Feature selection method:
+            - ``"mi"`` (default): Mutual information ranking, fastest.
+            - ``"boruta_shap"``: BorutaShapPlus statistical test with SHAP
+              importance and shadow features.
+            - ``"leshy"``: ARFS Leshy, a Boruta evolution with LightGBM/SHAP.
+              Requires ``pip install kreview[arfs]``.
+            - ``"grootcv"``: ARFS GrootCV, cross-validated SHAP importance.
+              Requires ``pip install kreview[arfs]``.
 
     Returns:
         (selected_df, selected_feature_names)
+
+    Raises:
+        ValueError: If ``strategy`` is not one of the valid options.
     """
     from sklearn.feature_selection import mutual_info_classif
+
+    # Validate strategy early — prevents silent fallback on typos
+    if strategy not in _VALID_MULTIMODAL_STRATEGIES:
+        raise ValueError(
+            f"Unknown multimodal selection strategy {strategy!r}. "
+            f"Valid options: {sorted(_VALID_MULTIMODAL_STRATEGIES)}"
+        )
 
     n_initial = len(df.columns)
 
@@ -3718,10 +3793,9 @@ def _select_multimodal_features(
 
     # Step 4: Feature ranking
     if strategy == "boruta_shap" and len(df.columns) > 1:
-        # BorutaShap (Ekeany v1.0.17) internally imports scipy.stats.binom_test
-        # at module level. binom_test was deprecated in scipy 1.7 and removed
-        # in scipy ≥1.12. Patch with the official replacement binomtest(),
-        # wrapping .pvalue to match the old return type (bare float).
+        # BorutaShapPlus (v0.1.3+) inherits from the original BorutaShap.
+        # Patch scipy.stats.binom_test (removed in scipy ≥1.12) so the
+        # internal statistical tests still work.
         import scipy
         import scipy.stats as _ss
 
@@ -3731,7 +3805,12 @@ def _select_multimodal_features(
             )
             log.info("scipy_binom_test_shimmed", scipy_version=scipy.__version__)
 
-        from BorutaShap import BorutaShap
+        # NumPy 2.0 removed np.NaN — shim it for BorutaShapPlus internals
+        if not hasattr(np, "NaN"):
+            np.NaN = np.nan
+            log.info("numpy_nan_shimmed", numpy_version=np.__version__)
+
+        from BorutaShapPlus import BorutaShap
         from xgboost import XGBClassifier
 
         log.info("boruta_shap_start", n_features=len(df.columns))
@@ -3767,25 +3846,13 @@ def _select_multimodal_features(
                 top_5=confirmed[:5],
             )
 
-            # If Boruta confirms >500 features, apply MI reduction
-            if len(confirmed) > 500:
-                n_keep = max(1, int(len(confirmed) * (top_percentile / 100.0)))
-                mi_scores = mutual_info_classif(
-                    df[confirmed].values, y, random_state=random_state
-                )
-                mi_ranked = sorted(
-                    zip(confirmed, mi_scores),
-                    key=lambda x: x[1],
-                    reverse=True,
-                )
-                confirmed = [name for name, _ in mi_ranked[:n_keep]]
-                log.info(
-                    "boruta_shap_mi_reduction",
-                    n_boruta=len(subset.columns),
-                    n_after_mi=len(confirmed),
-                    top_percentile=top_percentile,
-                    top_5=[(n, f"{s:.3f}") for n, s in mi_ranked[:5]],
-                )
+            confirmed = _mi_reduce_confirmed(
+                df, confirmed, y,
+                top_percentile=top_percentile,
+                random_state=random_state,
+                strategy_name="boruta_shap",
+                n_original=len(subset.columns),
+            )
 
             df = df[confirmed]
             return df, confirmed
@@ -3797,7 +3864,116 @@ def _select_multimodal_features(
             )
             # Fall through to MI ranking below
 
-    # Step 5: Mutual information ranking (also fallback for boruta_shap)
+    elif strategy == "leshy" and len(df.columns) > 1:
+        try:
+            from arfs.feature_selection import Leshy
+            from lightgbm import LGBMClassifier
+        except ImportError:
+            log.error(
+                "arfs_import_failed",
+                hint="pip install kreview[arfs]",
+                strategy=strategy,
+            )
+            raise ImportError(
+                "ARFS Leshy requires lightgbm and arfs. "
+                "Install with: pip install kreview[arfs]"
+            )
+
+        log.info("leshy_start", n_features=len(df.columns))
+        model = LGBMClassifier(
+            n_estimators=100,
+            max_depth=5,
+            random_state=random_state,
+            verbose=-1,
+        )
+        selector = Leshy(
+            estimator=model,
+            n_estimators=1000,
+            max_iter=50,
+            random_state=random_state,
+            importance="shap",
+            verbose=0,
+        )
+        selector.fit(df, y)
+        confirmed = list(selector.get_feature_names_out())
+
+        if confirmed:
+            log.info(
+                "leshy_complete",
+                n_confirmed=len(confirmed),
+                top_5=confirmed[:5],
+            )
+
+            confirmed = _mi_reduce_confirmed(
+                df, confirmed, y,
+                top_percentile=top_percentile,
+                random_state=random_state,
+                strategy_name="leshy",
+                n_original=len(selector.get_feature_names_out()),
+            )
+
+            df = df[confirmed]
+            return df, confirmed
+        else:
+            log.warning(
+                "leshy_no_features",
+                fallback="mi_top_percentile",
+                n_features=len(df.columns),
+            )
+            # Fall through to MI ranking below
+
+    elif strategy == "grootcv" and len(df.columns) > 1:
+        try:
+            from arfs.feature_selection import GrootCV
+        except ImportError:
+            log.error(
+                "arfs_import_failed",
+                hint="pip install kreview[arfs]",
+                strategy=strategy,
+            )
+            raise ImportError(
+                "ARFS GrootCV requires lightgbm and arfs. "
+                "Install with: pip install kreview[arfs]"
+            )
+
+        log.info("grootcv_start", n_features=len(df.columns))
+        # GrootCV uses its own internal LightGBM — no external estimator needed
+        selector = GrootCV(
+            objective="binary",
+            cutoff=1,
+            n_folds=5,
+            n_iter=50,
+            silent=True,
+        )
+        selector.fit(df, y)
+        confirmed = list(selector.get_feature_names_out())
+
+        if confirmed:
+            log.info(
+                "grootcv_complete",
+                n_confirmed=len(confirmed),
+                top_5=confirmed[:5],
+            )
+
+            confirmed = _mi_reduce_confirmed(
+                df, confirmed, y,
+                top_percentile=top_percentile,
+                random_state=random_state,
+                strategy_name="grootcv",
+                n_original=len(selector.get_feature_names_out()),
+            )
+
+            df = df[confirmed]
+            return df, confirmed
+        else:
+            log.warning(
+                "grootcv_no_features",
+                fallback="mi_top_percentile",
+                n_features=len(df.columns),
+            )
+            # Fall through to MI ranking below
+
+    # Step 5: Mutual information ranking (also fallback for boruta_shap/leshy/grootcv)
     n_keep = max(1, int(len(df.columns) * (top_percentile / 100.0)))
     if len(df.columns) > n_keep:
         mi_scores = mutual_info_classif(df.values, y, random_state=random_state)
@@ -3848,7 +4024,7 @@ def multimodal_eval(
 
     2. **Raw features** (optional): If ``super_matrix_path`` is provided,
        trains directly on the fused feature matrix with
-       ``multimodal_selection``-based feature selection (MI or Boruta-SHAP).
+       ``multimodal_selection``-based feature selection.
 
     3. **Ablation**: Leave-one-evaluator-out analysis on the stacking
        matrix, showing each evaluator's marginal contribution.
@@ -3864,7 +4040,8 @@ def multimodal_eval(
         n_folds: Cross-validation folds.
         top_percentile: Top N% features for feature selection.
         random_state: Reproducibility seed.
-        multimodal_selection: Feature selection strategy ('mi' or 'boruta_shap').
+        multimodal_selection: Feature selection strategy
+            ('mi', 'boruta_shap', 'leshy', or 'grootcv').
 
     Returns:
         A comprehensive results dict with keys for each strategy.
@@ -4180,7 +4357,7 @@ def multimodal_prep(
         results_dir: Directory with ``*_model_results.json`` files.
         super_matrix_path: Optional path to ``super_matrix.parquet``.
         multimodal_selection: Feature selection strategy for raw features
-            (``"mi"`` or ``"boruta_shap"``).
+            ('mi', 'boruta_shap', 'leshy', or 'grootcv').
         top_percentile: Top N% features to retain after MI ranking.
         random_state: Random seed.
         output_dir: Directory to write output files.

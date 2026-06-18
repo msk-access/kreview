@@ -16,7 +16,7 @@
 process KREVIEW_REPORT {
     tag "kreview-report"
     label 'process_medium'
-    publishDir "${params.outdir}/reports", mode: 'copy'
+    publishDir "${params.outdir}", mode: 'copy'  // output glob includes reports/ prefix
 
     input:
     path(matrix_files)     // Collected from KREVIEW_SELECT_SINGLE outputs

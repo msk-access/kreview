@@ -1105,7 +1105,8 @@ def eval_multimodal(
     multimodal_selection: str = typer.Option(
         "mi",
         "--multimodal-selection",
-        help="Multimodal feature selection: mi (default, fast) or boruta_shap (interaction-aware)",
+        help="Multimodal feature selection: mi (default), boruta_shap, leshy, "
+        "or grootcv. leshy/grootcv require: pip install kreview[arfs]",
     ),
     cv_folds: int = typer.Option(5, "--cv-folds", help="Cross-validation folds"),
     device: str = typer.Option("cuda", "--device", help="PyTorch device: cuda, cpu"),
@@ -1297,7 +1298,8 @@ def eval_multimodal_prep(
     multimodal_selection: str = typer.Option(
         "mi",
         "--multimodal-selection",
-        help="Feature selection for raw features: mi (default) or boruta_shap",
+        help="Feature selection for raw features: mi (default), boruta_shap, "
+        "leshy, or grootcv. leshy/grootcv require: pip install kreview[arfs]",
     ),
     top_percentile: float = typer.Option(
         10.0,
