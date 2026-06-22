@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.25] - 2026-06-22
+
+### Fixed
+- **Container Dependencies**: Moved `papermill>=2.5.0` from `[jupyter]` optional extra to core dependencies. Quarto's `--execute-params` (`-P`) flag requires papermill at runtime, and the CPU Docker container did not include it — causing all 26 evaluator reports to fail on HPC with `"The papermill package is required for processing --execute-params"`.
+- **BorutaShapPlus Container Availability**: Ensured `BorutaShapPlus>=0.1.3` (already in core deps since v0.0.24) is present in rebuilt containers. The v0.0.24 container was built from a stale state, causing multimodal prep to fail with `"No module named 'BorutaShapPlus'"` and cascading failure of the entire multimodal pipeline chain.
+
 ## [0.0.24] - 2026-06-18
 
 ### Added
