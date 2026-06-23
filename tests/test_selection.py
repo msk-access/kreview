@@ -392,12 +392,13 @@ class TestMultimodalFeatureSelection:
         try:
             from kreview.eval_engine import _select_multimodal_features
         except ImportError:
-            pytest.skip("BorutaShapPlus not importable (scipy compatibility)")
-        # BorutaShapPlus may fail to import due to scipy.stats.binom_test removal
+            pytest.skip("BorutaShap not importable (scipy compatibility)")
+        # BorutaShapPlus pip package provides the BorutaShap module.
+        # It may fail to import due to scipy.stats.binom_test removal.
         try:
-            import BorutaShapPlus  # noqa: F401
+            import BorutaShap  # noqa: F401  (pip: BorutaShapPlus>=0.1.3)
         except ImportError:
-            pytest.skip("BorutaShapPlus not installed or scipy incompatible")
+            pytest.skip("BorutaShap not installed (pip install BorutaShapPlus)")
         np.random.seed(42)
         n, p = 100, 10
         X = pd.DataFrame(np.random.randn(n, p), columns=[f"f{i}" for i in range(p)])
