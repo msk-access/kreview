@@ -3791,7 +3791,10 @@ def _select_multimodal_features(
 
     # Step 4: Feature ranking
     if strategy == "boruta_shap" and len(df.columns) > 1:
-        # BorutaShapPlus (v0.1.3+) inherits from the original BorutaShap.
+        # BorutaShapPlus pip package (v0.1.3+) is a drop-in fork of BorutaShap.
+        # It installs as pip package "BorutaShapPlus" but the importable module
+        # is "BorutaShap" (preserving backward-compatible import paths).
+        #
         # Patch scipy.stats.binom_test (removed in scipy ≥1.12) so the
         # internal statistical tests still work.
         import scipy
@@ -3803,12 +3806,12 @@ def _select_multimodal_features(
             )
             log.info("scipy_binom_test_shimmed", scipy_version=scipy.__version__)
 
-        # NumPy 2.0 removed np.NaN — shim it for BorutaShapPlus internals
+        # NumPy 2.0 removed np.NaN — shim it for BorutaShap internals
         if not hasattr(np, "NaN"):
             np.NaN = np.nan
             log.info("numpy_nan_shimmed", numpy_version=np.__version__)
 
-        from BorutaShapPlus import BorutaShap
+        from BorutaShap import BorutaShap  # pip: BorutaShapPlus>=0.1.3
         from xgboost import XGBClassifier
 
         log.info("boruta_shap_start", n_features=len(df.columns))
