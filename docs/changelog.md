@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.26] - 2026-06-23
+
+### Fixed
+- **BorutaShap Import**: The pip package `BorutaShapPlus` provides an importable module named `BorutaShap`, not `BorutaShapPlus`. Corrected `from BorutaShapPlus import BorutaShap` → `from BorutaShap import BorutaShap` in `eval_engine.py`. This was the root cause of multimodal pipeline failures in v0.0.24 and v0.0.25 — previously misdiagnosed as a container build issue.
+- **Test Skip Guard**: Fixed `test_boruta_shap_passes_through` which used `import BorutaShapPlus` as its skip guard. Since the module name is `BorutaShap`, the test was always being silently skipped even when the package was correctly installed.
+- **Report Memory (OOM)**: Bumped `KREVIEW_REPORT` and `KREVIEW_REPORT_MULTIMODAL` memory from 32 GB → 64 GB base (128 GB on retry). In v0.0.25, 8/26 reports OOM'd at SHAP summary plot computation (cell 31/53) and 3/26 OOM'd at pandoc `--embed-resources` HTML self-containment. Evaluators with 270+ features at `--shap-samples 5000` require more memory than the 32 GB allocation.
+
 ## [0.0.25] - 2026-06-22
 
 ### Fixed
