@@ -120,9 +120,8 @@ process KREVIEW_MULTIMODAL_SINGLE_GPU {
 
     # Always produce output JSON — even on total failure.
     if [ ! -f single_out/stacking_${model_name}_results.json ]; then
-        echo "WARNING: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT), emitting error JSON" >\&2
-        echo '{"model": "${model_name}", "error": "gpu_eval_failed", "exit_code": '\$GPU_EXIT'}' \\
-            > "single_out/stacking_${model_name}_results.json"
+        echo "WARNING: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT), emitting error JSON" >&2
+        echo '{"model": "${model_name}", "error": "gpu_eval_failed", "exit_code": '\$GPU_EXIT'}' > "single_out/stacking_${model_name}_results.json"
     fi
 
     echo "=== KREVIEW_MULTIMODAL_SINGLE_GPU: ${model_name} DONE ==="
