@@ -37,8 +37,10 @@ process KREVIEW_MULTIMODAL_SINGLE_CPU {
     set -euo pipefail
     mkdir -p single_out
 
-    # Extract best_single_auc from prep_metadata for delta computation
-    BEST_AUC=\$(python3 -c "import json; m=json.load(open('${prep_metadata}')); print(m.get('best_single_auc', 0.0))")
+    # Extract best_single_auc from prep_metadata for delta computation.
+    # Use grep instead of python3 — Singularity env strips container PATH,
+    # so bare 'python3' may not be found (see v0.0.26 exit 127 bug).
+    BEST_AUC=\$(grep -o '"best_single_auc": *[0-9.]*' ${prep_metadata} | grep -o '[0-9.]*\$' || echo "0.0")
 
     PYTHONUNBUFFERED=1 kreview eval multimodal single \\
         --stacking-matrix ${stacking_matrix} \\
@@ -88,9 +90,19 @@ process KREVIEW_MULTIMODAL_SINGLE_GPU {
     export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
     ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set"}
 
-    # Extract best_single_auc from prep_metadata for delta computation
-    BEST_AUC=\$(python3 -c "import json; m=json.load(open('${prep_metadata}')); print(m.get('best_single_auc', 0.0))")
+    # Debug: verify environment is functional
+    echo "=== KREVIEW_MULTIMODAL_SINGLE_GPU: ${model_name} ==="
+    echo "Working dir: \$(pwd)"
+    echo "kreview path: \$(which kreview 2>/dev/null || echo 'NOT FOUND')"
+    ls -la ${stacking_matrix} ${prep_metadata} 2>/dev/null || echo "WARNING: input files missing"
 
+    # Extract best_single_auc from prep_metadata for delta computation.
+    # Use grep instead of python3 — Singularity env strips container PATH,
+    # so bare 'python3' is not found in the GPU container (v0.0.26 exit 127 bug).
+    BEST_AUC=\$(grep -o '"best_single_auc": *[0-9.]*' ${prep_metadata} | grep -o '[0-9.]*\$' || echo "0.0")
+
+    # Run GPU eval — capture exit code instead of failing on error
+    set +e
     PYTHONUNBUFFERED=1 kreview eval multimodal single \\
         --stacking-matrix ${stacking_matrix} \\
         --model ${model_name} \\
@@ -103,5 +115,16 @@ process KREVIEW_MULTIMODAL_SINGLE_GPU {
         --seed ${params.seed ?: 42} \\
         ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output single_out
+    GPU_EXIT=\$?
+    set -e
+
+    # Always produce output JSON — even on total failure.
+    if [ ! -f single_out/stacking_${model_name}_results.json ]; then
+        echo "WARNING: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT), emitting error JSON" >\&2
+        echo '{"model": "${model_name}", "error": "gpu_eval_failed", "exit_code": '\$GPU_EXIT'}' \\
+            > "single_out/stacking_${model_name}_results.json"
+    fi
+
+    echo "=== KREVIEW_MULTIMODAL_SINGLE_GPU: ${model_name} DONE ==="
     """
 }
