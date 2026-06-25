@@ -3514,16 +3514,30 @@ def _load_per_evaluator_baselines(
             n_skipped += 1
             continue
 
+        # Compute best model/AUC from the per-model AUC dict.
+        # The JSON files do NOT contain aggregate "best_auc"/"best_model" keys;
+        # they only have individual "auc_lr", "auc_rf", "auc_xgb", etc.
+        eval_best_model = max(aucs, key=aucs.get) if aucs else None
+        eval_best_auc = max(aucs.values()) if aucs else None
+
         baselines[eval_name] = {
             "models": model_names,
             "oof_probs": oof_probs,
             "oof_labels": oof_labels,
             "oof_sample_ids": oof_sample_ids,
             "aucs": aucs,
-            "best_model": data.get("best_model"),
-            "best_auc": data.get("best_auc"),
+            "best_model": eval_best_model,
+            "best_auc": eval_best_auc,
         }
         n_loaded += 1
+
+        log.info(
+            "evaluator_baseline_loaded",
+            evaluator=eval_name,
+            n_models=len(model_names),
+            best_model=eval_best_model,
+            best_auc=eval_best_auc,
+        )
 
     log.info(
         "multimodal_baselines_loaded",
@@ -3545,7 +3559,7 @@ def _build_stacking_matrix(
     baselines: dict,
     *,
     model_filter: str | None = None,
-) -> tuple[pd.DataFrame, np.ndarray]:
+) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
     """Build a meta-feature matrix from OOF predictions across evaluators.
 
     Each column is ``{evaluator}_{model}`` containing that model's OOF
@@ -3558,9 +3572,10 @@ def _build_stacking_matrix(
             (e.g. ``"rf"``).  None means include all available models.
 
     Returns:
-        (stacking_df, y) where ``stacking_df`` has columns like
-        ``FSCOnTarget_rf``, ``MdsOnTarget_lr``, etc., and ``y`` is the
-        aligned binary label array.
+        (stacking_df, y, sample_ids) where ``stacking_df`` has columns like
+        ``FSCOnTarget_rf``, ``MdsOnTarget_lr``, etc.; ``y`` is the
+        aligned binary label array; and ``sample_ids`` is the list of
+        sample IDs corresponding to each row (needed for dashboard joins).
 
     Raises:
         ValueError: If no stacking columns can be built (e.g. no
@@ -3648,7 +3663,7 @@ def _build_stacking_matrix(
         sample_ids_head=sample_ids[:3],
     )
 
-    return stacking_features, y
+    return stacking_features, y, sample_ids
 
 
 # Valid feature selection strategies for multimodal evaluation.
@@ -4055,12 +4070,15 @@ def multimodal_eval(
     """
     from kreview.core import LABEL_META_COLS
 
-    # GPU kwargs for _build_model dispatch
+    # GPU-specific kwargs for _build_model dispatch.
+    # NOTE: random_state is NOT included here — it is already passed as a
+    # positional argument to _build_model(model_name, random_state, **kwargs).
+    # Including it in gpu_kwargs would cause:
+    #   TypeError: got multiple values for argument 'random_state'
     gpu_kwargs = dict(
         device=device,
         finetune_epochs=finetune_epochs,
         finetune_lr=finetune_lr,
-        random_state=random_state,
     )
     # Merge CPU + GPU model lists for unified iteration
     all_models = list(models) + list(gpu_models)
@@ -4094,7 +4112,7 @@ def multimodal_eval(
     # ── Strategy 1: Stacking ──
     log.info("multimodal_stacking_start")
     try:
-        stacking_df, y_stack = _build_stacking_matrix(baselines)
+        stacking_df, y_stack, _sample_ids = _build_stacking_matrix(baselines)
 
         # Impute NaNs from outer-join mismatches
         n_nans = int(stacking_df.isna().sum().sum())
@@ -4407,7 +4425,7 @@ def multimodal_prep(
     )
 
     # ── Build stacking matrix ──
-    stacking_df, y_stack = _build_stacking_matrix(baselines)
+    stacking_df, y_stack, sample_ids_stack = _build_stacking_matrix(baselines)
 
     # Impute NaNs from outer-join mismatches
     n_nans = int(stacking_df.isna().sum().sum())
@@ -4421,9 +4439,13 @@ def multimodal_prep(
             "no evaluators have OOF probabilities"
         )
 
-    # Save stacking matrix (features + labels)
+    # Save stacking matrix (features + labels + sample IDs).
+    # _sample_id enables joining predictions back to labels.parquet for
+    # per-label-tier (Healthy Normal vs ctDNA−) and per-cancer-type analysis
+    # in the kreview dashboard.
     stacking_out = stacking_df.copy()
     stacking_out["_label"] = y_stack
+    stacking_out["_sample_id"] = sample_ids_stack
     stacking_path = output_dir / "stacking_matrix.parquet"
     stacking_out.to_parquet(stacking_path, index=False)
     log.info(
@@ -4476,6 +4498,14 @@ def multimodal_prep(
 
         raw_out = X_selected.copy()
         raw_out["_label"] = y_raw
+        # Carry SAMPLE_ID for dashboard joins (same convention as stacking matrix)
+        if "SAMPLE_ID" in super_df.columns:
+            raw_out["_sample_id"] = super_df["SAMPLE_ID"].values
+        else:
+            log.warning(
+                "raw_features_missing_sample_id",
+                hint="super_matrix has no SAMPLE_ID — dashboard joins won't work",
+            )
         raw_path = output_dir / "raw_features_matrix.parquet"
         raw_out.to_parquet(raw_path, index=False)
         raw_shape = X_selected.shape
@@ -4485,6 +4515,7 @@ def multimodal_prep(
             shape=raw_shape,
             selection=multimodal_selection,
             n_selected=len(selected_names),
+            has_sample_id="SAMPLE_ID" in super_df.columns,
         )
 
     # ── Build metadata ──
@@ -4564,18 +4595,22 @@ def multimodal_single(
         stacking_path=str(stacking_matrix_path),
     )
 
-    # Load stacking matrix
+    # Load stacking matrix.
+    # Drop metadata columns (_label, _sample_id) to get pure feature columns.
     stacking_full = pd.read_parquet(stacking_matrix_path)
     y_stack = stacking_full["_label"].values.astype(int)
-    stacking_df = stacking_full.drop(columns=["_label"])
+    meta_cols = ["_label", "_sample_id"]
+    drop_cols = [c for c in meta_cols if c in stacking_full.columns]
+    stacking_df = stacking_full.drop(columns=drop_cols)
 
-    # Build GPU kwargs
+    # GPU-specific kwargs for _build_model dispatch.
+    # NOTE: random_state is NOT included — already passed positionally to
+    # _build_model(model_name, random_state, **kwargs).
     is_gpu = model_name in _GPU_MODEL_NAMES
     gpu_kwargs = dict(
         device=device,
         finetune_epochs=finetune_epochs,
         finetune_lr=finetune_lr,
-        random_state=random_state,
     )
 
     # Build model
@@ -4623,7 +4658,10 @@ def multimodal_single(
         if raw_features_path.exists():
             raw_full = pd.read_parquet(raw_features_path)
             y_raw = raw_full["_label"].values.astype(int)
-            X_raw = raw_full.drop(columns=["_label"])
+            # Drop metadata columns before training
+            raw_meta = ["_label", "_sample_id"]
+            raw_drop = [c for c in raw_meta if c in raw_full.columns]
+            X_raw = raw_full.drop(columns=raw_drop)
 
             model_raw = _build_model(
                 model_name, random_state, **(gpu_kwargs if is_gpu else {})

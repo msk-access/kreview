@@ -101,5 +101,16 @@ RUN WHL="$(ls /app/*.whl)" && \
 # Ensure output directories exist
 RUN mkdir -p /app/data /app/results
 
+# Ensure python3 is discoverable on /usr/local/bin (same dir as pip scripts).
+# Singularity's `env - PATH="$PATH"` uses the host PATH which includes
+# /usr/local/bin but NOT /usr/bin (where deadsnakes installs python3.12).
+# Without this, `python3` is not found in GPU container on HPC.
+RUN ln -sf /usr/bin/python3.12 /usr/local/bin/python3 && \
+    ln -sf /usr/bin/python3.12 /usr/local/bin/python
+
+# Smoke test — verify kreview and python3 are both on PATH
+RUN which kreview && kreview --version && \
+    which python3 && python3 --version
+
 ENTRYPOINT ["kreview"]
 CMD ["--help"]
