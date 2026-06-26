@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.27] - 2026-06-25
+
+### Fixed
+- **GPU Stacking random_state Duplicate**: Resolved a `TypeError: got multiple values for argument 'random_state'` occurring during fine-tuning of TabPFN and TabICL GPU multimodal models in `multimodal_eval()` and `multimodal_single()`. This was caused by `random_state` being passed as both a positional argument and duplicated via unpacked `gpu_kwargs`.
+- **Baseline Best Metric Recovery**: Fixed a bug in `_load_per_evaluator_baselines()` where `best_model` and `best_auc` keys were resolved as `None` from the source model JSONs. They are now dynamically computed from the model's actual OOF AUC values.
+- **Nextflow GPU Singularity Path**: Added symlinks for `python3` and `python` to `/usr/local/bin` inside the Dockerfile, and replaced container python sub-processes with native `grep` extraction in `multimodal_single.nf`'s script blocks. This prevents `python3` command not found (exit code 127) errors triggered by Singularity path-stripping behavior on HPC nodes.
+- **GPU Pipeline Deadlock Avoidance**: Configured `KREVIEW_MULTIMODAL_SINGLE_GPU` to catch non-zero exit codes during evaluation failures and output an error metadata JSON instead of terminating the pipeline immediately. This prevents Nextflow's `.collect()` channel from deadlocking when a GPU node experiences a runtime error.
+- **Resource Limits Hardening**: Bumped `KREVIEW_ABLATE_CPU_SINGLE` memory allocation from 32 GB to 64 GB to prevent OOM errors on large transcription factor annotation matrices, and bumped `KREVIEW_EXTRACT` walltime to 1.5h.
+
+### Added
+- **Dashboard Readiness Column**: Appended the unique `_sample_id` column to both the multimodal `stacking_matrix.parquet` and `raw_features_matrix.parquet`. This enables joining multimodal predictions back to `labels.parquet` for per-label-tier (e.g. Healthy Normal) and per-cancer-type performance comparisons in the kreview dashboard.
+
 ## [0.0.26] - 2026-06-23
 
 ### Fixed
