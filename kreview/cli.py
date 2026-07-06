@@ -1687,6 +1687,8 @@ def report(
         total=total,
         failed_evaluators=failed_names,
     )
+    if failed > 0:
+        raise typer.Exit(code=1)
 
 
 # %% ../nbs/90_cli.ipynb #extract_cmd
