@@ -4172,6 +4172,7 @@ def multimodal_eval(
                     f"stacking_{model_name}",
                     feature_names=list(stacking_df.columns),
                     random_state=random_state,
+                    sample_labels=_sample_labels,
                 )
                 stacking_results.update(res)
 
@@ -4247,6 +4248,11 @@ def multimodal_eval(
                 random_state=random_state,
             )
 
+            # Extract 4-tier text labels for healthy-normal specificity (v0.0.28+)
+            raw_sample_labels = (
+                super_df["label"].values if "label" in super_df.columns else None
+            )
+
             raw_results = {}
             for model_name in all_models:
                 try:
@@ -4269,6 +4275,7 @@ def multimodal_eval(
                         f"raw_{model_name}",
                         feature_names=selected_names,
                         random_state=random_state,
+                        sample_labels=raw_sample_labels,
                     )
                     raw_results.update(res)
 

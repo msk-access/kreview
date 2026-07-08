@@ -1347,7 +1347,7 @@ def run(
             model_res["evaluator"] = e.name
             model_res["top_features"] = top_feats
             model_res["selection_qc"] = selection_qc
-            # Add sample IDs for multimodal alignment.
+            # Add sample IDs and 4-tier labels for multimodal alignment.
             # CRITICAL: must use train-split only — oof_probs from
             # cross_val_predict covers train rows only, not the full DF.
             train_id_df = model_df.loc[train_mask] if has_split else model_df
@@ -1359,6 +1359,15 @@ def run(
                     evaluator=e.name,
                     n_ids=len(model_res["oof_sample_ids"]),
                     source="train_split" if has_split else "full_df",
+                )
+            # Save 4-tier labels aligned to oof_probs for healthy-normal
+            # specificity in multimodal stacking (v0.0.28+)
+            if train_labels is not None:
+                model_res["oof_sample_labels"] = train_labels.tolist()
+                log.info(
+                    "oof_sample_labels_set",
+                    evaluator=e.name,
+                    n_labels=len(model_res["oof_sample_labels"]),
                 )
             all_aucs = {
                 k: v
