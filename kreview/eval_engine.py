@@ -3671,9 +3671,7 @@ def _build_stacking_matrix(
 
     # Internal columns to exclude from the feature matrix
     _internal = {"_sample_id", "_oof_labels", "_oof_sample_labels"}
-    feature_cols = [
-        c for c in stacking.columns if c not in _internal
-    ]
+    feature_cols = [c for c in stacking.columns if c not in _internal]
     stacking_features = stacking[feature_cols].copy()
 
     n_nans = stacking_features.isna().sum().sum()
@@ -4136,7 +4134,9 @@ def multimodal_eval(
     # ── Strategy 1: Stacking ──
     log.info("multimodal_stacking_start")
     try:
-        stacking_df, y_stack, _sample_ids, _sample_labels = _build_stacking_matrix(baselines)
+        stacking_df, y_stack, _sample_ids, _sample_labels = _build_stacking_matrix(
+            baselines
+        )
 
         # Impute NaNs from outer-join mismatches
         n_nans = int(stacking_df.isna().sum().sum())
@@ -4456,7 +4456,9 @@ def multimodal_prep(
     )
 
     # ── Build stacking matrix ──
-    stacking_df, y_stack, sample_ids_stack, sample_labels_stack = _build_stacking_matrix(baselines)
+    stacking_df, y_stack, sample_ids_stack, sample_labels_stack = (
+        _build_stacking_matrix(baselines)
+    )
 
     # Impute NaNs from outer-join mismatches
     n_nans = int(stacking_df.isna().sum().sum())
