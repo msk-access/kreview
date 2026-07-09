@@ -131,6 +131,10 @@ else:
     eval_df = None
     top_col = numeric_cols[0] if numeric_cols else None
 
+# Fall back if selected top feature was dropped during selection/matrix fusion
+if top_col is not None and top_col not in df.columns:
+    top_col = numeric_cols[0] if numeric_cols else None
+
 # ── Load model results (CPU + GPU merge) ──
 from kreview.eval_engine import load_model_results
 _shap_display_n = int(shap_features)

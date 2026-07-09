@@ -38,8 +38,9 @@ process KREVIEW_REPORT {
     # Set custom writable cache/data paths for Quarto on HPC/Read-only filesystems
     export XDG_CACHE_HOME="\$PWD/.quarto_cache"
     export XDG_DATA_HOME="\$PWD/.quarto_data"
+    export IPYTHONDIR="\$PWD/.ipython"
 
-    mkdir -p matrices reports
+    mkdir -p matrices reports .ipython
 
     # Stage ALL files into one flat directory (report expects co-located files)
     for f in ${matrix_files}; do cp "\${f}" matrices/; done

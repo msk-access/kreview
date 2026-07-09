@@ -650,7 +650,7 @@ def eval_cpu(
                 results["holdout_n_train"] = int(train_mask.sum())
                 results["holdout_n_test"] = int(test_mask.sum())
 
-            # Add sample IDs for multimodal alignment.
+            # Add sample IDs and 4-tier labels for multimodal alignment.
             # CRITICAL: must use train-split only — oof_probs from
             # cross_val_predict covers train rows only, not the full DF.
             train_id_df = model_df.loc[train_mask] if has_split else model_df
@@ -662,6 +662,15 @@ def eval_cpu(
                     evaluator=evaluator,
                     n_ids=len(results["oof_sample_ids"]),
                     source="train_split" if has_split else "full_df",
+                )
+            # Save 4-tier labels aligned to oof_probs for healthy-normal
+            # specificity in multimodal stacking (v0.0.28+)
+            if train_labels is not None:
+                results["oof_sample_labels"] = train_labels.tolist()
+                log.info(
+                    "oof_sample_labels_set",
+                    evaluator=evaluator,
+                    n_labels=len(results["oof_sample_labels"]),
                 )
 
             _save_results(
@@ -980,7 +989,7 @@ def eval_gpu(
                 results["holdout_n_train"] = n_train
                 results["holdout_n_test"] = n_test
 
-            # Add sample IDs for multimodal alignment.
+            # Add sample IDs and 4-tier labels for multimodal alignment.
             # CRITICAL: must use train-split only — oof_probs from
             # cross_val_predict covers train rows only, not the full DF.
             train_id_df = model_df.loc[train_mask] if has_split else model_df
@@ -992,6 +1001,15 @@ def eval_gpu(
                     evaluator=evaluator,
                     n_ids=len(results["oof_sample_ids"]),
                     source="train_split" if has_split else "full_df",
+                )
+            # Save 4-tier labels aligned to oof_probs for healthy-normal
+            # specificity in multimodal stacking (v0.0.28+)
+            if train_labels is not None:
+                results["oof_sample_labels"] = train_labels.tolist()
+                log.info(
+                    "oof_sample_labels_set",
+                    evaluator=evaluator,
+                    n_labels=len(results["oof_sample_labels"]),
                 )
 
             # Merge with existing results if resuming

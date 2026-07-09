@@ -3299,14 +3299,15 @@ def load_model_results(
 
     # Metadata keys that should come from CPU (canonical source).
     # GPU JSONs from different models may have different feature counts
-    # (due to feature capping), so oof_sample_ids and oof_labels from
-    # GPU are skipped to avoid length mismatches.
+    # (due to feature capping), so oof_sample_ids, oof_labels, and
+    # oof_sample_labels from GPU are skipped to avoid length mismatches.
     _skip = {
         "evaluator",
         "matrix_path",
         "cv_folds_actual",
         "oof_sample_ids",
         "oof_labels",
+        "oof_sample_labels",
     }
 
     merged = None
@@ -3505,14 +3506,22 @@ def _load_per_evaluator_baselines(
             n_skipped += 1
             continue
 
-        # Extract labels and sample IDs
+        # Extract labels, sample IDs, and 4-tier sample labels
         oof_labels = data.get("oof_labels")
         oof_sample_ids = data.get("oof_sample_ids")
+        oof_sample_labels = data.get("oof_sample_labels")
 
         if oof_labels is None:
             log.warning("multimodal_missing_oof_labels", evaluator=eval_name)
             n_skipped += 1
             continue
+
+        if oof_sample_labels is None:
+            log.debug(
+                "multimodal_missing_oof_sample_labels",
+                evaluator=eval_name,
+                hint="Pre-v0.0.28 JSON; healthy-normal specificity unavailable",
+            )
 
         # Compute best model/AUC from the per-model AUC dict.
         # The JSON files do NOT contain aggregate "best_auc"/"best_model" keys;
@@ -3525,6 +3534,7 @@ def _load_per_evaluator_baselines(
             "oof_probs": oof_probs,
             "oof_labels": oof_labels,
             "oof_sample_ids": oof_sample_ids,
+            "oof_sample_labels": oof_sample_labels,
             "aucs": aucs,
             "best_model": eval_best_model,
             "best_auc": eval_best_auc,
@@ -3559,7 +3569,7 @@ def _build_stacking_matrix(
     baselines: dict,
     *,
     model_filter: str | None = None,
-) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
+) -> tuple[pd.DataFrame, np.ndarray, list[str], list[str] | None]:
     """Build a meta-feature matrix from OOF predictions across evaluators.
 
     Each column is ``{evaluator}_{model}`` containing that model's OOF
@@ -3572,10 +3582,11 @@ def _build_stacking_matrix(
             (e.g. ``"rf"``).  None means include all available models.
 
     Returns:
-        (stacking_df, y, sample_ids) where ``stacking_df`` has columns like
-        ``FSCOnTarget_rf``, ``MdsOnTarget_lr``, etc.; ``y`` is the
-        aligned binary label array; and ``sample_ids`` is the list of
-        sample IDs corresponding to each row (needed for dashboard joins).
+        (stacking_df, y, sample_ids, sample_labels) where ``stacking_df``
+        has columns like ``FSCOnTarget_rf``, ``MdsOnTarget_lr``, etc.;
+        ``y`` is the aligned binary label array; ``sample_ids`` is the
+        list of sample IDs; and ``sample_labels`` is the aligned list of
+        4-tier text labels (or None if pre-v0.0.28 JSONs).
 
     Raises:
         ValueError: If no stacking columns can be built (e.g. no
@@ -3617,8 +3628,10 @@ def _build_stacking_matrix(
                     n_ids=len(sample_ids),
                 )
 
-        # Also carry the labels for this evaluator
+        # Also carry the binary labels and 4-tier text labels
         eval_data["_oof_labels"] = info["oof_labels"]
+        if info.get("oof_sample_labels") is not None:
+            eval_data["_oof_sample_labels"] = info["oof_sample_labels"]
 
         if (
             len(eval_data) > 2
@@ -3646,10 +3659,19 @@ def _build_stacking_matrix(
     y = stacking["_oof_labels"].values.astype(int)
     sample_ids = stacking["_sample_id"].tolist()
 
-    # Drop internal columns
-    feature_cols = [
-        c for c in stacking.columns if c not in ("_sample_id", "_oof_labels")
-    ]
+    # Extract aligned 4-tier sample labels (may be None for pre-v0.0.28 runs)
+    sample_labels: list[str] | None = None
+    if "_oof_sample_labels" in stacking.columns:
+        sample_labels = stacking["_oof_sample_labels"].tolist()
+        log.info(
+            "stacking_sample_labels_aligned",
+            n_labels=len(sample_labels),
+            n_healthy=sum(1 for lbl in sample_labels if lbl == "Healthy Normal"),
+        )
+
+    # Internal columns to exclude from the feature matrix
+    _internal = {"_sample_id", "_oof_labels", "_oof_sample_labels"}
+    feature_cols = [c for c in stacking.columns if c not in _internal]
     stacking_features = stacking[feature_cols].copy()
 
     n_nans = stacking_features.isna().sum().sum()
@@ -3663,7 +3685,7 @@ def _build_stacking_matrix(
         sample_ids_head=sample_ids[:3],
     )
 
-    return stacking_features, y, sample_ids
+    return stacking_features, y, sample_ids, sample_labels
 
 
 # Valid feature selection strategies for multimodal evaluation.
@@ -4112,7 +4134,9 @@ def multimodal_eval(
     # ── Strategy 1: Stacking ──
     log.info("multimodal_stacking_start")
     try:
-        stacking_df, y_stack, _sample_ids = _build_stacking_matrix(baselines)
+        stacking_df, y_stack, _sample_ids, _sample_labels = _build_stacking_matrix(
+            baselines
+        )
 
         # Impute NaNs from outer-join mismatches
         n_nans = int(stacking_df.isna().sum().sum())
@@ -4148,6 +4172,7 @@ def multimodal_eval(
                     f"stacking_{model_name}",
                     feature_names=list(stacking_df.columns),
                     random_state=random_state,
+                    sample_labels=_sample_labels,
                 )
                 stacking_results.update(res)
 
@@ -4223,6 +4248,11 @@ def multimodal_eval(
                 random_state=random_state,
             )
 
+            # Extract 4-tier text labels for healthy-normal specificity (v0.0.28+)
+            raw_sample_labels = (
+                super_df["label"].values if "label" in super_df.columns else None
+            )
+
             raw_results = {}
             for model_name in all_models:
                 try:
@@ -4245,6 +4275,7 @@ def multimodal_eval(
                         f"raw_{model_name}",
                         feature_names=selected_names,
                         random_state=random_state,
+                        sample_labels=raw_sample_labels,
                     )
                     raw_results.update(res)
 
@@ -4425,7 +4456,9 @@ def multimodal_prep(
     )
 
     # ── Build stacking matrix ──
-    stacking_df, y_stack, sample_ids_stack = _build_stacking_matrix(baselines)
+    stacking_df, y_stack, sample_ids_stack, sample_labels_stack = (
+        _build_stacking_matrix(baselines)
+    )
 
     # Impute NaNs from outer-join mismatches
     n_nans = int(stacking_df.isna().sum().sum())
@@ -4439,13 +4472,17 @@ def multimodal_prep(
             "no evaluators have OOF probabilities"
         )
 
-    # Save stacking matrix (features + labels + sample IDs).
+    # Save stacking matrix (features + labels + sample IDs + 4-tier labels).
     # _sample_id enables joining predictions back to labels.parquet for
     # per-label-tier (Healthy Normal vs ctDNA−) and per-cancer-type analysis
     # in the kreview dashboard.
+    # _sample_label carries the 4-tier text label for direct healthy-normal
+    # specificity computation in multimodal_single (v0.0.28+).
     stacking_out = stacking_df.copy()
     stacking_out["_label"] = y_stack
     stacking_out["_sample_id"] = sample_ids_stack
+    if sample_labels_stack is not None:
+        stacking_out["_sample_label"] = sample_labels_stack
     stacking_path = output_dir / "stacking_matrix.parquet"
     stacking_out.to_parquet(stacking_path, index=False)
     log.info(
@@ -4453,6 +4490,7 @@ def multimodal_prep(
         path=str(stacking_path),
         shape=stacking_df.shape,
         columns_sample=list(stacking_df.columns[:10]),
+        has_sample_labels=sample_labels_stack is not None,
     )
 
     # ── Build raw features matrix (optional) ──
@@ -4506,6 +4544,9 @@ def multimodal_prep(
                 "raw_features_missing_sample_id",
                 hint="super_matrix has no SAMPLE_ID — dashboard joins won't work",
             )
+        # Carry 4-tier text labels for healthy-normal specificity (v0.0.28+)
+        if "label" in super_df.columns:
+            raw_out["_sample_label"] = super_df["label"].values
         raw_path = output_dir / "raw_features_matrix.parquet"
         raw_out.to_parquet(raw_path, index=False)
         raw_shape = X_selected.shape
@@ -4516,6 +4557,7 @@ def multimodal_prep(
             selection=multimodal_selection,
             n_selected=len(selected_names),
             has_sample_id="SAMPLE_ID" in super_df.columns,
+            has_sample_labels="label" in super_df.columns,
         )
 
     # ── Build metadata ──
@@ -4596,10 +4638,31 @@ def multimodal_single(
     )
 
     # Load stacking matrix.
-    # Drop metadata columns (_label, _sample_id) to get pure feature columns.
+    # Drop metadata columns (_label, _sample_id, _sample_label) to get pure
+    # feature columns. _sample_label carries 4-tier text labels (v0.0.28+).
     stacking_full = pd.read_parquet(stacking_matrix_path)
     y_stack = stacking_full["_label"].values.astype(int)
-    meta_cols = ["_label", "_sample_id"]
+
+    # Extract 4-tier sample labels for healthy-normal specificity (v0.0.28+).
+    # Falls back to None for pre-v0.0.28 stacking matrices that lack this column.
+    sample_labels_stack: np.ndarray | None = None
+    if "_sample_label" in stacking_full.columns:
+        sample_labels_stack = stacking_full["_sample_label"].values
+        n_healthy = int((sample_labels_stack == "Healthy Normal").sum())
+        log.info(
+            "multimodal_single_sample_labels_loaded",
+            model=model_name,
+            n_labels=len(sample_labels_stack),
+            n_healthy=n_healthy,
+        )
+    else:
+        log.debug(
+            "multimodal_single_no_sample_labels",
+            model=model_name,
+            hint="Pre-v0.0.28 stacking matrix; healthy specificity unavailable",
+        )
+
+    meta_cols = ["_label", "_sample_id", "_sample_label"]
     drop_cols = [c for c in meta_cols if c in stacking_full.columns]
     stacking_df = stacking_full.drop(columns=drop_cols)
 
@@ -4638,6 +4701,7 @@ def multimodal_single(
         f"stacking_{model_name}",
         feature_names=list(stacking_df.columns),
         random_state=random_state,
+        sample_labels=sample_labels_stack,
     )
     results.update(res)
 
@@ -4658,8 +4722,14 @@ def multimodal_single(
         if raw_features_path.exists():
             raw_full = pd.read_parquet(raw_features_path)
             y_raw = raw_full["_label"].values.astype(int)
+
+            # Extract 4-tier labels from raw matrix (same pattern as stacking)
+            sample_labels_raw: np.ndarray | None = None
+            if "_sample_label" in raw_full.columns:
+                sample_labels_raw = raw_full["_sample_label"].values
+
             # Drop metadata columns before training
-            raw_meta = ["_label", "_sample_id"]
+            raw_meta = ["_label", "_sample_id", "_sample_label"]
             raw_drop = [c for c in raw_meta if c in raw_full.columns]
             X_raw = raw_full.drop(columns=raw_drop)
 
@@ -4680,6 +4750,7 @@ def multimodal_single(
                     f"raw_{model_name}",
                     feature_names=list(X_raw.columns),
                     random_state=random_state,
+                    sample_labels=sample_labels_raw,
                 )
                 results.update(raw_res)
 
