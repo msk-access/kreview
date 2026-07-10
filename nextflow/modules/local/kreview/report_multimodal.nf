@@ -32,8 +32,9 @@ process KREVIEW_REPORT_MULTIMODAL {
     # Set custom writable cache/data paths for Quarto on HPC/Read-only filesystems
     export XDG_CACHE_HOME="\$PWD/.quarto_cache"
     export XDG_DATA_HOME="\$PWD/.quarto_data"
+    export IPYTHONDIR="\$PWD/.ipython"
 
-    mkdir -p matrices reports
+    mkdir -p matrices reports .ipython
 
     # Stage super-matrix and multimodal results into expected directory layout
     cp ${super_matrix} matrices/

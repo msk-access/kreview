@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.28] - 2026-07-09
+
+### Fixed
+- **Silent Report Failures**: `kreview report` now exits with code `1` when any dashboards fail to render, enabling Nextflow to retry with higher memory allocations. Previously exited `0` even when multiple reports failed.
+- **ValueError in Feature Plotting**: Added a fallback in `report_template.qmd` when the univariate `top_col` (selected by eval_stats) is filtered out during feature selection or matrix fusion. Falls back to the first available numeric column instead of crashing Plotly.
+- **CUDA OOM on Shared GPU Nodes**: Added `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to the `KREVIEW_MULTIMODAL_SINGLE_GPU` Nextflow process, reducing PyTorch memory fragmentation on shared Slurm nodes. Prevents TabICL_ft failures from CUDA allocation errors.
+- **IPython Home Path on HPC**: Exported `IPYTHONDIR="$PWD/.ipython"` in `report.nf`, `report_multimodal.nf`, and `multimodal_single.nf` to prevent errors when `/home` is read-only on HPC Singularity nodes.
+- **Healthy Normal Specificity = 0.0 in Multimodal Stacking**: The stacking matrix parquet files did not carry the original 4-tier label text (e.g. "Healthy Normal", "Possible ctDNA-"), so `evaluate_model()` could not compute sensitivity at 100% healthy-normal specificity. Fixed by plumbing `oof_sample_labels` through the full pipeline: evaluator JSONs → baselines loader → stacking matrix alignment → parquet persistence → `evaluate_model()` in all paths (decomposed Nextflow + monolithic `kreview run`).
+
+### Added
+- **`_sample_label` Column**: The `stacking_matrix.parquet` and `raw_features_matrix.parquet` outputs from `multimodal_prep()` now include a `_sample_label` column carrying the 4-tier text labels. This enables downstream consumers (multimodal_single, dashboard) to compute per-label-tier specificity without joining back to `labels.parquet`.
+
 ## [0.0.27] - 2026-06-25
 
 ### Fixed
