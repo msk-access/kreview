@@ -62,7 +62,10 @@ The pipeline supports two modes:
 ### Installation
 
 > [!IMPORTANT]
-> **Quarto is strictly required** for programmatic dashboard generation. Because `quarto-cli` wrapper packages are unreliable across Python environments, `kreview` assumes the Quarto executable is installed dynamically on your OS or container.
+> **Quarto is required** for programmatic dashboard generation. `kreview` declares `quarto-cli` as a
+> core dependency, so `pip install kreview` provides the Quarto executable automatically (and the
+> Docker images ship it). If the pip-provided binary misbehaves in your environment, install Quarto
+> from your OS package manager as a fallback (see the [Quarto guide](https://quarto.org/docs/get-started/)).
 
 #### Option 1: Docker (Recommended "Batteries-Included" Method)
 The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker containers (hosted on GHCR). They ship with `Python 3.12`, all ML libraries, and `quarto`:
@@ -79,14 +82,15 @@ docker run -v /your/data:/data ghcr.io/msk-access/kreview:latest \
 ```
 
 #### Option 2: Local Install (Pip)
-If you install via pip, you **must separately install Quarto** via your OS manager:
-1. **Install Quarto:** Follow the [official Quarto Installation Guide](https://quarto.org/docs/get-started/) (e.g. `brew install quarto` on macOS).
-2. **Install kreview:**
+`quarto-cli` is a declared dependency, so a plain pip install provides Quarto. Only if the
+pip-provided binary misbehaves, install Quarto from your OS manager (e.g. `brew install quarto`)
+as a fallback.
 ```bash
 git clone https://github.com/msk-access/kreview.git
 cd kreview
-pip install -e .          # CPU models only
-pip install -e ".[gpu]"   # + TabPFN, TabICL (requires CUDA)
+pip install -e .            # CPU models only
+pip install -e ".[all]"     # + arfs feature selection, docs, dev, test (CPU)
+pip install -e ".[gpu]"     # + TabPFN, TabICL (requires CUDA)
 ```
 
 ### Running the Pipeline
