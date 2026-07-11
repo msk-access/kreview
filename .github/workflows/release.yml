@@ -25,7 +25,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip build twine
           pip install -e .[docs]
-          
+
+      - name: Check version consistency (settings.ini / __init__ / nextflow.config / tag)
+        run: python3 scripts/check_version_consistency.py --tag "${GITHUB_REF_NAME}"
+
       - name: Build package
         run: python -m build
         
