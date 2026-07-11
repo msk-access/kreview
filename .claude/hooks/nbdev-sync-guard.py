@@ -12,6 +12,7 @@ and are exempt. Anything outside `kreview/` is ignored.
 
 FAIL-OPEN on any error (never wedge the tool). Wire on PostToolUse / Edit|MultiEdit|Write.
 """
+
 import json
 import os
 import re
@@ -41,20 +42,20 @@ def main():
 
     if in_pkg and base not in EXEMPT:
         module = base
-        nb_hint = ""
-        # Best-effort: point at the likely notebook if a mapping is obvious.
-        stem = module[:-3]
-        print(json.dumps({
-            "systemMessage": (
-                f"nbdev: you edited the generated module kreview/{module}. Before committing, "
-                f"sync it back so the notebook stays the source of truth:\n"
-                f"  python3 -m nbdev.sync --fname kreview/{module}\n"
-                f"  python3 -m nbdev.export   # must produce ZERO git diff (idempotency)\n"
-                f"  python3 -m nbdev.doclinks # refresh _modidx.py\n"
-                f"Do NOT leave kreview/{module} edited without a matching nbs/ change."
-                f"{nb_hint}"
+        print(
+            json.dumps(
+                {
+                    "systemMessage": (
+                        f"nbdev: you edited the generated module kreview/{module}. Before committing, "
+                        f"sync it back so the notebook stays the source of truth:\n"
+                        f"  python3 -m nbdev.sync --fname kreview/{module}\n"
+                        f"  python3 -m nbdev.export   # must produce ZERO git diff (idempotency)\n"
+                        f"  python3 -m nbdev.doclinks # refresh _modidx.py\n"
+                        f"Do NOT leave kreview/{module} edited without a matching nbs/ change."
+                    )
+                }
             )
-        }))
+        )
     else:
         print("{}")
 

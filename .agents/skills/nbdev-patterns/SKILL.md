@@ -83,9 +83,15 @@ diff kreview/<module>.py /tmp/check.py && echo "IDEMPOTENT ✓"
 | `nbs/91_cli_eval.ipynb` | `kreview/cli_eval.py` | `kreview eval cpu\|gpu\|multimodal` |
 | `nbs/92_cli_select.ipynb` | `kreview/cli_select.py` | `kreview select` command |
 
-**Standalone files** (no notebook, edit directly):
+**Standalone files** (no notebook — edit directly, and EXCLUDE from `nbdev_update`/`nbdev.sync`,
+which chokes on them with "Cell ID required but not found"):
 - `kreview/scoreboard.py`
 - `kreview/feature_cards.py`
+- `kreview/reproducibility.py`
+
+> When syncing `.py → notebook`, always use `nbdev.sync --fname kreview/<module>.py` for a
+> specific notebook-backed module. A blanket `nbdev.sync` (no `--fname`) tries to process the
+> standalone modules above and fails. Standalone modules have no notebook to sync to.
 
 ---
 

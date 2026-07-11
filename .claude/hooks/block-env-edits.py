@@ -8,6 +8,7 @@ they carry no secrets and are meant to be edited and committed.
 
 Wire it on PreToolUse / Edit|MultiEdit|Write. See hooks/README.md.
 """
+
 import json
 import re
 import sys
@@ -19,15 +20,19 @@ data = json.load(sys.stdin)
 path = data.get("tool_input", {}).get("file_path", "")
 
 if re.search(r"(^|/)\.env(\.[^/]+)?$", path) and not path.lower().endswith(EXEMPT):
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                f"Editing .env files is blocked: keep secrets in a password "
-                f"manager, not a committable file. Blocked path: {path}"
-            ),
-        }
-    }))
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        f"Editing .env files is blocked: keep secrets in a password "
+                        f"manager, not a committable file. Blocked path: {path}"
+                    ),
+                }
+            }
+        )
+    )
 else:
     print("{}")
