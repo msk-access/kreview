@@ -19,4 +19,10 @@ pre-commit install
 
 ## Important
 
-**Never edit `.py` files directly.** All code changes must be made in the Jupyter notebooks under `nbs/`, then exported with `nbdev-export`.
+**Never edit generated `.py` files directly.** All code changes must be made in the Jupyter
+notebooks under `nbs/`, then exported with `nbdev-export`. After exporting, `nbdev-export` must
+produce **zero git diff** (idempotency) — CI enforces this.
+
+**Exception — standalone modules** (hand-maintained, no notebook; edit them directly and exclude
+them from `nbdev-update`/`nbdev.sync`): `kreview/scoreboard.py`, `kreview/feature_cards.py`,
+`kreview/reproducibility.py`.

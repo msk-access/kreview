@@ -16,6 +16,7 @@ Usage:
 
 Exit 0 if all agree, 1 otherwise. Stdlib only.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,7 +38,9 @@ def _search(path: Path, pattern: str) -> str | None:
 
 def collect() -> dict[str, str | None]:
     return {
-        "settings.ini": _search(ROOT / "settings.ini", r"^version\s*=\s*([0-9][^\s#]*)"),
+        "settings.ini": _search(
+            ROOT / "settings.ini", r"^version\s*=\s*([0-9][^\s#]*)"
+        ),
         "kreview/__init__.py": _search(
             ROOT / "kreview" / "__init__.py", r'__version__\s*=\s*["\']([^"\']+)["\']'
         ),
@@ -67,7 +70,10 @@ def main() -> int:
 
     missing = [k for k, v in versions.items() if v is None]
     if missing:
-        print(f"\nFAIL: could not find a version in: {', '.join(missing)}", file=sys.stderr)
+        print(
+            f"\nFAIL: could not find a version in: {', '.join(missing)}",
+            file=sys.stderr,
+        )
         return 1
 
     distinct = set(versions.values())

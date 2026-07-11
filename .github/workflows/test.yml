@@ -30,8 +30,15 @@ jobs:
       - name: Check version consistency
         run: python3 scripts/check_version_consistency.py
 
+      - name: Check nbdev export is in sync (notebooks <-> kreview/*.py)
+        run: |
+          pip install nbdev "black[jupyter]"
+          python3 -m nbdev.export
+          git diff --exit-code -- kreview/ \
+            || { echo "::error::nbs/ and kreview/*.py are out of sync. Run 'nbdev_export' and commit."; exit 1; }
+
       - name: Run tests with pytest
-        run: pytest --cov=kreview --cov-report=xml
+        run: pytest --cov=kreview --cov-report=xml --cov-fail-under=38
 
       - name: Test Python Package Build
         run: python -m build

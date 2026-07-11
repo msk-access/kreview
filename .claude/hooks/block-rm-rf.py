@@ -15,6 +15,7 @@ injection-guard.py is the ask-layer sibling.
 
 Wire it on PreToolUse / Bash. See hooks/README.md.
 """
+
 import json
 import re
 import sys
@@ -33,27 +34,31 @@ RM_RF = re.compile(
     r"(?:sudo\s+)?(?:xargs\s+(?:-\S+\s+)*)?(?:sudo\s+)?"
     r"\brm\s+"
     r"(?:"
-        r"-[a-z]*r[a-z]*f[a-z]*"               # -rf, -Rf, -rfv, -vrf ...
-        r"|-[a-z]*f[a-z]*r[a-z]*"              # -fr, -vfr ...
-        r"|-r[a-z]*\s+-[a-z]*f"                # -r -f  (separate)
-        r"|-f[a-z]*\s+-[a-z]*r"                # -f -r  (separate)
-        r"|--recursive\b[^\n;&|]*?--force\b"   # --recursive ... --force
-        r"|--force\b[^\n;&|]*?--recursive\b"   # --force ... --recursive
+    r"-[a-z]*r[a-z]*f[a-z]*"  # -rf, -Rf, -rfv, -vrf ...
+    r"|-[a-z]*f[a-z]*r[a-z]*"  # -fr, -vfr ...
+    r"|-r[a-z]*\s+-[a-z]*f"  # -r -f  (separate)
+    r"|-f[a-z]*\s+-[a-z]*r"  # -f -r  (separate)
+    r"|--recursive\b[^\n;&|]*?--force\b"  # --recursive ... --force
+    r"|--force\b[^\n;&|]*?--recursive\b"  # --force ... --recursive
     r")",
     re.I,
 )
 
 if RM_RF.search(command):
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                "rm -rf is not allowed. Use the `trash` command instead for "
-                "safe, recoverable deletion."
-            ),
-        }
-    }))
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "rm -rf is not allowed. Use the `trash` command instead for "
+                        "safe, recoverable deletion."
+                    ),
+                }
+            }
+        )
+    )
     sys.exit(2)
 
 sys.exit(0)
