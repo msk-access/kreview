@@ -15,11 +15,14 @@
   `.claude/hooks/`, learning-loop + memory scaffolding in `.agents/`.
 
 ## Now
-- Harness Phase 1+2 in place. graphify hook de-noised (advisory, not a per-tool MANDATORY gate).
+- Harness Phase 1+2 committed on branch `chore/agent-harness` (not pushed). graphify hook
+  de-noised (advisory, not a per-tool MANDATORY gate).
+- GitHub issues created on `msk-access/kreview`: tracking #66 + children #55–#65, milestone
+  `v0.0.29 hardening`.
 
 ## Next
-1. Create the drafted GitHub issues on `msk-access/kreview` (tracking issue + 12 children).
-2. Start fixes in review-priority order: **#1 collapse monolithic layer to thin orchestrators**
+1. Push `chore/agent-harness` and open a PR when ready (not pushed yet).
+2. Start fixes in review-priority order: **#55 collapse monolithic layer to thin orchestrators**
    (keeps `kreview run` + `multimodal run` as thin wrappers over ONE implementation, deletes
    `multimodal_eval()` + inlined eval block, fixes H1 structurally, flips NF default to
    multistage) → **CI container smoke test** → **nbdev black-policy reconcile + export-sync gate**.

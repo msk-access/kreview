@@ -1,10 +1,26 @@
-# v0.0.29 Hardening — drafted GitHub issues
+# v0.0.29 Hardening — GitHub issues
 
-Drafted from the 2026-07-11 deep review. To be created on `msk-access/kreview` as one
-tracking issue + 12 children after the harness spine lands. Labels in brackets.
+From the 2026-07-11 deep review. **Created** on `msk-access/kreview` under milestone
+`v0.0.29 hardening` (created 2026-07-11): tracking issue
+[#66](https://github.com/msk-access/kreview/issues/66) + 11 children.
 
-Suggested labels to create: `systemic`, `ci`, `nbdev`, `nextflow`, `eval`, `core`, `deps`,
-`tests`, `hygiene`, `bug`. Milestone: `v0.0.29 hardening`.
+| Draft | Issue | Title |
+|---|---|---|
+| 1 | [#55](https://github.com/msk-access/kreview/issues/55) | Collapse monolithic layer to thin orchestrators (fixes H1) |
+| 2 | [#56](https://github.com/msk-access/kreview/issues/56) | CI container smoke test + release gating |
+| 3 | [#57](https://github.com/msk-access/kreview/issues/57) | nbdev reconcile + export-sync/coverage gates |
+| 4 | [#58](https://github.com/msk-access/kreview/issues/58) | Nextflow centralized env/resource |
+| 6 | [#59](https://github.com/msk-access/kreview/issues/59) | Nextflow GPU exit-0 wrapper defeats retry |
+| 7 | [#60](https://github.com/msk-access/kreview/issues/60) | Nextflow combine(by:0) silent evaluator drop |
+| 8 | [#61](https://github.com/msk-access/kreview/issues/61) | Fail loud instead of 0.0/empty masking |
+| 9 | [#62](https://github.com/msk-access/kreview/issues/62) | Dependency hygiene |
+| 10 | [#63](https://github.com/msk-access/kreview/issues/63) | Test coverage + un-skip strategy tests |
+| 11 | [#64](https://github.com/msk-access/kreview/issues/64) | Single source of truth for version |
+| 12 | [#65](https://github.com/msk-access/kreview/issues/65) | Untrack manifest.txt |
+
+(Draft #5 "extract shared eval helper" was merged into #55.) The full drafted bodies below are
+retained for reference. Labels: `systemic`, `ci`, `nbdev`, `nextflow`, `eval`, `core`, `deps`,
+`tests`, `hygiene`, `bug`.
 
 ---
 
