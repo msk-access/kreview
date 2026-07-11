@@ -81,3 +81,9 @@ results/
 nohup.out
 reports/
 static_plots/
+
+# graphify knowledge graph (generated, rebuildable via `graphify update .`)
+graphify-out/
+
+# Agent harness — machine-local session settings (personal auto-approvals, local paths)
+.claude/settings.local.json

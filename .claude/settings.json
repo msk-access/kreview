@@ -1,0 +1,103 @@
+{
+  "_comment": "kreview project harness. Hooks are the deterministic floor (rules persuade, hooks enforce). Skills load from .claude/skills (symlink -> ../.agents/skills). graphify is advisory (see CLAUDE.md), not a per-tool gate. Paths under .claude/hooks are repo-relative and committed so the whole team shares them.",
+
+  "includeGitInstructions": true,
+  "showTurnDuration": true,
+
+  "permissions": {
+    "_comment": "Allowlist the read-only commands run constantly so they stop prompting. No denylist here: the injection-guard/rm-rf/env/gitleaks hooks are the real safety floor, not deny rules.",
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(ls:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(python3 -m pytest:*)",
+      "Bash(pytest:*)",
+      "Bash(python3 -m nbdev.export)",
+      "Bash(python3 -m nbdev.doclinks)",
+      "Bash(nbdev_export:*)",
+      "Bash(nbdev_test:*)",
+      "Bash(nextflow *-preview*)",
+      "Bash(docker images:*)",
+      "Bash(graphify query:*)",
+      "Bash(graphify explain:*)",
+      "Bash(graphify path:*)"
+    ]
+  },
+
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"Current time: '$(date '+%A, %B %d, %Y %I:%M %p %Z')'\"}'"
+          }
+        ]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "matcher": "WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json, sys, re; from datetime import datetime; d = json.load(sys.stdin); q = d.get('tool_input', {}).get('query', ''); has_year = re.search(r'\\\\b20\\\\d{2}\\\\b', q); has_temporal = any(w in q.lower() for w in ['latest','recent','current','new','now','today']); mq = f'{q} {datetime.now().year}' if not has_year and not has_temporal else q; print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'modifiedToolInput': {'query': mq}}})); sys.exit(0)\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/block-env-edits.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/block-rm-rf.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/injection-guard.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/gitleaks-pre-push.py",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/nbdev-sync-guard.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
