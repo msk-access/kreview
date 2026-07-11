@@ -76,6 +76,18 @@ jobs:
         with:
           context: .
           push: false                              # build only, do not publish
+          load: ${{ matrix.target == 'cpu' }}      # load cpu into the daemon so we can run it
           target: ${{ matrix.target }}             # cpu or gpu, from the matrix
           tags: kreview:test-${{ matrix.target }}
           platforms: linux/amd64
+
+      # Smoke-test the CPU image: importing the CLI exercises the full dependency
+      # chain (papermill, BorutaShap, xgboost, shap, quarto) — exactly the class of
+      # breakage that shipped in v0.0.24-0.0.28 and slipped past a build-only CI.
+      # The GPU image needs a GPU runtime to execute, so it is build-verified only.
+      - name: Smoke test cpu image (CLI imports + tools present)
+        if: matrix.target == 'cpu'
+        run: |
+          docker run --rm kreview:test-cpu kreview --help
+          docker run --rm kreview:test-cpu quarto --version
+          docker run --rm kreview:test-cpu python -c "import papermill, BorutaShap, xgboost, shap, kreview; print('kreview imports OK')"

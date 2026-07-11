@@ -38,14 +38,6 @@ jobs:
           files: dist/*
           generate_release_notes: true
 
-      - name: Publish to PyPI
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          print-hash: true
-          skip-existing: true
-          verbose: true
-
       # Free disk space before Docker builds — GPU image needs ~10 GB.
       # tool-cache must stay false: this job needs the Python tool-cache
       # for mike (docs deployment) which runs after Docker builds.
@@ -103,6 +95,17 @@ jobs:
             org.opencontainers.image.licenses=AGPL-3.0
             org.opencontainers.image.version=${{ github.ref_name }}
           
+      # Publish to PyPI only AFTER both container images are built and pushed, so a
+      # failed image build blocks the PyPI release — prevents a published pip package
+      # whose matching :vX.Y.Z container is missing/stale (the v0.0.24-0.0.28 pattern).
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          skip-existing: true
+          verbose: true
+
       - name: Configure Git Credentials
         run: |
           git config user.name github-actions[bot]
