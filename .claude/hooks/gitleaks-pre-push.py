@@ -11,14 +11,21 @@ PHI rules matter as much as the secret rules. Rules and the placeholder/allowlis
 live in `.gitleaks.toml` (auto-discovered — no --config flag needed). Verify the rules
 still work with `bash scripts/check_phi_guard.sh`.
 
+Two gitleaks blind spots are covered explicitly: it does not scan commit MESSAGES (so the
+messages of the commits being pushed are scanned separately here, reusing the same rules),
+and it does not scan its own config file (asserted by check_phi_guard.sh instead).
+
 Requires gitleaks on PATH (e.g. `brew install gitleaks`).
 Wire it on PreToolUse / Bash. See hooks/README.md.
 """
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 data = json.load(sys.stdin)
 cmd = data.get("tool_input", {}).get("command", "")
@@ -139,20 +146,86 @@ elif res.returncode != 0:
             }
         )
     )
-elif is_force:
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "ask",
-                    "permissionDecisionReason": (
-                        "Force push detected. Force push is off by default here. "
-                        "Confirm explicitly to proceed."
-                    ),
-                }
-            }
-        )
-    )
 else:
-    print("{}")
+    # ── Commit MESSAGE scan ────────────────────────────────────────────────────
+    # gitleaks scans diffs, NOT commit messages. A value redacted from a file can still be
+    # published by describing the redaction in the message. Scan the messages of commits not
+    # yet on any remote: that is exactly what this push would publish, and it avoids
+    # re-flagging already-published history we cannot change.
+    # Rules are NOT duplicated here — the messages are written to a temp file and run
+    # through gitleaks using this repo's own .gitleaks.toml.
+    msg_finding = None
+    try:
+        log = subprocess.run(
+            ["git", "log", "HEAD", "--not", "--remotes", "--format=%B"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        messages = log.stdout.strip()
+        if messages:
+            tmpdir = tempfile.mkdtemp(prefix="kreview-msgscan-")
+            try:
+                # Deliberately NOT named .gitleaks.toml — gitleaks skips its own config file.
+                with open(os.path.join(tmpdir, "commit-messages.txt"), "w") as fh:
+                    fh.write(messages)
+                mres = subprocess.run(
+                    [
+                        "gitleaks",
+                        "detect",
+                        "--no-git",
+                        "--no-banner",
+                        "--redact",
+                        "--exit-code",
+                        "1",
+                        "--source",
+                        tmpdir,
+                        "-c",
+                        ".gitleaks.toml",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                if mres.returncode == 1:
+                    msg_finding = (mres.stdout or mres.stderr or "(no output)")[-1200:]
+            finally:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+    except Exception as exc:  # noqa: BLE001 - surface the failure, never silently skip
+        msg_finding = f"commit-message scan could not run: {exc}"
+
+    if msg_finding:
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            "gitleaks BLOCKED push: a COMMIT MESSAGE contains a secret or "
+                            "PHI/PII value. Messages are published and cannot be edited "
+                            "after push without rewriting history. Reword it (refer to a "
+                            "commit by SHA, never by identifier) and amend.\n"
+                            + msg_finding
+                        ),
+                    }
+                }
+            )
+        )
+    elif is_force:
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "ask",
+                        "permissionDecisionReason": (
+                            "Force push detected. Force push is off by default here. "
+                            "Confirm explicitly to proceed."
+                        ),
+                    }
+                }
+            )
+        )
+    else:
+        print("{}")

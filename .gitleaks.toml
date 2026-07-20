@@ -20,9 +20,21 @@
 #   Go's RE2 engine has no negative lookahead, so this is expressed as an allowlist
 #   rather than in the pattern itself.
 #
+# DO NOT PUT REAL IDENTIFIERS IN THIS FILE
+#   gitleaks does NOT scan its own config file — content here is invisible to the scanner.
+#   A real identifier pasted into a comment would therefore be published unnoticed. Refer to
+#   offending commits by SHA, never by value. scripts/check_phi_guard.sh asserts this file
+#   stays clean, because gitleaks itself cannot.
+#
+# COMMIT MESSAGES
+#   gitleaks scans diffs, not commit messages. A value redacted from a file can still be
+#   published by describing the redaction in the commit message. The pre-push hook scans the
+#   messages of the commits being pushed separately, reusing these same rules.
+#
 # TESTING
-#   scripts/check_phi_guard.sh asserts both directions: the clean tree passes, and a
-#   file containing synthetic PHI is blocked. Run it after changing any rule here.
+#   scripts/check_phi_guard.sh asserts every direction: the clean tree passes, synthetic PHI
+#   is blocked, the placeholder is allowed, and this config carries no real identifiers.
+#   Run it after changing any rule here.
 
 title = "kreview secrets + PHI"
 
@@ -38,9 +50,10 @@ description = "Documentation placeholders and one immutable historical commit"
 regexes = [
   '''P-0000000''',      # canonical all-zeros patient-id placeholder for docs/examples
 ]
-# The initial scaffold commit carries a real-looking sample id (P-0000280-T02-XS1) in three
-# doc files. It was replaced with the P-0000000 placeholder on the current tree, but it
-# remains in git history and CANNOT be removed without rewriting published history.
+# The initial scaffold commit carries a real-looking sample id in three doc files (the literal
+# value is deliberately NOT repeated here — see "DO NOT PUT REAL IDENTIFIERS IN THIS FILE"
+# above). It was replaced with the P-0000000 placeholder on the current tree, but it remains
+# in git history and CANNOT be removed without rewriting published history.
 # gitleaks scans full history on the first push of a new branch, so without this entry every
 # such push would be denied. Allowlisting the single commit keeps the guard effective for all
 # NEW content while tolerating immutable history.
