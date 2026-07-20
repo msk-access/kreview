@@ -4987,7 +4987,7 @@ groups by evaluator name, and merges GPU keys into CPU dicts.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Cross-evaluator multimodal evaluation.</p>
+        <p>Cross-evaluator multimodal evaluation, run in a single process.</p>
 <p>Implements three complementary strategies:</p>
 <ol>
 <li>
@@ -5006,6 +5006,17 @@ groups by evaluator name, and merges GPU keys into CPU dicts.</p>
    matrix, showing each evaluator's marginal contribution.</p>
 </li>
 </ol>
+<p>This function is a <strong>thin orchestrator</strong>: it owns no evaluation logic of its own and
+simply drives the decomposed stages in sequence —
+<code>multimodal_prep</code> -&gt; <code>multimodal_single</code> (once per model) -&gt; <code>multimodal_ablation</code>
+-&gt; <code>multimodal_merge</code>. Those same stages are what the Nextflow multistage pipeline
+scatters across jobs, so the single-machine and <abbr title="High-Performance Computing">HPC</abbr> paths execute <strong>one implementation</strong>.
+They previously had separate implementations, which is how a fix applied to one path
+silently missed the other.</p>
+<p>Intermediate artifacts (stacking matrix, per-model JSONs, ablation JSON) are written to
+a temporary directory that is removed on exit, preserving this function's contract of
+returning results without leaving files behind — callers persist the returned dict
+themselves.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -5215,7 +5226,62 @@ groups by evaluator name, and merges GPU keys into CPU dicts.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A comprehensive results dict with keys for each strategy.</p>
+                <p>The merged results dict (see <code>multimodal_merge</code>), plus <code>models_requested</code> and</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>gpu_models_requested</code>, and <code>model_errors</code> if any individual model failed.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>No models requested.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Every requested model failed, so there is nothing to report.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="Exception">Exception</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Propagated from <code>multimodal_prep</code>/<code>multimodal_merge</code> — without a
+stacking matrix or merged output there is no result, so these fail loudly
+rather than returning a partial dict that reads as success.</p>
               </div>
             </td>
           </tr>
