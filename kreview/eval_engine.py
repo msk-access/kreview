@@ -4385,6 +4385,28 @@ def multimodal_eval(
 
 # ── Decomposed Multimodal Pipeline ────────────────────────────────────────────
 #
+# Metadata columns that `multimodal_prep` writes into the stacking / raw-feature
+# parquets alongside the numeric features. They are NOT features:
+#   _label        - the binary target
+#   _sample_id    - string, for joining predictions back to labels.parquet
+#   _sample_label - string 4-tier label, for healthy-normal specificity
+# Every consumer that builds a model matrix MUST drop these. Defined once here because
+# a consumer that drops only a subset leaves string columns in the matrix, which makes
+# model.fit() raise for every evaluator. Kept as a module constant so the set cannot
+# drift between multimodal_single() and multimodal_ablation().
+_STACKING_META_COLS = ("_label", "_sample_id", "_sample_label")
+
+
+def _drop_stacking_metadata(df: "pd.DataFrame") -> tuple["pd.DataFrame", list[str]]:
+    """Return ``(features_only, dropped)`` for a stacking / raw-feature matrix.
+
+    Returns the dropped column names as well so callers can log exactly what was
+    removed — silently dropping columns is how a shape mismatch goes unnoticed.
+    """
+    dropped = [c for c in _STACKING_META_COLS if c in df.columns]
+    return df.drop(columns=dropped), dropped
+
+
 # These functions implement the same logic as `multimodal_eval()` but as
 # independent stages that can be run in parallel or sequentially.  The
 # monolithic `multimodal_eval()` above is preserved for backward compat
@@ -4662,9 +4684,8 @@ def multimodal_single(
             hint="Pre-v0.0.28 stacking matrix; healthy specificity unavailable",
         )
 
-    meta_cols = ["_label", "_sample_id", "_sample_label"]
-    drop_cols = [c for c in meta_cols if c in stacking_full.columns]
-    stacking_df = stacking_full.drop(columns=drop_cols)
+    # Single source of truth for the metadata column set — see _STACKING_META_COLS.
+    stacking_df, _dropped_meta = _drop_stacking_metadata(stacking_full)
 
     # GPU-specific kwargs for _build_model dispatch.
     # NOTE: random_state is NOT included — already passed positionally to
@@ -4728,10 +4749,9 @@ def multimodal_single(
             if "_sample_label" in raw_full.columns:
                 sample_labels_raw = raw_full["_sample_label"].values
 
-            # Drop metadata columns before training
-            raw_meta = ["_label", "_sample_id", "_sample_label"]
-            raw_drop = [c for c in raw_meta if c in raw_full.columns]
-            X_raw = raw_full.drop(columns=raw_drop)
+            # Drop metadata columns before training — same single source of truth as the
+            # stacking path, so the raw-feature matrix cannot drift out of sync with it.
+            X_raw, _raw_dropped_meta = _drop_stacking_metadata(raw_full)
 
             model_raw = _build_model(
                 model_name, random_state, **(gpu_kwargs if is_gpu else {})
@@ -4825,10 +4845,21 @@ def multimodal_ablation(
         results_dir=str(stacking_results_dir),
     )
 
-    # Load stacking matrix
+    # Load stacking matrix.
+    # multimodal_prep always writes _sample_id (and _sample_label when 4-tier labels
+    # exist) next to the features. Dropping only _label would leave those STRING columns
+    # in the matrix: every model.fit() below then raises "could not convert string to
+    # float", the per-evaluator handler records {"error": ...} for every evaluator, and
+    # the stage still reports success — a silently empty ablation. Drop the same set
+    # multimodal_single drops.
     stacking_full = pd.read_parquet(stacking_matrix_path)
     y_stack = stacking_full["_label"].values.astype(int)
-    stacking_df = stacking_full.drop(columns=["_label"])
+    stacking_df, dropped_meta = _drop_stacking_metadata(stacking_full)
+    log.info(
+        "ablation_matrix_prepared",
+        n_features=stacking_df.shape[1],
+        dropped_metadata=dropped_meta,
+    )
 
     # Find best stacking model from partial results
     best_stack_model = None
@@ -4873,10 +4904,25 @@ def multimodal_ablation(
         random_state=random_state,
     )
 
-    # Discover unique evaluator prefixes from column names
+    # Discover unique evaluator prefixes from the FEATURE column names.
+    # Columns are named "<evaluator>_<model>". Any internal column (leading underscore)
+    # is excluded explicitly: a stray "_sample_id" would otherwise rsplit into a phantom
+    # "_sample" evaluator that produces a meaningless delta while looking legitimate.
+    # The guard is belt-and-braces — _drop_stacking_metadata already removed the known
+    # ones — so a metadata column added later cannot silently become a fake evaluator.
     evaluator_names = sorted(
-        {col.rsplit("_", 1)[0] for col in stacking_df.columns if "_" in col}
+        {
+            col.rsplit("_", 1)[0]
+            for col in stacking_df.columns
+            if "_" in col and not col.startswith("_")
+        }
     )
+    if not evaluator_names:
+        raise ValueError(
+            f"No evaluator columns found in {stacking_matrix_path}. Expected columns "
+            f"named '<evaluator>_<model>'; got {list(stacking_df.columns)[:10]}."
+        )
+    log.info("ablation_evaluators_discovered", evaluators=evaluator_names)
 
     ablation = {}
     for eval_name in evaluator_names:
@@ -4899,8 +4945,16 @@ def multimodal_ablation(
                 feature_names=list(X_ablated.columns),
                 random_state=random_state,
             )
-            ablated_auc = res.get(f"auc_ablation_{eval_name}", 0.0)
-            delta = best_stack_auc - (ablated_auc or 0.0)
+            # Do NOT default a missing AUC to 0.0: that silently turns "the metric was
+            # never produced" into "this evaluator scored zero", which reads as a real
+            # (and dramatic) ablation effect. A missing key is a programming error.
+            ablated_auc = res.get(f"auc_ablation_{eval_name}")
+            if ablated_auc is None:
+                raise KeyError(
+                    f"evaluate_model did not return 'auc_ablation_{eval_name}'; "
+                    f"got keys {sorted(res)[:10]}"
+                )
+            delta = best_stack_auc - ablated_auc
             ablation[eval_name] = {
                 "auc_without": ablated_auc,
                 "delta": delta,
@@ -4921,11 +4975,30 @@ def multimodal_ablation(
             )
             ablation[eval_name] = {"error": str(e)}
 
-    # Sort by delta (most important first)
+    # Fail loud on a systematic failure. One evaluator erroring can be legitimate (e.g.
+    # a degenerate subset), but EVERY evaluator erroring means the input or the matrix is
+    # wrong — the exact signature of metadata columns leaking in. Returning a dict of
+    # errors here would report success and ship an empty ablation downstream.
+    failed = {k: v["error"] for k, v in ablation.items() if "error" in v}
+    if failed and len(failed) == len(ablation):
+        raise RuntimeError(
+            "multimodal_ablation: every evaluator failed, so no ablation was produced. "
+            "This usually means non-numeric columns reached the feature matrix. "
+            f"Errors: {failed}"
+        )
+    if failed:
+        log.warning(
+            "ablation_partial_failure",
+            n_failed=len(failed),
+            n_total=len(ablation),
+            failed=sorted(failed),
+        )
+
+    # Sort by delta (most important first); errored entries have no delta and sort last.
     ablation_sorted = dict(
         sorted(
             ablation.items(),
-            key=lambda x: x[1].get("delta", 0.0),
+            key=lambda x: x[1].get("delta", float("-inf")),
             reverse=True,
         )
     )
