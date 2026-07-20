@@ -4234,12 +4234,6 @@ def multimodal_eval(
 # drift between multimodal_single() and multimodal_ablation().
 _STACKING_META_COLS = ("_label", "_sample_id", "_sample_label")
 
-# How many selected raw-feature names to record in the results as a diagnostic. The full
-# selected matrix is always in raw_features_matrix.parquet; this is only for reporting,
-# so it is capped to keep the JSON readable. Defined once so multimodal_prep and any
-# consumer agree on the cap.
-_RAW_FEATURES_REPORTED = 20
-
 
 def _drop_stacking_metadata(df: "pd.DataFrame") -> tuple["pd.DataFrame", list[str]]:
     """Return ``(features_only, dropped)`` for a stacking / raw-feature matrix.
@@ -4441,16 +4435,6 @@ def multimodal_prep(
         "top_percentile": top_percentile,
         "has_raw_features": raw_shape is not None,
         "raw_shape": list(raw_shape) if raw_shape is not None else None,
-        # Names of the raw features that survived selection (capped — this is a
-        # diagnostic aid, not the authoritative matrix, which lives in the parquet).
-        # Recorded here so the decomposed pipeline reports the same information the
-        # in-process orchestrator does; without it, merge cannot reconstruct the names
-        # and the field would silently differ between the two entry points.
-        "raw_features_selected": (
-            list(selected_names[:_RAW_FEATURES_REPORTED])
-            if raw_shape is not None
-            else []
-        ),
     }
 
     meta_path = output_dir / "prep_metadata.json"
@@ -4964,11 +4948,6 @@ def multimodal_merge(
         if metadata.get("has_raw_features"):
             results["raw_n_features_selected"] = metadata["raw_shape"][1]
             results["raw_features_selection_method"] = metadata["multimodal_selection"]
-            # Present only for prep_metadata written by v0.0.29+. Older metadata simply
-            # omits it rather than reporting an empty list, so a stale artifact is
-            # distinguishable from "selection returned nothing".
-            if "raw_features_selected" in metadata:
-                results["raw_features_selected"] = metadata["raw_features_selected"]
 
     # Merge ablation results
     if ablation_path is not None:
