@@ -1,9 +1,7 @@
 {
   "_comment": "kreview project harness. Hooks are the deterministic floor (rules persuade, hooks enforce). Skills load from .claude/skills (symlink -> ../.agents/skills). graphify is advisory (see CLAUDE.md), not a per-tool gate. Paths under .claude/hooks are repo-relative and committed so the whole team shares them.",
-
   "includeGitInstructions": true,
   "showTurnDuration": true,
-
   "permissions": {
     "_comment": "Allowlist the read-only commands run constantly so they stop prompting. No denylist here: the injection-guard/rm-rf/env/gitleaks hooks are the real safety floor, not deny rules.",
     "allow": [
@@ -31,7 +29,6 @@
       "Bash(graphify path:*)"
     ]
   },
-
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -44,7 +41,6 @@
         ]
       }
     ],
-
     "PreToolUse": [
       {
         "matcher": "WebSearch",
@@ -81,12 +77,11 @@
           {
             "type": "command",
             "command": "python3 .claude/hooks/gitleaks-pre-push.py",
-            "timeout": 60
+            "timeout": 120
           }
         ]
       }
     ],
-
     "PostToolUse": [
       {
         "matcher": "Edit|MultiEdit|Write",

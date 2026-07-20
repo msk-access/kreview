@@ -16,7 +16,7 @@ from kreview.core import load_sample_feature
 
 # Load a feature parquet for one sample
 df = load_sample_feature(
-    sample_id="P-0000280-T02-XS1",
+    sample_id="P-0000000-T01-XS1",
     feature_suffix=".FSC.gene.parquet",  # exact suffix from §4 table
     results_dir="/path/to/results/",
 )

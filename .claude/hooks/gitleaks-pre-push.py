@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """PreToolUse / Bash hook: run gitleaks before any `git push`, ask before force-push.
 
-Scans the commits actually being pushed for secrets, denies the push on a real
-finding, and asks (rather than silently passing) when gitleaks is not installed.
-Force pushes always ask, because the default posture here is no force push.
+Scans the commits actually being pushed for BOTH secrets and PHI/PII, denies the push on
+a real finding, and asks (rather than silently passing) when gitleaks is missing, times
+out, or fails to run. Force pushes always ask, because the default posture here is no
+force push.
+
+kreview is a PUBLIC repo that commits an agent memory store (`.agents/memory/`), so the
+PHI rules matter as much as the secret rules. Rules and the placeholder/allowlist policy
+live in `.gitleaks.toml` (auto-discovered — no --config flag needed). Verify the rules
+still work with `bash scripts/check_phi_guard.sh`.
 
 Requires gitleaks on PATH (e.g. `brew install gitleaks`).
 Wire it on PreToolUse / Bash. See hooks/README.md.
@@ -61,7 +67,7 @@ if log_opts:
     gitleaks_cmd.append(f"--log-opts={log_opts}")
 
 try:
-    res = subprocess.run(gitleaks_cmd, capture_output=True, text=True, timeout=45)
+    res = subprocess.run(gitleaks_cmd, capture_output=True, text=True, timeout=100)
 except FileNotFoundError:
     print(
         json.dumps(
@@ -85,14 +91,18 @@ except subprocess.TimeoutExpired:
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "ask",
-                    "permissionDecisionReason": "gitleaks scan timed out after 45s. Confirm push manually.",
+                    "permissionDecisionReason": "gitleaks scan timed out after 100s. Confirm push manually.",
                 }
             }
         )
     )
     sys.exit(0)
 
-if res.returncode != 0:
+# gitleaks exit codes: 0 = clean, 1 = findings (we pass --exit-code 1), >=2 = gitleaks
+# itself failed (bad .gitleaks.toml, git error). Those are different situations and must
+# not report the same way: a broken scanner is NOT "no leaks", and calling it "findings"
+# sends people hunting for a secret that does not exist.
+if res.returncode == 1:
     body = (res.stdout or res.stderr or "(no output)")[-1500:]
     print(
         json.dumps(
@@ -101,7 +111,28 @@ if res.returncode != 0:
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
-                        "gitleaks BLOCKED push: secret findings before sending to remote.\n"
+                        "gitleaks BLOCKED push: secret or PHI/PII findings before sending "
+                        "to remote. This repo is PUBLIC — do not bypass. Rules live in "
+                        ".gitleaks.toml; verify them with scripts/check_phi_guard.sh.\n"
+                        + body
+                    ),
+                }
+            }
+        )
+    )
+elif res.returncode != 0:
+    # Scanner error: we could not verify. Fail loud and ask rather than silently allowing.
+    body = (res.stderr or res.stdout or "(no output)")[-1500:]
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "ask",
+                    "permissionDecisionReason": (
+                        f"gitleaks FAILED to run (exit {res.returncode}) — the push was NOT "
+                        "scanned for secrets or PHI. This is a scanner/config error, not a "
+                        "finding. Fix it (check .gitleaks.toml) or confirm to push unscanned.\n"
                         + body
                     ),
                 }

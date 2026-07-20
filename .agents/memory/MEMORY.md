@@ -4,6 +4,12 @@ One line per memory, loaded for recall. Four tiers: `user_` (identity/prefs),
 `project_` (live state), `reference_` (stable facts), `feedback_` (corrections + why).
 Keep this file to index lines only; the content lives in the linked files.
 
+> **This store is COMMITTED to a public repo.** Never record PHI, patient identifiers, or
+> personal paths here — codebase and process facts only. Enforced by `.gitleaks.toml`.
+
+- [project-kreview-harness.md](project-kreview-harness.md) — the cross-tool agent harness
+  layout (AGENTS.md canonical, hooks enforce the review invariants).
+
 - [feedback-nbdev-source-of-truth.md](feedback-nbdev-source-of-truth.md) — never leave
   `kreview/*.py` edited without a matching notebook change; end with `nbdev_export` = zero diff.
 - [feedback-parallel-paths-one-impl.md](feedback-parallel-paths-one-impl.md) — monolithic
