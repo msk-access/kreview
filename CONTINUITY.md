@@ -22,6 +22,19 @@
     lint-cleaned the harness files, `reproducibility.py` documented as a 3rd standalone,
     CI export-sync + `--cov-fail-under=38` gates (PR #71)
 
+## Security guard (PHI/PII) — 2026-07-16
+- `.gitleaks.toml` adds PHI rules (DMP patient ids, SSN, MRN, DOB) on top of the default
+  secret rules; enforced by the pre-push hook and a CI `phi-secret-scan` job.
+- `scripts/check_phi_guard.sh` asserts 4 directions (tree clean, every rule fires, placeholder
+  allowed, config self-clean). Run it after touching any rule.
+- **Two gitleaks blind spots found and closed:** it does not scan commit MESSAGES (the hook
+  now scans messages of commits not yet on any remote), and it does not scan its OWN config
+  file (assertion 4 covers it — a real id pasted in a comment there would ship unnoticed).
+- **Convention:** never write a real identifier into a commit message, PR body, or
+  `.gitleaks.toml`. Refer to an offending commit by SHA, never by value.
+- Outstanding maintainer decision: a real-looking sample id remains in history (commit
+  `0813447d`) and in the message of the commit that redacted it. Scrubbing = history rewrite.
+
 ## Now
 - Working **#56** (CI container smoke test) on branch `fix/ci-container-smoke-test`.
 - Process (per maintainer): **one branch out of develop at a time**; **CI must be green before merge**.

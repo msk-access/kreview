@@ -12,6 +12,9 @@
 #      allowlist) and lets real PHI through.
 #   3. PLACEHOLDER — the documented `P-0000000` placeholder is NOT flagged, so docs can
 #      show the shape of a sample id.
+#   4. CONFIG SELF-CHECK — .gitleaks.toml itself carries no real identifier. gitleaks skips
+#      its own config file, so anything pasted into a comment there is invisible to the
+#      scanner and would be published unnoticed. Only this script can catch it.
 #
 # Enforcement itself lives in .claude/hooks/gitleaks-pre-push.py (blocks `git push`) and
 # in the CI secret/PHI scan. This script validates the rules those rely on.
@@ -40,7 +43,7 @@ trap cleanup EXIT
 echo "PHI guard check — config: $CONFIG"
 
 # ── 1. NEGATIVE: the working tree must be clean ────────────────────────────────
-echo "  [1/3] repository tree is clean ..."
+echo "  [1/4] repository tree is clean ..."
 if ! gitleaks detect --source "$REPO_ROOT" --no-git --no-banner --redact >/dev/null 2>&1; then
   fail "the repository tree has PHI/secret findings, or a rule is false-positiving.
        Run: gitleaks detect --source . --no-git --redact"
@@ -48,7 +51,7 @@ fi
 echo "        OK — no findings"
 
 # ── 2. POSITIVE: synthetic PHI must be detected by every rule ──────────────────
-echo "  [2/3] synthetic PHI is detected ..."
+echo "  [2/4] synthetic PHI is detected ..."
 # The probe values are assembled at RUNTIME from fragments on purpose: if the literal
 # patterns appeared in this file, the guard would (correctly) flag this script itself and
 # block the push. Building them here keeps the guard strict — no path exemption needed.
@@ -84,7 +87,7 @@ done
 echo "        OK — all rules fired: $FIRED"
 
 # ── 3. PLACEHOLDER: the documented example id must be allowed ──────────────────
-echo "  [3/3] P-0000000 placeholder is allowed ..."
+echo "  [3/4] P-0000000 placeholder is allowed ..."
 rm -f "$TMP/probe.md" "$TMP/report.json"
 printf 'Example: P-0000000-T01-XS1.FSC.gene.parquet\n' > "$TMP/placeholder.md"
 if ! gitleaks detect --source "$TMP" --no-git --no-banner --redact -c "$CONFIG" >/dev/null 2>&1; then
@@ -93,4 +96,14 @@ if ! gitleaks detect --source "$TMP" --no-git --no-banner --redact -c "$CONFIG" 
 fi
 echo "        OK — placeholder not flagged"
 
-echo "PHI guard healthy: tree clean, all rules fire, placeholder allowed."
+# ── 4. CONFIG SELF-CHECK: .gitleaks.toml must contain no real identifiers ──────
+# gitleaks refuses to scan its own config, so copy it under a different name and scan that.
+echo "  [4/4] .gitleaks.toml carries no real identifiers ..."
+cp "$CONFIG" "$TMP/config-copy.txt"
+if ! gitleaks detect --source "$TMP" --no-git --no-banner --redact -c "$CONFIG" >/dev/null 2>&1; then
+  fail "a real identifier appears inside .gitleaks.toml. gitleaks does NOT scan its own
+       config, so this would be published unnoticed. Refer to commits by SHA, never by value."
+fi
+echo "        OK — config clean"
+
+echo "PHI guard healthy: tree clean, all rules fire, placeholder allowed, config clean."
