@@ -14,6 +14,7 @@ import pytest
 
 from kreview.eval_engine import (
     multimodal_ablation,
+    multimodal_eval,
     multimodal_merge,
     multimodal_prep,
     multimodal_single,
@@ -630,3 +631,100 @@ class TestMultimodalFullPipeline:
         stacking = results["stacking"]
         assert "auc_stacking_rf" in stacking
         assert "auc_stacking_xgb" in stacking
+
+
+# ── Tests: entry-point parity ─────────────────────────────────────────────────
+
+
+class TestMultimodalEntryPointParity:
+    """`multimodal_eval` and the scattered stages must stay one implementation.
+
+    `multimodal_eval` (single machine) and the Nextflow multistage pipeline both drive
+    the same stages, but through different entry points. They were previously separate
+    implementations, and the drift between them is what allowed a bug fixed in one path
+    to persist in the other. These tests fail if the two ever produce different result
+    schemas again.
+    """
+
+    # Keys that only the in-process orchestrator can know: they describe a single
+    # invocation, whereas the scattered pipeline has no one process that sees them.
+    ORCHESTRATOR_ONLY = {
+        "models_requested",
+        "gpu_models_requested",
+        "model_errors",
+        "ablation_error",
+    }
+
+    def _run_stages_manually(self, results_dir: Path, out: Path, model: str) -> dict:
+        """Drive prep -> single -> ablation -> merge the way Nextflow scatters them."""
+        out.mkdir(parents=True, exist_ok=True)
+        multimodal_prep(results_dir=results_dir, output_dir=out)
+        multimodal_single(
+            stacking_matrix_path=out / "stacking_matrix.parquet",
+            model_name=model,
+            n_folds=3,
+            random_state=42,
+            output_dir=out,
+        )
+        multimodal_ablation(
+            stacking_matrix_path=out / "stacking_matrix.parquet",
+            stacking_results_dir=out,
+            n_folds=3,
+            random_state=42,
+            output_dir=out,
+        )
+        return multimodal_merge(
+            stacking_results_dir=out,
+            prep_metadata_path=out / "prep_metadata.json",
+            ablation_path=out / "ablation_results.json",
+            output_dir=out,
+        )
+
+    def test_both_entry_points_produce_the_same_schema(
+        self, sample_evaluator_jsons, tmp_path
+    ):
+        """Same keys from both drivers, modulo the documented orchestrator-only ones."""
+        via_orchestrator = multimodal_eval(
+            results_dir=sample_evaluator_jsons, models=("rf",), n_folds=3
+        )
+        via_stages = self._run_stages_manually(
+            sample_evaluator_jsons, tmp_path / "staged", "rf"
+        )
+
+        only_orchestrator = set(via_orchestrator) - set(via_stages)
+        only_stages = set(via_stages) - set(via_orchestrator)
+
+        assert only_orchestrator <= self.ORCHESTRATOR_ONLY, (
+            "multimodal_eval grew keys the scattered pipeline does not produce: "
+            f"{sorted(only_orchestrator - self.ORCHESTRATOR_ONLY)}"
+        )
+        assert not only_stages, (
+            "the scattered pipeline produces keys multimodal_eval drops: "
+            f"{sorted(only_stages)}"
+        )
+
+    def test_orchestrator_reports_what_it_requested(self, sample_evaluator_jsons):
+        """The orchestrator-only keys are actually populated, not just declared."""
+        results = multimodal_eval(
+            results_dir=sample_evaluator_jsons, models=("rf",), n_folds=3
+        )
+        assert results["models_requested"] == ["rf"]
+        assert results["gpu_models_requested"] == []
+        # A fully successful run must not advertise failures.
+        assert "model_errors" not in results
+
+    def test_no_models_requested_raises(self, sample_evaluator_jsons):
+        """An empty model set is a caller error and must fail loudly."""
+        with pytest.raises(ValueError, match="no models requested"):
+            multimodal_eval(
+                results_dir=sample_evaluator_jsons, models=(), gpu_models=(), n_folds=3
+            )
+
+    def test_leaves_no_temporary_artifacts_behind(
+        self, sample_evaluator_jsons, tmp_path
+    ):
+        """Intermediates go to a temp dir that is cleaned up; callers persist results."""
+        before = set(Path(sample_evaluator_jsons).iterdir())
+        multimodal_eval(results_dir=sample_evaluator_jsons, models=("rf",), n_folds=3)
+        after = set(Path(sample_evaluator_jsons).iterdir())
+        assert after == before, f"stray artifacts written: {sorted(after - before)}"
