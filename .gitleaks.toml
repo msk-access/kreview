@@ -1,0 +1,79 @@
+# gitleaks configuration for kreview — secrets AND PHI/PII.
+#
+# WHY THIS EXISTS
+#   kreview is a PUBLIC repository that also carries an agent memory store
+#   (`.agents/memory/`) and learning logs (`.agents/learnings/`) which are committed.
+#   Anything written there is published. This config extends gitleaks' secret
+#   detection with patient-identifier patterns so that PHI/PII is blocked at the
+#   push boundary, not discovered after it is public.
+#
+# HOW IT IS ENFORCED
+#   `.claude/hooks/gitleaks-pre-push.py` runs `gitleaks detect --source .` before any
+#   `git push`. gitleaks auto-discovers this file at the repo root, so these rules are
+#   applied automatically — no flag needed. A finding DENIES the push (it does not warn
+#   and continue). See AGENTS.md ("No PHI or personal data in committed files").
+#
+# PLACEHOLDER POLICY
+#   Documentation needs to show the shape of a sample ID. The convention is the
+#   all-zeros patient id `P-0000000` (e.g. `P-0000000-T01-XS1`). That exact form is
+#   allowlisted below; any other 7-digit patient id is treated as real and blocked.
+#   Go's RE2 engine has no negative lookahead, so this is expressed as an allowlist
+#   rather than in the pattern itself.
+#
+# TESTING
+#   scripts/check_phi_guard.sh asserts both directions: the clean tree passes, and a
+#   file containing synthetic PHI is blocked. Run it after changing any rule here.
+
+title = "kreview secrets + PHI"
+
+# Keep every built-in gitleaks secret rule (API keys, tokens, private keys).
+# Only ADD to them here — do not restate default rules, to avoid drift/duplication.
+[extend]
+useDefault = true
+
+# ── Global allowlist ────────────────────────────────────────────────────────────
+# Applies to all rules below. Keep this list tiny and obviously-synthetic.
+[allowlist]
+description = "Documentation placeholders and one immutable historical commit"
+regexes = [
+  '''P-0000000''',      # canonical all-zeros patient-id placeholder for docs/examples
+]
+# The initial scaffold commit carries a real-looking sample id (P-0000280-T02-XS1) in three
+# doc files. It was replaced with the P-0000000 placeholder on the current tree, but it
+# remains in git history and CANNOT be removed without rewriting published history.
+# gitleaks scans full history on the first push of a new branch, so without this entry every
+# such push would be denied. Allowlisting the single commit keeps the guard effective for all
+# NEW content while tolerating immutable history.
+#   NOTE: if that id was ever a real patient identifier, scrubbing history is a separate
+#   decision for the maintainers — this entry does not make it any more or less public.
+commits = [
+  "0813447dc5b4c9717550302b596dbddd35a4a8d5",  # feat: initial nbdev scaffold with agent config
+]
+
+# ── PHI / PII rules ─────────────────────────────────────────────────────────────
+
+[[rules]]
+id = "msk-dmp-patient-id"
+description = "MSK DMP/IMPACT patient or sample identifier (potential PHI)"
+# Matches the patient portion, which also covers full sample ids such as
+# P-0000000-T01-XS1 / P-0000000-T02-IM6.
+regex = '''P-[0-9]{7}'''
+tags = ["phi", "patient-id"]
+
+[[rules]]
+id = "us-ssn"
+description = "US Social Security Number (PII)"
+regex = '''\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b'''
+tags = ["pii", "ssn"]
+
+[[rules]]
+id = "medical-record-number"
+description = "Medical Record Number (PHI)"
+regex = '''(?i)\bMRN\b[ \t]*[:#=]?[ \t]*[0-9]{6,10}'''
+tags = ["phi", "mrn"]
+
+[[rules]]
+id = "date-of-birth"
+description = "Date of birth field (PHI)"
+regex = '''(?i)\b(?:dob|date[ _-]of[ _-]birth)\b[ \t]*[:=]?[ \t]*[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}'''
+tags = ["phi", "dob"]
