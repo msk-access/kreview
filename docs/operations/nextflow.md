@@ -34,10 +34,9 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
     - `report.nf` — HTML dashboard generation (6 inputs: matrices, JSONs, stats, QC, joblib, scoreboard)
     - `report_multimodal.nf` — Multimodal stacking dashboard
 
-The pipeline supports two modes controlled by `params.pipeline_mode`:
-
-- **`monolithic`** (default) — Single-process `KREVIEW_RUN` for backward compatibility.
-- **`multistage`** — Decomposed DAG with per-evaluator parallelism:
+The pipeline is a single decomposed DAG with per-evaluator parallelism. (The former
+`monolithic` mode and its `params.pipeline_mode` switch were removed in v0.0.29 — it was a
+second, unmaintained implementation of the same pipeline.)
 
 ```mermaid
 graph LR
@@ -147,7 +146,6 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --healthy_xs2_samplesheet /data/healthy2.csv \
   --cbioportal_dir /data/msk_solid_heme/ \
   --krewlyzer_dir /data/krewlyzer_parquets/ \
-  --pipeline_mode multistage \
   --run_gpu_eval true \
   --gpu_models "tabpfn,tabpfn_ft,tabicl,tabicl_ft" \
   --run_multimodal_eval true \

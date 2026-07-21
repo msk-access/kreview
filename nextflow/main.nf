@@ -37,10 +37,6 @@ def helpMessage() {
                                 eval  = Label → Extract → Select → Eval → Report
                                 label = Label only (no feature extraction required)
 
-     Pipeline Mode (eval workflow only):
-     --pipeline_mode            'monolithic' (default) or 'multistage'
-                                multistage = Label → Extract(×N) → Fuse → Eval → Report
-
      ML Engine:
      --outdir                   Output directory (default: ./results)
      --cv_folds                 Cross Validation folds (default: 5, slurm: 10)
@@ -64,7 +60,7 @@ def helpMessage() {
      --cvd_safe                 Use colorblind-safe palette (default: false)
      --compute_univariate_auc   Compute per-feature univariate AUC (default: false)
 
-     Multistage Options (--pipeline_mode multistage):
+     Multistage Options:
      --run_gpu_eval             Enable GPU evaluation step (default: false)
      --gpu_models               Comma-separated GPU models: tabpfn,tabicl (default: tabpfn,tabicl)
      --min_evaluators           Min evaluators per sample for fuse (default: 1)

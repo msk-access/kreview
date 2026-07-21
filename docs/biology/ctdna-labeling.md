@@ -144,9 +144,9 @@ THEN → label as "Undetermined"
     - `Undetermined` samples are excluded from binary classification (`build_binary_target()` ignores them).
 
 !!! tip "When to use CH filtering"
-    CH filtering is **recommended for production cohorts** where elderly patients with CHIP may inflate the positive class. Pass the `--ch-hotspot-maf` flag to `kreview label`, `kreview extract`, or `kreview run`:
+    CH filtering is **recommended for production cohorts** where elderly patients with CHIP may inflate the positive class. Pass the `--ch-hotspot-maf` flag to `kreview label` or `kreview extract`:
     ```bash
-    kreview run \
+    kreview label \
       --cancer-samplesheet ... \
       --ch-hotspot-maf /path/to/ch_hotspots.maf
     ```

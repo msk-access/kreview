@@ -31,7 +31,6 @@ class TestTopLevel:
         """All registered commands appear in the help output."""
         result = runner.invoke(app, ["--help"])
         expected_commands = [
-            "run",
             "label",
             "extract",
             "fuse",
@@ -43,6 +42,18 @@ class TestTopLevel:
         for cmd in expected_commands:
             assert cmd in result.output, f"Command '{cmd}' not found in --help output"
 
+    def test_monolithic_run_command_is_gone(self):
+        """`kreview run` was removed; the pipeline is Nextflow-multistage only.
+
+        Guards against the legacy all-in-one orchestrator being reintroduced. It was a
+        second, drifting implementation of the whole pipeline (see #55) and the single
+        largest source of the fix-one-path-miss-the-other bugs.
+        """
+        assert "run" not in [
+            (c.name or c.callback.__name__) for c in app.registered_commands
+        ], "the monolithic `run` command was reintroduced"
+        assert runner.invoke(app, ["run", "--help"]).exit_code != 0
+
 
 # ── Standalone commands ──
 
@@ -53,7 +64,6 @@ class TestStandaloneCommands:
     @pytest.mark.parametrize(
         "cmd",
         [
-            "run",
             "label",
             "extract",
             "fuse",

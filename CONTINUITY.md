@@ -2,7 +2,7 @@
 
 **Goal:** Harden kreview against the recurring release-breakage classes surfaced in the
 2026-07 deep review, and stand up an enforcing agent harness so the fixes stay fixed.
-**Phase:** Harness spine built (Phase 1+2); fixes tracked as GitHub issues, not yet started.
+**Phase:** Harness enforcing; #55 cleanup landed. Remaining: #80 → #79 → hardening issues.
 
 ---
 
@@ -36,24 +36,30 @@
   `0813447d`) and in the message of the commit that redacted it. Scrubbing = history rewrite.
 
 ## Now
+- **#55 cleanup done** on `chore/remove-monolithic-path`: `kreview run` (924 lines), `run.nf`,
+  the `pipeline_mode` fork, and 4 orphaned bulk `.nf` modules deleted; docs swept; guard test
+  added. Nextflow multistage is the only run path.
+- Nextflow support policy recorded: **v25–v26**, stub test only (see #80).
+
+## Previously
 - Working **#56** (CI container smoke test) on branch `fix/ci-container-smoke-test`.
 - Process (per maintainer): **one branch out of develop at a time**; **CI must be green before merge**.
 
 ## Next
-1. Finish #56 (smoke-test the built image in CI; build images before PyPI publish in release.yml).
-2. **#55** collapse monolithic layer to thin orchestrators (big notebook refactor; keeps
-   `kreview run` + `multimodal run` as thin wrappers over ONE impl, deletes `multimodal_eval()`
-   + inlined eval block, fixes H1 structurally, flips NF default to multistage) → **#61** fail-loud.
-3. **#58/#59/#60** Nextflow (needs a local `nextflow` install or `nf-test` to verify) → **#63** tests.
-4. Add `model:` pins + sharpened triggers to the 10 `.agents/skills/*` frontmatters.
+1. **#80** — make `nextflow.config` parse on Nextflow **v25–v26** (3 blockers: try/catch around
+   `includeConfig`, `${manifest.version}` container refs, `${HOME}` interpolation) + set a real
+   version bound. Scope: **stub test only**, no nf-test harness.
+2. **#79** — reporting-layer redesign (after #80).
+3. **#61** fail-loud, **#58/#59/#60** Nextflow hardening, **#63** tests.
+4. Add `model:` pins + sharpened triggers to the `.agents/skills/*` frontmatters.
 
-## Design decision (monolithic path) — 2026-07-11
-Keep `kreview run` and `kreview eval multimodal run` as **thin orchestrators** over a single
-shared implementation (not delete them). The target was the duplicated *implementation*, not
-the *commands*: once thin (zero logic of their own), there is nothing left to drift, and the
-README's local UX is preserved. `multimodal_eval()` and the inlined eval block are deleted as
-the duplicates. Nextflow: flip default `pipeline_mode` to `multistage`, deprecate monolithic
-mode (keep `KREVIEW_RUN` as a trivial wrapper). H1 is folded into this refactor (no interim patch).
+## Design decision (monolithic path) — SUPERSEDED 2026-07-21
+Originally: keep `kreview run` as a thin orchestrator. **Superseded** once evidence showed the
+path was unused (recent Nextflow work touched `run.nf` once vs 9× for `eval_gpu_single`; README
+and docs both used multistage; CI never exercised it). It was **deleted** instead, along with
+`run.nf`, the `pipeline_mode` fork, and four orphaned bulk `.nf` modules. `kreview eval
+multimodal run` is kept as the single-shot multimodal entry point (a thin wrapper over the
+decomposed stages, from #77).
 
 ---
 

@@ -19,7 +19,7 @@ The easiest way to run `kreview` without managing external dependencies is to us
 ```bash
 docker pull ghcr.io/msk-access/kreview:latest
 docker run -v /your/data:/data ghcr.io/msk-access/kreview:latest \
-  kreview run --cancer-samplesheet /data/cancer.csv ...
+  label --cancer-samplesheet /data/cancer.csv ...   # stages are driven by Nextflow
 ```
 For more complex execution commands (e.g., binding multiple access paths), see the [Docker Operations Guide](../operations/docker.md).
 

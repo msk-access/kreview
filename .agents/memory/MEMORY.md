@@ -16,3 +16,5 @@ Keep this file to index lines only; the content lives in the linked files.
   and decomposed paths must call one shared function; drift is the top bug source.
 - [reference-hpc-singularity-gotchas.md](reference-hpc-singularity-gotchas.md) — Singularity
   PATH stripping, read-only /home, CUDA OOM, cache=lenient: the recurring HPC environment traps.
+- [reference-nextflow-support-policy.md](reference-nextflow-support-policy.md) — supports
+  Nextflow v25–v26; stub run only, no nf-test harness.
