@@ -36,7 +36,17 @@
   `0813447d`) and in the message of the commit that redacted it. Scrubbing = history rewrite.
 
 ## Now
-- **PR-A (#59 + #60) implemented** on `fix/nextflow-fail-loud`, part of the fail-loud sweep.
+- **PR-B (#61) implemented** on `fix/python-fail-loud` — the Python half of the fail-loud sweep.
+  - DuckDB (`_read_parquet_chunk`, `run_feature_sql`, `nbs/00_core.ipynb`): classify
+    `OperationalError` (retry→raise) vs `ProgrammingError`/`DataError` (raise now); no more
+    `except→empty` masking. "No files" still legitimately empty.
+  - eval_engine (`nbs/02_eval_engine.ipynb`): `mutual_info_score` and the ablation inner-CV
+    fold now **raise** instead of scoring `0.0` (benign degenerate cases already handled
+    upfront). New shared `_numeric_feature_columns` consolidates 2 duplicated `select_dtypes`
+    filters and loudly flags object-dtype feature columns.
+  - Verified: export+black **zero-diff** (idempotent), 364 pytest passed / 44.64% cov (8 new
+    tests), black/ruff/PHI/version clean. Issue counts were stale (5→4 return-0.0, 36 not 62).
+- **PR-A (#59 + #60) merged** (#87) on `fix/nextflow-fail-loud`, part of the fail-loud sweep.
   Terminal-failure policy recorded (optional stages degrade AND surface loudly; mandatory
   terminate) in `.agents/memory/feedback-terminal-failure-policy.md`.
   - **#59** — GPU eval/ablate/multimodal wrappers now exit non-zero while `task.attempt <=
@@ -56,11 +66,11 @@
 - Process (per maintainer): **one branch out of develop at a time**; **CI must be green before merge**.
 
 ## Next
-1. **PR-B (#61)** — Python fail-loud: DuckDB `except→empty` classify transient-vs-schema;
-   narrow the 2 masked `return 0.0` excepts (keep the 3 legitimate); correct #61's stale counts.
-2. **#79** — reporting-layer redesign.
-3. **#58** Nextflow shared labels, **#63** tests.
-4. Add `model:` pins + sharpened triggers to the `.agents/skills/*` frontmatters.
+1. **#79** — reporting-layer redesign.
+2. **#58** Nextflow shared labels, **#63** tests, **#84** publishDir nesting.
+3. Add `model:` pins + sharpened triggers to the `.agents/skills/*` frontmatters.
+4. Consider a full audit of the remaining 36 `except Exception` in eval_engine (deferred from
+   #61 as a larger, riskier sweep — the high-value masking is now fixed).
 
 ## Design decision (monolithic path) — SUPERSEDED 2026-07-21
 Originally: keep `kreview run` as a thin orchestrator. **Superseded** once evidence showed the

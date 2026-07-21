@@ -221,7 +221,8 @@ def mutual_info_score(
 
     Returns:
         Mutual information score (float, >= 0). Higher means more informative.
-        Returns 0.0 if the feature is constant or computation fails.
+        Returns 0.0 if the feature is constant; raises if the MI computation itself
+        fails (a malformed matrix is a bug, not a zero-information feature).
     """
     from sklearn.feature_selection import mutual_info_classif
 
@@ -236,8 +237,12 @@ def mutual_info_score(
         mi = mutual_info_classif(X, y, random_state=random_state, n_neighbors=3)
         return float(mi[0])
     except Exception as exc:
-        log.warning("mutual_info_failed", error=str(exc))
-        return 0.0
+        # Fail loud, not to 0.0 (#61). The only benign degenerate case -- a constant feature --
+        # is handled by the np.std(X) == 0 guard above, so any exception here is a real error
+        # (a malformed matrix: object dtype, shape mismatch) that would otherwise masquerade as
+        # a zero-information feature. Surface it with context instead of scoring it 0.
+        log.error("mutual_info_failed", error=str(exc))
+        raise
 
 
 # %% ../nbs/02_eval_engine.ipynb #69946ce8
@@ -1023,13 +1028,42 @@ def _inner_cv_sensitivity(
                 fold_sensitivities.append(0.0)
 
         except Exception as e:
-            log.debug("inner_cv_fold_error", fold=fold_idx, error=str(e))
-            fold_sensitivities.append(0.0)
+            # Fail loud, not to 0.0 (#61). The benign degenerate cases -- <2 classes, too few
+            # samples per class -- are handled before the fold loop, and StratifiedKFold keeps
+            # both classes in each fold, so an exception here is a real error (a malformed
+            # matrix reaching model.fit). Appending 0.0 would let a systematically broken
+            # matrix score every fold 0 and drive ablation off garbage. Surface it instead.
+            log.error("inner_cv_fold_error", fold=fold_idx, error=str(e))
+            raise
 
     if not fold_sensitivities:
         return 0.0
 
     return float(np.mean(fold_sensitivities))
+
+
+def _numeric_feature_columns(df, meta_cols):
+    """Numeric feature columns of a matrix, with the metadata columns removed.
+
+    Also fails loud on a data-plumbing bug (#61): a column that is neither numeric nor known
+    metadata should have been a numeric feature, so an object dtype there means a feature was
+    not coerced upstream. ``select_dtypes`` would drop it silently and the model would quietly
+    train on fewer features than intended; instead this logs it at error level with the
+    offending dtypes. Logged, not raised: ``meta_cols`` may not enumerate every possible
+    metadata column, and over-crashing a long HPC run on an unlisted string column would be
+    worse than a loud, visible flag.
+    """
+    numeric = set(df.select_dtypes(include=np.number).columns)
+    feature_cols = [c for c in df.columns if c in numeric and c not in meta_cols]
+    suspicious = [c for c in df.columns if c not in numeric and c not in meta_cols]
+    if suspicious:
+        log.error(
+            "non_numeric_feature_columns_dropped",
+            columns=suspicious,
+            dtypes={c: str(df[c].dtype) for c in suspicious},
+            impact="excluded from the feature matrix -- likely a data-plumbing bug (#61)",
+        )
+    return feature_cols
 
 
 def ablate_feature_groups(
@@ -1126,11 +1160,7 @@ def ablate_feature_groups(
     sample_labels = model_df["label"].values  # 4-tier labels for inner CV
 
     # ── 3. Identify feature columns and groups ──
-    feature_cols = [
-        c
-        for c in model_df.select_dtypes(include=np.number).columns
-        if c not in LABEL_META_COLS
-    ]
+    feature_cols = _numeric_feature_columns(model_df, LABEL_META_COLS)
     if not feature_cols:
         log.error("ablation_no_features", evaluator=evaluator)
         return {"evaluator": evaluator, "error": "no_feature_columns"}
@@ -4378,11 +4408,7 @@ def multimodal_prep(
 
         super_df, y_raw = build_binary_target(super_df, "label")
 
-        feature_cols = [
-            c
-            for c in super_df.select_dtypes(include=np.number).columns
-            if c not in LABEL_META_COLS
-        ]
+        feature_cols = _numeric_feature_columns(super_df, LABEL_META_COLS)
         if not feature_cols:
             raise ValueError("No numeric feature columns in super_matrix")
 

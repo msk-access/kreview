@@ -310,6 +310,10 @@ d = {
                 "eval_engine.html#_mi_reduce_confirmed",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine._numeric_feature_columns": (
+                "eval_engine.html#_numeric_feature_columns",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine._optimal_threshold": (
                 "eval_engine.html#_optimal_threshold",
                 "kreview/eval_engine.py",
