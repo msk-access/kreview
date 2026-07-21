@@ -128,9 +128,17 @@ process KREVIEW_MULTIMODAL_SINGLE_GPU {
     GPU_EXIT=\$?
     set -e
 
-    # Always produce output JSON — even on total failure.
+    # Failure handling — see #59 and the collect() deadlock history (commits 698c72e /
+    # dcfe356). Fail loud first (exit non-zero) so errorStrategy='retry' climbs the
+    # memory/partition ladder; degrade gracefully (error-JSON + exit 0) only once retries
+    # are exhausted, keeping the channel-closing invariant so collect() cannot deadlock.
     if [ ! -f single_out/stacking_${model_name}_results.json ]; then
-        echo "WARNING: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT), emitting error JSON" >&2
+        if [ ${task.attempt} -le ${task.maxRetries} ]; then
+            RETRY_CODE=\$GPU_EXIT; [ "\$RETRY_CODE" -eq 0 ] && RETRY_CODE=1
+            echo "ERROR: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT), attempt ${task.attempt}/\$((${task.maxRetries}+1)) — failing to trigger retry + memory/partition escalation" >&2
+            exit \$RETRY_CODE
+        fi
+        echo "WARNING: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT) after ${task.maxRetries} retries — emitting error JSON and continuing" >&2
         echo '{"model": "${model_name}", "error": "gpu_eval_failed", "exit_code": '\$GPU_EXIT'}' > "single_out/stacking_${model_name}_results.json"
     fi
 

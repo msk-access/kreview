@@ -134,6 +134,33 @@ if grep -q 'no process matching config selector' "$WORK/eval.out"; then
     fail=1
 fi
 
+# --- 6. #60 regression: the matrix<->best_subset pairing must not drop an evaluator -----
+# A standalone channel-logic test (feeds 3 matrices + 2 best_subsets, asserts all 3 survive
+# with a NO_BEST_SUBSET fallback). Guards against a revert to combine(by:0).
+echo "== #60 drop-guard (channel join keeps evaluators)"
+if "$NF" -log "$WORK/join.log" run "$REPO/scripts/test_nextflow_join_dropguard.nf" \
+        > "$WORK/join.out" 2>&1; then
+    echo "   $(grep -o 'PASS (#60):.*' "$WORK/join.out" | head -1)"
+else
+    echo "FAILED: #60 drop-guard — an evaluator was dropped or mis-paired:" >&2
+    grep -iE 'DROP BUG|FALLBACK|PAIRING|assert' "$WORK/join.out" | head -3 | sed 's/^/    /' >&2
+    fail=1
+fi
+
+# --- 7. #59 structural: GPU wrappers must keep the retry-then-degrade guard -------------
+# Behaviour can't be exercised by a stub (stubs always succeed), so assert the guard is
+# present: each GPU wrapper must fail (exit non-zero) before its retries are exhausted, so
+# errorStrategy='retry' actually climbs the memory ladder instead of the old always-exit-0.
+echo "== #59 structural (GPU wrappers engage the retry ladder)"
+for m in eval_gpu_single ablate_gpu_single multimodal_single; do
+    f="$REPO/nextflow/modules/local/kreview/$m.nf"
+    if ! grep -q 'task.attempt.*-le.*task.maxRetries' "$f"; then
+        echo "FAILED: $m.nf lost the '[ \${task.attempt} -le \${task.maxRetries} ]' retry guard (#59)" >&2
+        fail=1
+    fi
+done
+[ "$fail" -eq 0 ] && echo "   all GPU wrappers retain the retry-then-degrade guard"
+
 [ "$fail" -eq 0 ] || exit 1
 
-echo "OK: DAG wires end to end on $("$NF" -v 2>&1) (eval + label workflows)."
+echo "OK: DAG wires end to end on $("$NF" -v 2>&1) (eval + label workflows; #59/#60 guards pass)."

@@ -103,9 +103,20 @@ process KREVIEW_EVAL_GPU_SINGLE {
         mv "\$f" "\${base}_gpu_model_results.json"
     done
 
-    # Always produce output JSON — even on total failure.
+    # Failure handling — see #59 and the collect() deadlock history (commits 698c72e /
+    # dcfe356). On failure we FAIL LOUD first: exit non-zero so errorStrategy='retry'
+    # re-runs the task up the memory/partition ladder (64GB*attempt, gpushort->gpu). Only
+    # once the retries are exhausted do we degrade gracefully — emit an error-flagged JSON
+    # and exit 0 — so the output channel still closes and the downstream collect() cannot
+    # deadlock (Nextflow only forwards outputs from exit-0 tasks). The error JSON is
+    # surfaced downstream (scoreboard/report flag the evaluator as failed), not masked.
     if ! ls *_gpu_model_results.json 1>/dev/null 2>&1; then
-        echo "WARNING: GPU eval failed for ${evaluator} (exit=\$GPU_EXIT), emitting error JSON" >&2
+        if [ ${task.attempt} -le ${task.maxRetries} ]; then
+            RETRY_CODE=\$GPU_EXIT; [ "\$RETRY_CODE" -eq 0 ] && RETRY_CODE=1
+            echo "ERROR: GPU eval failed for ${evaluator} (exit=\$GPU_EXIT), attempt ${task.attempt}/\$((${task.maxRetries}+1)) — failing to trigger retry + memory/partition escalation" >&2
+            exit \$RETRY_CODE
+        fi
+        echo "WARNING: GPU eval failed for ${evaluator} (exit=\$GPU_EXIT) after ${task.maxRetries} retries — emitting error JSON and continuing (evaluator flagged failed downstream)" >&2
         echo '{"evaluator": "${evaluator}", "error": "all_gpu_models_failed", "exit_code": '\$GPU_EXIT'}' \
             > "${evaluator}_gpu_model_results.json"
     fi

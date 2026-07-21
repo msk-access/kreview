@@ -36,21 +36,31 @@
   `0813447d`) and in the message of the commit that redacted it. Scrubbing = history rewrite.
 
 ## Now
-- **#80 done** on `fix/nextflow-v26-compat`: `nextflow.config` now parses on Nextflow 24+.
-  Fixed the three blockers (try/catch around `includeConfig` → nf-core ternary; 5
-  `${manifest.version}` → `params.kreview_version`; `${HOME}` → `env('HOME')`), removed 2
-  stale `withName:` selectors left by #55, set `nextflowVersion = '!>=25.04.0'`, added a
-  `stub` profile + `stub:` blocks on all 17 processes + `scripts/nextflow_stub_test.sh`,
-  wired into CI on a 25.04.6/26.04.6 matrix. Verified locally on 25.04.6, 25.10.6, 26.04.6.
+- **PR-A (#59 + #60) implemented** on `fix/nextflow-fail-loud`, part of the fail-loud sweep.
+  Terminal-failure policy recorded (optional stages degrade AND surface loudly; mandatory
+  terminate) in `.agents/memory/feedback-terminal-failure-policy.md`.
+  - **#59** — GPU eval/ablate/multimodal wrappers now exit non-zero while `task.attempt <=
+    task.maxRetries` (climb the 64→256 GB / gpushort→gpu ladder), degrade to error-JSON + exit
+    0 only on the terminal attempt (keeps the collect() channel-closing invariant, `698c72e`).
+  - **#60** — `combine(by:0)` → `join(by:0, remainder:true)` + `NO_BEST_SUBSET` fallback + loud
+    warn on the matrix↔best_subset pairings, so a missing best_subset no longer drops the
+    evaluator. Standalone regression test `scripts/test_nextflow_join_dropguard.nf`.
+  - Report surfacing — scoreboard gains `status`/`error_detail`, logs degraded evaluators, emits
+    a FAILED row instead of dropping on parse error; both `.qmd` templates show status + a
+    callout (and their stale `kreview run` text fixed).
+  - Verified: full stub test (25.04.6 + 26.04.6, #59/#60 guards), 356 pytest passed / 43.98%
+    cov, black/ruff/PHI/version all clean.
+- **#80 done** (merged): `nextflow.config` parses on v25–v26; stub test + CI matrix.
 
 ## Previously
-- Working **#56** (CI container smoke test) on branch `fix/ci-container-smoke-test`.
 - Process (per maintainer): **one branch out of develop at a time**; **CI must be green before merge**.
 
 ## Next
-1. **#79** — reporting-layer redesign (next).
-2. **#61** fail-loud, **#58/#59/#60** Nextflow hardening, **#63** tests.
-3. Add `model:` pins + sharpened triggers to the `.agents/skills/*` frontmatters.
+1. **PR-B (#61)** — Python fail-loud: DuckDB `except→empty` classify transient-vs-schema;
+   narrow the 2 masked `return 0.0` excepts (keep the 3 legitimate); correct #61's stale counts.
+2. **#79** — reporting-layer redesign.
+3. **#58** Nextflow shared labels, **#63** tests.
+4. Add `model:` pins + sharpened triggers to the `.agents/skills/*` frontmatters.
 
 ## Design decision (monolithic path) — SUPERSEDED 2026-07-21
 Originally: keep `kreview run` as a thin orchestrator. **Superseded** once evidence showed the
