@@ -80,6 +80,51 @@ jobs:
       - name: Scan repository for secrets and PHI
         run: gitleaks detect --source . --no-banner --redact --exit-code 1
 
+  # ── Nextflow DAG smoke test ──────────────────────────────────────────────────
+  # Guards the regression class from #80: nextflow.config used constructs (try/catch around
+  # includeConfig, ${manifest.version}, ${HOME}) that modern Nextflow rejects, so the pipeline
+  # would not even parse — and nothing in CI noticed, because CI never ran Nextflow.
+  #
+  # The matrix pins both ends of the supported range (v25 and v26) so a construct that works
+  # on one but not the other cannot land. This is a wiring test only: every process runs its
+  # `stub:` block. A full nf-test harness is out of scope by maintainer decision.
+  nextflow-stub:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor and ceiling of the documented support range (manifest.nextflowVersion).
+        # Pinned rather than "latest-stable" so a new Nextflow release cannot turn CI red
+        # without a deliberate bump. Both were verified locally when #80 landed.
+        nxf_ver: ["25.04.6", "26.04.6"]
+    env:
+      # Job-scoped, not step-scoped: the launcher consults NXF_VER at run time too, so
+      # scoping it to the install step alone would let the actual test run on some other
+      # version and quietly make this matrix meaningless.
+      NXF_VER: ${{ matrix.nxf_ver }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Nextflow 25.04 does not start on a JDK newer than 21 ("Unsupported class file major
+      # version"), so pin 17 rather than inheriting whatever the runner ships.
+      - name: Set up Java (Nextflow requires 17+)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Installed from RUNNER_TEMP, not the checkout: the installer writes a file called
+      # `nextflow`, and the repo already has a directory of that name, which makes it abort.
+      - name: Install Nextflow ${{ matrix.nxf_ver }}
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL https://get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+          nextflow -v
+
+      - name: Stub-run the DAG (config parses, all profiles resolve, wiring holds)
+        run: bash scripts/nextflow_stub_test.sh
+
   # ── Docker image builds (both targets, in parallel) ─────────────────────────
   docker:
     runs-on: ubuntu-latest

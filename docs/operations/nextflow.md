@@ -170,6 +170,37 @@ nextflow run /path/to/kreview/nextflow/main.nf \
 
 ---
 
+## Supported Nextflow versions
+
+`kreview` supports **Nextflow v25–v26**. `manifest.nextflowVersion` pins a hard floor of
+`25.04.0`, so an older Nextflow fails immediately with a clear message instead of a confusing
+parse error. CI runs the stub test against both ends of the range (25.04.6 and 26.04.6).
+
+The floor exists because `nextflow.config` uses `env('VAR')` to read environment variables,
+which Nextflow added in 24.11. Older releases also accepted `try`/`catch` and `${HOME}`
+interpolation in config; Nextflow 24+ rejects both, which is why the config was reworked.
+
+### Smoke-testing the DAG (`-profile stub`)
+
+Every process declares a `stub:` block that creates its declared outputs and nothing else.
+Combined with `-stub-run`, this exercises the whole DAG — config parsing, profile resolution,
+module includes and channel wiring — in seconds, with no data and no containers:
+
+```bash
+bash scripts/nextflow_stub_test.sh            # uses `nextflow` from PATH
+bash scripts/nextflow_stub_test.sh /path/to/nextflow
+```
+
+The script checks every profile resolves, runs both the `eval` and `label` workflows, and
+asserts from `execution_trace.txt` that all 17 processes ran and every task reached
+`COMPLETED`. It also fails on a `withName:` selector naming a process that no longer exists —
+silent config rot that Nextflow only reports as a warning.
+
+This is a **wiring** test, not a correctness test: no real computation happens. Run it after
+changing any `.nf` file, the DAG, or `nextflow.config`.
+
+---
+
 ## Profiling & Scaling (SLURM)
 
 Because `kreview` accesses thousands of files aggressively using DuckDB, network filesystem socket limits (`Ulimit N`) behave entirely differently between a desktop Mac and a remote HPC SLURM cluster.

@@ -23,9 +23,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ran straight off `EXTRACT`, bypassing `SELECT`/`ABLATE` — re-enabling one would have
   produced different, incorrect results.
 
+### Fixed
+- **`nextflow.config` would not parse on Nextflow 24 or newer** (#80), so the pipeline could
+  not start at all on a current Nextflow — an outright adoption blocker, and invisible because
+  nothing in CI ran Nextflow. Three constructs were rejected by the modern config parser:
+  - `try`/`catch` around the nf-core institutional `includeConfig`. Replaced with the nf-core
+    ternary idiom, which also honours `NXF_OFFLINE` (an `if` statement is rejected too).
+  - Five `${manifest.version}` references in container tags — `manifest` is not resolvable
+    from `process`/`profiles` scope. The version now lives in `params.kreview_version`, which
+    the manifest reads back, so there is still exactly one version literal in the file.
+  - `${HOME}` interpolation in the Singularity `cacheDir`, now `env('HOME')`.
+- **Stale `withName:` selectors** for `KREVIEW_EVAL_CPU`/`KREVIEW_EVAL_GPU`, left behind when
+  the Gen-1 bulk modules were deleted. They matched no process and made Nextflow warn on every
+  run; the resource settings they carried applied to nothing.
+
+### Added
+- **Nextflow stub smoke test** (`scripts/nextflow_stub_test.sh`, and a `stub` profile). Every
+  process now declares a `stub:` block, so `-stub-run -profile stub` exercises the entire DAG
+  — config parsing, all four profiles, module includes and channel wiring — in seconds without
+  data or containers. CI runs it against both ends of the supported range. It asserts from
+  `execution_trace.txt` that all 17 processes ran and every task reached `COMPLETED`, and
+  fails on any `withName:` selector naming a process that does not exist.
+
 ### Changed
 - Documentation now presents a single run path. `--pipeline_mode multistage` is no longer
   needed (or accepted); use `-profile docker` locally and `-profile iris`/`slurm` on HPC.
+- **Supported Nextflow range is now declared and enforced: v25–v26.** `manifest.nextflowVersion`
+  was `!>=22.10.1`, an unbounded floor that let a modern Nextflow get far enough to fail with a
+  cryptic parse error. It is now `!>=25.04.0` (the floor `env()` requires), verified against
+  25.04.6, 25.10.6 and 26.04.6.
 
 ## [0.0.28] - 2026-07-09
 

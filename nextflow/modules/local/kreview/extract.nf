@@ -61,4 +61,11 @@ process KREVIEW_EXTRACT {
         --features "${evaluator_name}" \\
         --output output
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p output
+    touch output/${evaluator_name}_matrix.parquet
+    """
 }

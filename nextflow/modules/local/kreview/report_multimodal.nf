@@ -48,4 +48,11 @@ process KREVIEW_REPORT_MULTIMODAL {
         --shap-features ${shap_features_arg} \\
         ${cvd_flag}
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p reports
+    touch reports/stub_dashboard.html
+    """
 }

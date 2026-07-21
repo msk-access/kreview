@@ -57,4 +57,12 @@ process KREVIEW_REPORT {
         --shap-features ${params.shap_features ?: 10} \\
         ${cvd_flag}
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p reports
+    touch reports/stub_report.html
+    touch reports/stub_plot.png
+    """
 }

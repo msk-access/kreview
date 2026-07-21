@@ -36,4 +36,11 @@ process KREVIEW_FUSE {
         --min-evaluators ${params.min_evaluators ?: 1} \\
         --output-name super_matrix.parquet
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p fused
+    touch fused/super_matrix.parquet
+    """
 }

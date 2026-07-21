@@ -52,6 +52,13 @@ process KREVIEW_MULTIMODAL_SINGLE_CPU {
         ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output single_out
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p single_out
+    echo '{}' > single_out/stacking_${model_name}_results.json
+    """
 }
 
 
@@ -128,5 +135,12 @@ process KREVIEW_MULTIMODAL_SINGLE_GPU {
     fi
 
     echo "=== KREVIEW_MULTIMODAL_SINGLE_GPU: ${model_name} DONE ==="
+    """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p single_out
+    echo '{}' > single_out/stacking_${model_name}_results.json
     """
 }
