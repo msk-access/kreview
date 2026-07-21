@@ -3510,7 +3510,17 @@ mutual information captures arbitrary (non-monotonic) relationships.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Returns 0.0 if the feature is constant or computation fails.</p>
+                <p>Returns 0.0 if the feature is constant; raises if the <abbr title="Mutual Information">MI</abbr> computation itself</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>fails (a malformed matrix is a bug, not a zero-information feature).</p>
               </div>
             </td>
           </tr>
