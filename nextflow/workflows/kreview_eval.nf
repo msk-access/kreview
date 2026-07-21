@@ -181,14 +181,31 @@ workflow KREVIEW_EVAL {
     // Step 4b: Per-evaluator CPU evaluation (×N, parallel)
     // When ablation is enabled, pair matrix with best_subset by evaluator name
     if (params.run_ablation) {
+        // #60: join(remainder:true), NOT combine(by:0). combine is an inner join, so an
+        // evaluator whose best_subset was never produced (its ablation failed and was
+        // ignored upstream) would be SILENTLY DROPPED from eval — scientific data loss with
+        // no error. This join is the last line of defence before eval: remainder:true keeps
+        // the unmatched matrix (best_subset padded to null); we fall back to the
+        // NO_BEST_SUBSET sentinel — identical to the ablation-off path — and log LOUDLY, so
+        // the evaluator is degraded-but-present, never dropped. (best_subset keys are always
+        // a subset of matrix keys, so the only remainder rows are matrices without a subset;
+        // the filter guards the theoretical inverse.)
         ch_cpu_eval_input = KREVIEW_SELECT_SINGLE.out.matrix
             .map { f -> [f.baseName.replace('_matrix', ''), f] }
-            .combine(
+            .join(
                 ch_best_subset
                     .map { f -> [f.baseName.replace('_best_subset', ''), f] },
-                by: 0
+                by: 0, remainder: true
             )
-            .map { key, matrix, bs -> [matrix, bs] }
+            .filter { it[1] != null }
+            .map { key, matrix, bs ->
+                if (bs == null) {
+                    log.warn "[#60] ablation best_subset MISSING for evaluator '${key}' (CPU eval) — " +
+                             "ablation likely failed and was ignored upstream. Falling back to " +
+                             "full-feature eval (NO_BEST_SUBSET); evaluator is NOT dropped."
+                }
+                [matrix, bs ?: file('NO_BEST_SUBSET')]
+            }
 
         KREVIEW_EVAL_CPU_SINGLE(
             ch_cpu_eval_input.map { it[0] },
@@ -217,13 +234,22 @@ workflow KREVIEW_EVAL {
             )
 
         if (params.run_ablation) {
+            // #60: join(remainder:true) — see the CPU eval note above. Same fix so GPU eval
+            // does not silently drop an evaluator whose best_subset is missing.
             ch_gpu_input = ch_gpu_base
-                .combine(
+                .join(
                     ch_best_subset
                         .map { f -> [f.baseName.replace('_best_subset', ''), f] },
-                    by: 0
+                    by: 0, remainder: true
                 )
-                .map { key, matrix, stats, bs -> [matrix, stats, bs] }
+                .filter { it[1] != null }
+                .map { key, matrix, stats, bs ->
+                    if (bs == null) {
+                        log.warn "[#60] ablation best_subset MISSING for evaluator '${key}' (GPU eval) — " +
+                                 "falling back to full-feature eval (NO_BEST_SUBSET); evaluator is NOT dropped."
+                    }
+                    [matrix, stats, bs ?: file('NO_BEST_SUBSET')]
+                }
         } else {
             ch_gpu_input = ch_gpu_base
                 .map { key, matrix, stats -> [matrix, stats, file('NO_BEST_SUBSET')] }

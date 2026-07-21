@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **GPU retry ladder never engaged** (#59). The GPU eval/ablation/multimodal wrappers always
+  exited 0 (emitting an error-JSON on failure) to avoid a `collect()` deadlock — but that also
+  meant `errorStrategy='retry'` never fired, so the 64→256 GB / `gpushort`→`gpu` escalation was
+  dead code for transient CUDA OOM. The wrappers now **fail loud on non-terminal attempts**
+  (exit non-zero → the ladder climbs) and only degrade gracefully (error-JSON + exit 0) once
+  retries are exhausted, preserving the channel-closing invariant that prevents the deadlock
+  (see commits `698c72e` / `dcfe356`).
+- **Silent evaluator drop on ablation failure** (#60). `kreview_eval.nf` paired each matrix
+  with its `best_subset` via `combine(by:0)` — an inner join — so an evaluator whose ablation
+  failed and was ignored upstream was **silently dropped from both CPU and GPU eval** (missing
+  from results entirely, with no error). Now uses `join(by:0, remainder:true)` with a
+  `NO_BEST_SUBSET` fallback (identical to the ablation-off path) and a loud per-evaluator
+  warning, so the evaluator is degraded-but-present, never dropped. This is also strictly
+  safer than the old `combine` + `.ifEmpty` guards when the whole ablation channel is empty.
+- **Failed evaluators masked as blank rows** (#59/#60). A GPU wrapper that exhausts its retry
+  ladder emits `{"error": ...}`; the scoreboard rendered that as an innocent all-NaN row. The
+  scoreboard now carries a `status` column (`OK` / `PARTIAL` / `FAILED` / `NO_RESULTS`) with an
+  `error_detail`, logs degraded evaluators loudly, and **no longer drops an evaluator that
+  throws during metric extraction** (emits a `FAILED` row instead). Both report templates show
+  the `status` column and a "Degraded evaluators" callout, and their stale `kreview run`
+  fallback text (removed in #55) was corrected to the Nextflow invocation.
+
+### Added
+- **`scripts/test_nextflow_join_dropguard.nf`** — a standalone channel-logic regression test
+  for #60 (3 matrices, 2 best_subsets → all 3 survive with a fallback). Run by
+  `scripts/nextflow_stub_test.sh`, which also structurally asserts the #59 retry guard is
+  present in all three GPU wrappers.
+
 ### Removed
 - **`kreview run` (monolithic pipeline command)** and everything that existed only to serve
   it: the Nextflow `KREVIEW_RUN` process (`run.nf`), the `params.pipeline_mode` switch, and

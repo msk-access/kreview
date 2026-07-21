@@ -19,6 +19,9 @@ Keep this file to index lines only; the content lives in the linked files.
   `kreview/*.py` edited without a matching notebook change; end with `nbdev-export && black` = zero diff (the `-m` forms are no-ops).
 - [feedback-parallel-paths-one-impl.md](feedback-parallel-paths-one-impl.md) — monolithic
   and decomposed paths must call one shared function; drift is the top bug source.
+- [feedback-terminal-failure-policy.md](feedback-terminal-failure-policy.md) — on terminal
+  failure: optional per-evaluator stages degrade AND surface loudly; mandatory stages
+  terminate; never silent-drop or silent-substitute.
 - [reference-hpc-singularity-gotchas.md](reference-hpc-singularity-gotchas.md) — Singularity
   PATH stripping, read-only /home, CUDA OOM, cache=lenient: the recurring HPC environment traps.
 - [reference-nextflow-support-policy.md](reference-nextflow-support-policy.md) — supports
