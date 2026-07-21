@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **DuckDB reads masked failures as empty results** (#61). Both chunked-read paths
+  (`_read_parquet_chunk`, `run_feature_sql`) retried on *any* exception and then returned an
+  empty DataFrame — indistinguishable from a legitimate 0-row read, so a persistently failing
+  feature silently dropped those samples (`iter_feature_chunks` skips an "empty" chunk). They
+  now classify the error: `OperationalError` (I/O, resource, OOM) backs off and retries, and
+  **raises** if it never succeeds; `ProgrammingError` / `DataError` (bad column, malformed SQL,
+  type mismatch) **raises immediately** — no wasted retries, no masking. The legitimate
+  "no files found" case still returns empty.
+- **eval_engine masked errors as low scores** (#61). Two broad excepts turned real failures
+  into a `0.0`: `mutual_info_score` scored a feature 0 on any exception, and the ablation
+  inner-CV appended `0.0` for a fold that raised. Both benign degenerate cases (constant
+  feature, <2 classes, too-few-samples, empty folds) are handled explicitly *before* these
+  points, so both now **raise** with context instead. The four legitimate degenerate
+  `return 0.0` cases are preserved. A new shared `_numeric_feature_columns` helper replaces two
+  duplicated `select_dtypes(include=np.number)` filters and **loudly flags** any non-metadata
+  column that is unexpectedly non-numeric (an object-dtype feature that would otherwise be
+  dropped silently), consolidating the two sites into one implementation.
 - **GPU retry ladder never engaged** (#59). The GPU eval/ablation/multimodal wrappers always
   exited 0 (emitting an error-JSON on failure) to avoid a `collect()` deadlock — but that also
   meant `errorStrategy='retry'` never fired, so the 64→256 GB / `gpushort`→`gpu` escalation was
