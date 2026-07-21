@@ -10,7 +10,7 @@ from ..eval_engine import FeatureEvaluator, parse_array
 log = structlog.get_logger()
 
 # %% auto #0
-__all__ = ["log", "WPSGenomeEvaluator", "_to_array"]
+__all__ = ["log", "WPSGenomeEvaluator"]
 
 
 # %% ../../nbs/features/25_wps_genomewide.ipynb #a0805d34

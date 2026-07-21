@@ -24,7 +24,7 @@ This project strictly utilizes a PR-driven **Git Flow**. Direct merging to `main
    Execute export *after* bumping `settings.ini` to allow dynamic `__init__.py` hook propagation:
    ```bash
    nbdev_clean
-   nbdev_export
+   nbdev-export && black kreview/
    ```
 
 4. **Formatting Compliance**:

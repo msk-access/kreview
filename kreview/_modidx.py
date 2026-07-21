@@ -10,12 +10,15 @@ d = {
     },
     "syms": {
         "kreview.cli": {
+            "kreview.cli._add_mad_features": (
+                "cli.html#_add_mad_features",
+                "kreview/cli.py",
+            ),
             "kreview.cli._extract_evaluator": (
                 "cli.html#_extract_evaluator",
                 "kreview/cli.py",
             ),
             "kreview.cli._find_quarto": ("cli.html#_find_quarto", "kreview/cli.py"),
-            "kreview.cli._impute": ("cli.html#_impute", "kreview/cli.py"),
             "kreview.cli._render_quarto_report": (
                 "cli.html#_render_quarto_report",
                 "kreview/cli.py",
@@ -37,8 +40,28 @@ d = {
                 "cli_eval.html#_load_matrix_and_labels",
                 "kreview/cli_eval.py",
             ),
+            "kreview.cli_eval._save_fitted_models": (
+                "cli_eval.html#_save_fitted_models",
+                "kreview/cli_eval.py",
+            ),
             "kreview.cli_eval._save_results": (
                 "cli_eval.html#_save_results",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval._validate_gpu_models": (
+                "cli_eval.html#_validate_gpu_models",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_ablate_cpu": (
+                "cli_eval.html#eval_ablate_cpu",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_ablate_gpu": (
+                "cli_eval.html#eval_ablate_gpu",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_ablate_merge": (
+                "cli_eval.html#eval_ablate_merge",
                 "kreview/cli_eval.py",
             ),
             "kreview.cli_eval.eval_cpu": (
@@ -51,6 +74,22 @@ d = {
             ),
             "kreview.cli_eval.eval_multimodal": (
                 "cli_eval.html#eval_multimodal",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_multimodal_ablation": (
+                "cli_eval.html#eval_multimodal_ablation",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_multimodal_merge": (
+                "cli_eval.html#eval_multimodal_merge",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_multimodal_prep": (
+                "cli_eval.html#eval_multimodal_prep",
+                "kreview/cli_eval.py",
+            ),
+            "kreview.cli_eval.eval_multimodal_single": (
+                "cli_eval.html#eval_multimodal_single",
                 "kreview/cli_eval.py",
             ),
         },
@@ -101,6 +140,10 @@ d = {
             ),
             "kreview.core.clear_cbioportal_caches": (
                 "core.html#clear_cbioportal_caches",
+                "kreview/core.py",
+            ),
+            "kreview.core.configure_duckdb": (
+                "core.html#configure_duckdb",
                 "kreview/core.py",
             ),
             "kreview.core.discover_available_samples": (
@@ -180,8 +223,40 @@ d = {
                 "eval_engine.html#featureevaluator.supports_sql",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine.GPUModelCVAdapter": (
+                "eval_engine.html#gpumodelcvadapter",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.GPUModelCVAdapter.__getstate__": (
+                "eval_engine.html#gpumodelcvadapter.__getstate__",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.GPUModelCVAdapter.__init__": (
+                "eval_engine.html#gpumodelcvadapter.__init__",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.GPUModelCVAdapter.__setstate__": (
+                "eval_engine.html#gpumodelcvadapter.__setstate__",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.GPUModelCVAdapter.fit": (
+                "eval_engine.html#gpumodelcvadapter.fit",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.GPUModelCVAdapter.predict": (
+                "eval_engine.html#gpumodelcvadapter.predict",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.GPUModelCVAdapter.predict_proba": (
+                "eval_engine.html#gpumodelcvadapter.predict_proba",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine._bootstrap_auc": (
                 "eval_engine.html#_bootstrap_auc",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._build_ablation_model_factories": (
+                "eval_engine.html#_build_ablation_model_factories",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine._build_gpu_model": (
@@ -204,16 +279,36 @@ d = {
                 "eval_engine.html#_classification_metrics",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine._compute_oof_metrics": (
+                "eval_engine.html#_compute_oof_metrics",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine._compute_shap": (
                 "eval_engine.html#_compute_shap",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._drop_stacking_metadata": (
+                "eval_engine.html#_drop_stacking_metadata",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine._extract_importances": (
                 "eval_engine.html#_extract_importances",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine._inner_cv_sensitivity": (
+                "eval_engine.html#_inner_cv_sensitivity",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._load_feature_cap": (
+                "eval_engine.html#_load_feature_cap",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine._load_per_evaluator_baselines": (
                 "eval_engine.html#_load_per_evaluator_baselines",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._mi_reduce_confirmed": (
+                "eval_engine.html#_mi_reduce_confirmed",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine._optimal_threshold": (
@@ -228,12 +323,24 @@ d = {
                 "eval_engine.html#_pr_curve",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine._save_ablation_json": (
+                "eval_engine.html#_save_ablation_json",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine._save_merged_json": (
+                "eval_engine.html#_save_merged_json",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine._select_multimodal_features": (
                 "eval_engine.html#_select_multimodal_features",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine._subgroup_metrics": (
                 "eval_engine.html#_subgroup_metrics",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.ablate_feature_groups": (
+                "eval_engine.html#ablate_feature_groups",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine.cpu_models": (
@@ -248,16 +355,56 @@ d = {
                 "eval_engine.html#evaluate_feature",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine.evaluate_holdout": (
+                "eval_engine.html#evaluate_holdout",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine.evaluate_model": (
                 "eval_engine.html#evaluate_model",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.generate_subsets": (
+                "eval_engine.html#generate_subsets",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine.gpu_models": (
                 "eval_engine.html#gpu_models",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine.identify_feature_groups": (
+                "eval_engine.html#identify_feature_groups",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.load_all_model_results": (
+                "eval_engine.html#load_all_model_results",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.load_model_results": (
+                "eval_engine.html#load_model_results",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.merge_ablation": (
+                "eval_engine.html#merge_ablation",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.multimodal_ablation": (
+                "eval_engine.html#multimodal_ablation",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine.multimodal_eval": (
                 "eval_engine.html#multimodal_eval",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.multimodal_merge": (
+                "eval_engine.html#multimodal_merge",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.multimodal_prep": (
+                "eval_engine.html#multimodal_prep",
+                "kreview/eval_engine.py",
+            ),
+            "kreview.eval_engine.multimodal_single": (
+                "eval_engine.html#multimodal_single",
                 "kreview/eval_engine.py",
             ),
             "kreview.eval_engine.mutual_info_score": (
@@ -547,6 +694,14 @@ d = {
                 "features/wps_genomewide.html#wpsgenomeevaluator.extract",
                 "kreview/features/wps_genomewide.py",
             ),
+            "kreview.features.wps_genomewide.WPSGenomeEvaluator.extract_sql": (
+                "features/wps_genomewide.html#wpsgenomeevaluator.extract_sql",
+                "kreview/features/wps_genomewide.py",
+            ),
+            "kreview.features.wps_genomewide._to_array": (
+                "features/wps_genomewide.html#_to_array",
+                "kreview/features/wps_genomewide.py",
+            ),
         },
         "kreview.features.wps_panel": {
             "kreview.features.wps_panel.WPSPanelEvaluator": (
@@ -569,6 +724,10 @@ d = {
             ),
             "kreview.labels.CtDNALabeler._assign_labels": (
                 "labels.html#ctdnalabeler._assign_labels",
+                "kreview/labels.py",
+            ),
+            "kreview.labels.CtDNALabeler._assign_train_test_split": (
+                "labels.html#ctdnalabeler._assign_train_test_split",
                 "kreview/labels.py",
             ),
             "kreview.labels.CtDNALabeler._build_healthy_df": (

@@ -96,7 +96,7 @@ from kreview.selection import score_features, select_features
 from kreview.eval_engine import cpu_models, gpu_models
 ```
 
-When editing these shared functions, always edit the **source notebook** (`nbs/*.ipynb`) and run `nbdev_export` to regenerate the `.py` modules.
+When editing these shared functions, always edit the **source notebook** (`nbs/*.ipynb`) and run `nbdev-export && black kreview/` to regenerate the `.py` modules.
 
 ---
 
@@ -183,9 +183,9 @@ Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 ## Adding a New Pipeline Stage
 
 1. **Create the source notebook** (e.g., `nbs/04_new_stage.ipynb`) with the shared logic functions
-2. Run `nbdev_export` to generate `kreview/new_stage.py`
+2. Run `nbdev-export && black kreview/` to generate `kreview/new_stage.py`
 3. **Create a CLI notebook** (e.g., `nbs/93_cli_new_stage.ipynb`) with the thin CLI wrapper
-4. Run `nbdev_export` to generate `kreview/cli_new_stage.py`
+4. Run `nbdev-export && black kreview/` to generate `kreview/cli_new_stage.py`
 5. Register in `nbs/90_cli.ipynb` via `app.command()` or `app.add_typer()`
 6. Update `kreview run` in the same notebook to call the shared functions
 7. Create a Nextflow process in `nextflow/modules/local/kreview/new_stage.nf`
@@ -194,4 +194,4 @@ Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 10. Update this document and [Pipeline CLI](../getting-started/pipeline-cli.md)
 
 !!! warning "Remember the Golden Rule"
-    Always edit the **notebook** first, then `nbdev_export`. See [nbdev Workflow](nbdev-workflow.md) for details.
+    Always edit the **notebook** first, then `nbdev-export && black kreview/`. See [nbdev Workflow](nbdev-workflow.md) for details.

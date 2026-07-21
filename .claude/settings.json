@@ -66,6 +66,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/nbdev-noop-guard.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-rm-rf.py",
             "timeout": 5
           },

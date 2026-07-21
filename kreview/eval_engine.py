@@ -29,6 +29,12 @@ from sklearn.utils.validation import check_is_fitted
 
 log = structlog.get_logger()
 
+# GPU model names — single source of truth for dispatch logic.
+# NOTE: this must live in an exported CELL, not in the generated `# %% auto 0`
+# header. Code placed in that header cannot be synced back and is destroyed by
+# the next `nbdev-export`.
+_GPU_MODEL_NAMES = frozenset({"tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"})
+
 # %% auto #0
 __all__ = [
     "log",
@@ -54,20 +60,18 @@ __all__ = [
     "ablate_feature_groups",
     "merge_ablation",
     "evaluate_model",
+    "evaluate_holdout",
     "cpu_models",
+    "GPUModelCVAdapter",
     "gpu_models",
-    "multimodal_eval",
     "load_model_results",
     "load_all_model_results",
-    "GPUModelCVAdapter",
+    "multimodal_eval",
     "multimodal_prep",
     "multimodal_single",
     "multimodal_ablation",
     "multimodal_merge",
 ]
-
-# GPU model names — single source of truth for dispatch logic
-_GPU_MODEL_NAMES = frozenset({"tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"})
 
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3

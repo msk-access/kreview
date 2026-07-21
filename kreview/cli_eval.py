@@ -14,6 +14,10 @@ __all__ = [
     "eval_cpu",
     "eval_gpu",
     "eval_multimodal",
+    "eval_multimodal_prep",
+    "eval_multimodal_single",
+    "eval_multimodal_ablation",
+    "eval_multimodal_merge",
 ]
 
 # %% ../nbs/91_cli_eval.ipynb #ba11bc60

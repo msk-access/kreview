@@ -5,11 +5,11 @@
 # %% auto #0
 __all__ = [
     "log",
+    "MODEL_LABELS",
+    "POSITIVE_LABELS",
     "build_binary_target",
     "score_features",
     "select_features",
-    "MODEL_LABELS",
-    "POSITIVE_LABELS",
 ]
 
 # %% ../nbs/04_selection.ipynb #core

@@ -11,7 +11,7 @@ Keep this file to index lines only; the content lives in the linked files.
   layout (AGENTS.md canonical, hooks enforce the review invariants).
 
 - [feedback-nbdev-source-of-truth.md](feedback-nbdev-source-of-truth.md) — never leave
-  `kreview/*.py` edited without a matching notebook change; end with `nbdev_export` = zero diff.
+  `kreview/*.py` edited without a matching notebook change; end with `nbdev-export && black` = zero diff (the `-m` forms are no-ops).
 - [feedback-parallel-paths-one-impl.md](feedback-parallel-paths-one-impl.md) — monolithic
   and decomposed paths must call one shared function; drift is the top bug source.
 - [reference-hpc-singularity-gotchas.md](reference-hpc-singularity-gotchas.md) — Singularity
