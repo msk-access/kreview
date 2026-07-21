@@ -113,4 +113,14 @@ process KREVIEW_EVAL_GPU_SINGLE {
     echo "Output: \$(ls *_gpu_model_results.json)"
     echo "=== KREVIEW_EVAL_GPU_SINGLE: ${evaluator} DONE ==="
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    def evaluator = matrix.baseName.replace('_matrix', '')
+    """
+    echo '{}' > ${evaluator}_gpu_model_results.json
+    # Mirror production naming: cli_eval writes {evaluator}_{model}_model.joblib. A bare
+    # {evaluator}_model.joblib would collide with the CPU stub's file when both feed REPORT.
+    touch ${evaluator}_tabpfn_model.joblib
+    """
 }

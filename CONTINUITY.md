@@ -36,22 +36,21 @@
   `0813447d`) and in the message of the commit that redacted it. Scrubbing = history rewrite.
 
 ## Now
-- **#55 cleanup done** on `chore/remove-monolithic-path`: `kreview run` (924 lines), `run.nf`,
-  the `pipeline_mode` fork, and 4 orphaned bulk `.nf` modules deleted; docs swept; guard test
-  added. Nextflow multistage is the only run path.
-- Nextflow support policy recorded: **v25–v26**, stub test only (see #80).
+- **#80 done** on `fix/nextflow-v26-compat`: `nextflow.config` now parses on Nextflow 24+.
+  Fixed the three blockers (try/catch around `includeConfig` → nf-core ternary; 5
+  `${manifest.version}` → `params.kreview_version`; `${HOME}` → `env('HOME')`), removed 2
+  stale `withName:` selectors left by #55, set `nextflowVersion = '!>=25.04.0'`, added a
+  `stub` profile + `stub:` blocks on all 17 processes + `scripts/nextflow_stub_test.sh`,
+  wired into CI on a 25.04.6/26.04.6 matrix. Verified locally on 25.04.6, 25.10.6, 26.04.6.
 
 ## Previously
 - Working **#56** (CI container smoke test) on branch `fix/ci-container-smoke-test`.
 - Process (per maintainer): **one branch out of develop at a time**; **CI must be green before merge**.
 
 ## Next
-1. **#80** — make `nextflow.config` parse on Nextflow **v25–v26** (3 blockers: try/catch around
-   `includeConfig`, `${manifest.version}` container refs, `${HOME}` interpolation) + set a real
-   version bound. Scope: **stub test only**, no nf-test harness.
-2. **#79** — reporting-layer redesign (after #80).
-3. **#61** fail-loud, **#58/#59/#60** Nextflow hardening, **#63** tests.
-4. Add `model:` pins + sharpened triggers to the `.agents/skills/*` frontmatters.
+1. **#79** — reporting-layer redesign (next).
+2. **#61** fail-loud, **#58/#59/#60** Nextflow hardening, **#63** tests.
+3. Add `model:` pins + sharpened triggers to the `.agents/skills/*` frontmatters.
 
 ## Design decision (monolithic path) — SUPERSEDED 2026-07-21
 Originally: keep `kreview run` as a thin orchestrator. **Superseded** once evidence showed the
@@ -80,5 +79,9 @@ decomposed stages, from #77).
 ## Open questions
 - ~~nbdev formatting policy~~ — RESOLVED in #57: `black_formatting = True`.
 - ~~`graphify-out/` committed vs gitignored~~ — RESOLVED: gitignored.
-- Nextflow verification: no local `nextflow` install — decide whether to install it / add
-  `nf-test` for #58/#59/#60, or verify those by review only. — owner: maintainer
+- ~~Nextflow verification~~ — RESOLVED in #80: `scripts/nextflow_stub_test.sh` + CI matrix.
+  #58/#59/#60 can now be verified by stub run rather than review alone.
+- `publishDir` duplicates the output subdirectory (`out/matrices/selected/selected/...`,
+  `matrices/fused/fused/`, `matrices/raw/output/`) because the declared output path already
+  contains the folder. Cosmetic but confusing; affects real runs too. Surfaced by the stub
+  test in #80, filed separately. — owner: maintainer

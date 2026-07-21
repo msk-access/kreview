@@ -87,3 +87,8 @@ graphify-out/
 
 # Agent harness — machine-local session settings (personal auto-approvals, local paths)
 .claude/settings.local.json
+
+# Nextflow run artifacts — created by local runs and by scripts/nextflow_stub_test.sh
+.nextflow/
+.nextflow.log*
+work/

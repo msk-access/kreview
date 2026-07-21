@@ -79,4 +79,11 @@ process KREVIEW_ABLATE_GPU_SINGLE {
     echo "Output: \$(ls *_ablation_gpu.json)"
     echo "=== KREVIEW_ABLATE_GPU_SINGLE: ${evaluator} DONE ==="
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    def evaluator = matrix.baseName.replace('_matrix', '')
+    """
+    echo '{}' > ${evaluator}_ablation_gpu.json
+    """
 }

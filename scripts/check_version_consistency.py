@@ -4,11 +4,17 @@
 The version lives in three places that are hand-synced:
   - settings.ini            version = X            (nbdev source of truth)
   - kreview/__init__.py      __version__ = "X"     (generated from settings.ini)
-  - nextflow/nextflow.config manifest { version = 'X' }  (drives container image tags)
+  - nextflow/nextflow.config params.kreview_version = 'X'  (drives container image tags)
 
-nextflow.config pins container tags to `ghcr.io/msk-access/kreview:v${manifest.version}`, so a
-lagging manifest silently pulls a nonexistent/stale image on HPC. This check fails CI on any
+nextflow.config pins container tags to `ghcr.io/msk-access/kreview:v${params.kreview_version}`,
+so a lagging version silently pulls a nonexistent/stale image on HPC. This check fails CI on any
 drift. On release, pass --tag "$GITHUB_REF_NAME" to also assert the git tag matches.
+
+Note: `manifest.version` reads back `params.kreview_version` rather than holding its own
+literal, because `manifest` is not resolvable from `process`/`profiles` scope on Nextflow 24+
+(issue #80). The param is therefore the single literal, and the pattern below anchors to it by
+name so renaming it fails this check loudly instead of silently matching another version-like
+string elsewhere in the file.
 
 Usage:
     python3 scripts/check_version_consistency.py            # compare the three files
@@ -46,7 +52,7 @@ def collect() -> dict[str, str | None]:
         ),
         "nextflow/nextflow.config": _search(
             ROOT / "nextflow" / "nextflow.config",
-            r"version\s*=\s*['\"]([0-9][^'\"]*)['\"]",
+            r"^params\.kreview_version\s*=\s*['\"]([0-9][^'\"]*)['\"]",
         ),
     }
 

@@ -60,4 +60,14 @@ process KREVIEW_SELECT_SINGLE {
     echo "Output: \$(ls selected/*_matrix.parquet)"
     echo "=== KREVIEW_SELECT_SINGLE: ${evaluator} DONE ==="
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    def evaluator = matrix.baseName.replace('_matrix', '')
+    """
+    mkdir -p selected
+    touch selected/${evaluator}_matrix.parquet
+    touch selected/${evaluator}_eval_stats.parquet
+    echo '{}' > selected/${evaluator}_selection_qc.json
+    """
 }

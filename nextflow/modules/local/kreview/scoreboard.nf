@@ -46,4 +46,11 @@ if len(sb) > 0:
     print(f"  Best: {sb.iloc[0]['evaluator']} (AUC={sb.iloc[0]['best_auc']:.3f})", flush=True)
 EOF
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    touch scoreboard_combined__all.parquet
+    touch scoreboard_combined__all.csv
+    """
 }

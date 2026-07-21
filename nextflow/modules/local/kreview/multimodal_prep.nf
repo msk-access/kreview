@@ -45,4 +45,13 @@ process KREVIEW_MULTIMODAL_PREP {
         --seed ${params.seed ?: 42} \\
         --output prep_out
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p prep_out
+    touch prep_out/stacking_matrix.parquet
+    touch prep_out/raw_features_matrix.parquet
+    echo '{}' > prep_out/prep_metadata.json
+    """
 }

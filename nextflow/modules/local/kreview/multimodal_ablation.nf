@@ -40,4 +40,11 @@ process KREVIEW_MULTIMODAL_ABLATION {
         --seed ${params.seed ?: 42} \\
         --output ablation_out
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p ablation_out
+    echo '{}' > ablation_out/ablation_results.json
+    """
 }

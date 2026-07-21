@@ -49,4 +49,11 @@ process KREVIEW_MERGE_ABLATION {
     echo "Output: \$(ls *_best_subset.json)"
     echo "=== KREVIEW_MERGE_ABLATION: ${evaluator} DONE ==="
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    def evaluator = cpu_json.baseName.replace('_ablation_cpu', '')
+    """
+    echo '{}' > ${evaluator}_best_subset.json
+    """
 }
