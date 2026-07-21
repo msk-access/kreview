@@ -35,14 +35,9 @@ of scope** by maintainer decision (2026-07-21). Run the script after any `.nf` o
   stdout.
 - Nextflow ≤25.04 will not start on JDK 25 (`Unsupported class file major version 69`). Use a
   JDK 17 to test the floor version locally; CI pins Java 17.
-- A conda env named **`nf-env`** carries both Nextflow and a JDK 17, so one env covers the
-  whole supported range via `NXF_VER`. An agent's shell will not have conda on `PATH`;
-  activate it explicitly first:
-  ```bash
-  source "$HOME/mambaforge/etc/profile.d/conda.sh"   # or wherever conda.sh lives
-  conda activate nf-env
-  NXF_VER=25.04.6 bash scripts/nextflow_stub_test.sh "$(which nextflow)"   # floor
-  NXF_VER=26.04.6 bash scripts/nextflow_stub_test.sh "$(which nextflow)"   # ceiling
-  ```
+- Testing the **floor** therefore needs a JDK ≤21 alongside a modern one. A conda env that
+  ships its own JDK is the easiest way to get that, and lets a single env cover the whole
+  range via `NXF_VER`. Where that env lives on this machine is machine-local, so it is
+  recorded in `private/reference-local-nextflow-env.md` rather than here.
 
 See [[reference-hpc-singularity-gotchas]] and [[feedback-parallel-paths-one-impl]].

@@ -92,3 +92,10 @@ graphify-out/
 .nextflow/
 .nextflow.log*
 work/
+
+# Machine-local agent memory. .agents/memory/ is symlinked in as the Claude memory store
+# and is COMMITTED to this public repo, so facts that are only true on one machine
+# (absolute paths, env names, cluster/account specifics) go in private/ instead.
+# The README is kept so the convention travels with the repo; nothing else does.
+.agents/memory/private/*
+!.agents/memory/private/README.md

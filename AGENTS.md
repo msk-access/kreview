@@ -63,7 +63,10 @@ stage subcommands. Supported Nextflow: **v25–v26**. Full module map:
 - **No PHI or personal data — this repo is PUBLIC.** Never write patient identifiers (MSK
   DMP ids, MRN, SSN, DOB), clinical data, or personal paths/names into any committed file —
   especially `.agents/memory/` and `.agents/learnings/`, which are committed and therefore
-  published. Memory holds codebase and process facts only. Use `P-0000000-T01-XS1` as the
+  published. **`.agents/memory/` is also symlinked in as the Claude memory store, so "saving a
+  memory" publishes.** Machine-local facts (absolute paths, env names, cluster/account
+  specifics) go in `.agents/memory/private/` (gitignored) — routing rule and rationale in
+  `private/README.md`. PHI belongs in **neither** store. Use `P-0000000-T01-XS1` as the
   sample-id placeholder in docs. Enforced by the PHI rules in `.gitleaks.toml` via the
   gitleaks pre-push hook; verify them with `bash scripts/check_phi_guard.sh`.
 - **Outward actions ask first:** pushing to shared branches, publishing images, creating
