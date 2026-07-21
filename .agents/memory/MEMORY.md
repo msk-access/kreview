@@ -17,4 +17,5 @@ Keep this file to index lines only; the content lives in the linked files.
 - [reference-hpc-singularity-gotchas.md](reference-hpc-singularity-gotchas.md) — Singularity
   PATH stripping, read-only /home, CUDA OOM, cache=lenient: the recurring HPC environment traps.
 - [reference-nextflow-support-policy.md](reference-nextflow-support-policy.md) — supports
-  Nextflow v25–v26; stub run only, no nf-test harness.
+  Nextflow v25–v26 (floor 25.04.0, enforced); config-syntax rules modern Nextflow enforces;
+  smoke-test with `scripts/nextflow_stub_test.sh`, stub run only, no nf-test harness.

@@ -84,4 +84,4 @@ decomposed stages, from #77).
 - `publishDir` duplicates the output subdirectory (`out/matrices/selected/selected/...`,
   `matrices/fused/fused/`, `matrices/raw/output/`) because the declared output path already
   contains the folder. Cosmetic but confusing; affects real runs too. Surfaced by the stub
-  test in #80, filed separately. — owner: maintainer
+  test in #80, filed as #84. — owner: maintainer
