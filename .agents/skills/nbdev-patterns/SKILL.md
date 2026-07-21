@@ -23,11 +23,14 @@ description: "nbdev cell directives, module export conventions, editing workflow
 | refresh `_modidx.py` | `nbdev-export` (regenerates it) | `python3 -m nbdev.doclinks` |
 | run tests | `pytest -q` | `nbdev_test` |
 
-**Export must always be followed by `black`.** nbdev 3.0.12 does **not** implement
-`black_formatting` — the key appears nowhere in its source and it never imports black — so
+**Export must always be followed by `black`.** nbdev does **not** implement
+`black_formatting` — verified absent from both 3.0.12 and 3.3.0 (the key appears nowhere in
+its source and it never imports black) — so
 setting it in `settings.ini` *or* `pyproject.toml` does nothing. Meanwhile CI runs
 `black --check .`. Export then black is the only combination that converges.
 Enforced by `.claude/hooks/nbdev-noop-guard.py`.
+
+> **nbdev and black are PINNED EXACTLY** in `pyproject.toml`'s `[dev]` extra (`nbdev==3.3.0`, `black[jupyter]==26.5.1`). They generate committed source, so a version difference between your machine and CI produces a different tree and the export-sync gate fails on nothing real — CI once pulled nbdev 3.3.0 (which appends a `Docs:` line to module docstrings) against a local 3.0.12. Install with `pip install -e .[dev]`; never bare `pip install nbdev`. To upgrade, bump the pin, re-run `nbdev-export && black kreview/`, and commit the regenerated tree.
 
 > **Config lives in `pyproject.toml`, not `settings.ini`.** `get_config().config_file`
 > resolves to `pyproject.toml`; keys in `settings.ini` are read by nbdev only for legacy

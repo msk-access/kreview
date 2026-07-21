@@ -37,7 +37,11 @@ jobs:
       # source and it never imports black), while lint runs `black --check .`.
       - name: Check nbdev export is in sync (notebooks <-> kreview/*.py)
         run: |
-          pip install nbdev "black[jupyter]"
+          # Install the PINNED versions from the dev extra — never bare `pip install nbdev`.
+          # These tools generate committed source, so an unpinned install makes CI and local
+          # produce different trees and this gate fails on a version difference, not a real
+          # drift (observed: CI pulled nbdev 3.3.0 vs local 3.0.12).
+          pip install -e .[dev]
           nbdev-export
           black kreview/ -q
           git diff --exit-code -- kreview/ \
