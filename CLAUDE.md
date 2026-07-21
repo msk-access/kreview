@@ -12,8 +12,11 @@
 - **Hooks:** `.claude/settings.json` wires the `.claude/hooks/` guards
   (`block-rm-rf.py`, `block-env-edits.py`, `injection-guard.py`, `gitleaks-pre-push.py`,
   `nbdev-sync-guard.py`) plus current-time injection and policy-aware format-on-save.
-- **Memory** auto-recall reads `.agents/memory/` (symlink it from the Claude project
-  memory dir if you want built-in recall).
+- **Memory** auto-recall reads `.agents/memory/` — the Claude project memory dir is already
+  symlinked to it. That means the memory tool writes **into this public repo**: there is no
+  separate private store by default. Machine-local facts go in `.agents/memory/private/`
+  (gitignored, see its README); `scripts/check_phi_guard.sh` assertion 5 fails the push if a
+  tracked memory file gains an absolute home path.
 
 ### graphify (knowledge graph, advisory)
 

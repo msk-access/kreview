@@ -4,8 +4,13 @@ One line per memory, loaded for recall. Four tiers: `user_` (identity/prefs),
 `project_` (live state), `reference_` (stable facts), `feedback_` (corrections + why).
 Keep this file to index lines only; the content lives in the linked files.
 
-> **This store is COMMITTED to a public repo.** Never record PHI, patient identifiers, or
-> personal paths here — codebase and process facts only. Enforced by `.gitleaks.toml`.
+> **This store is COMMITTED to a public repo** — it is symlinked in as the Claude memory
+> directory, so writing here publishes. Never record PHI, patient identifiers, or personal
+> paths. Enforced by `.gitleaks.toml` and by assertion 5 of `scripts/check_phi_guard.sh`.
+>
+> **Machine-local facts go in [`private/`](private/README.md)** (gitignored). Routing rule:
+> *would this still be true and useful for a teammate on a different machine?* Yes → here.
+> No → `private/`. PHI belongs in **neither** — that rule is absolute, not a routing choice.
 
 - [project-kreview-harness.md](project-kreview-harness.md) — the cross-tool agent harness
   layout (AGENTS.md canonical, hooks enforce the review invariants).
@@ -19,3 +24,11 @@ Keep this file to index lines only; the content lives in the linked files.
 - [reference-nextflow-support-policy.md](reference-nextflow-support-policy.md) — supports
   Nextflow v25–v26 (floor 25.04.0, enforced); config-syntax rules modern Nextflow enforces;
   smoke-test with `scripts/nextflow_stub_test.sh`, stub run only, no nf-test harness.
+
+## Private (machine-local, gitignored — see `private/README.md`)
+
+Listed here because `MEMORY.md` is the only memory file always loaded; the content stays in
+`private/` and is never committed. Keep these lines generic.
+
+- `private/reference-local-nextflow-env.md` — where the Nextflow + JDK 17 conda env lives and
+  how to activate it from an agent shell (needed to run the stub test against the v25 floor).

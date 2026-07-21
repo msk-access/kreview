@@ -2,7 +2,7 @@
 # Verify the PHI/PII guard in .gitleaks.toml works in BOTH directions.
 #
 # A scanner that never fires is worse than no scanner: it produces a false sense of
-# safety. So this asserts three things, and fails loudly (non-zero exit + message) on
+# safety. So this asserts five things, and fails loudly (non-zero exit + message) on
 # any of them:
 #
 #   1. NEGATIVE — the repository working tree is clean (no PHI/secret findings).
@@ -15,6 +15,11 @@
 #   4. CONFIG SELF-CHECK — .gitleaks.toml itself carries no real identifier. gitleaks skips
 #      its own config file, so anything pasted into a comment there is invisible to the
 #      scanner and would be published unnoticed. Only this script can catch it.
+#   5. MEMORY STORE — no TRACKED file under .agents/memory/ contains an absolute home path,
+#      and .agents/memory/private/ is gitignored. That directory is symlinked in as the
+#      Claude memory store, so an agent writing "machine-local" notes there is in fact
+#      writing to a public repo. gitleaks has no rule for home paths, so nothing else
+#      catches this.
 #
 # Enforcement itself lives in .claude/hooks/gitleaks-pre-push.py (blocks `git push`) and
 # in the CI secret/PHI scan. This script validates the rules those rely on.
@@ -43,7 +48,7 @@ trap cleanup EXIT
 echo "PHI guard check — config: $CONFIG"
 
 # ── 1. NEGATIVE: the working tree must be clean ────────────────────────────────
-echo "  [1/4] repository tree is clean ..."
+echo "  [1/5] repository tree is clean ..."
 if ! gitleaks detect --source "$REPO_ROOT" --no-git --no-banner --redact >/dev/null 2>&1; then
   fail "the repository tree has PHI/secret findings, or a rule is false-positiving.
        Run: gitleaks detect --source . --no-git --redact"
@@ -51,7 +56,7 @@ fi
 echo "        OK — no findings"
 
 # ── 2. POSITIVE: synthetic PHI must be detected by every rule ──────────────────
-echo "  [2/4] synthetic PHI is detected ..."
+echo "  [2/5] synthetic PHI is detected ..."
 # The probe values are assembled at RUNTIME from fragments on purpose: if the literal
 # patterns appeared in this file, the guard would (correctly) flag this script itself and
 # block the push. Building them here keeps the guard strict — no path exemption needed.
@@ -87,7 +92,7 @@ done
 echo "        OK — all rules fired: $FIRED"
 
 # ── 3. PLACEHOLDER: the documented example id must be allowed ──────────────────
-echo "  [3/4] P-0000000 placeholder is allowed ..."
+echo "  [3/5] P-0000000 placeholder is allowed ..."
 rm -f "$TMP/probe.md" "$TMP/report.json"
 printf 'Example: P-0000000-T01-XS1.FSC.gene.parquet\n' > "$TMP/placeholder.md"
 if ! gitleaks detect --source "$TMP" --no-git --no-banner --redact -c "$CONFIG" >/dev/null 2>&1; then
@@ -98,7 +103,7 @@ echo "        OK — placeholder not flagged"
 
 # ── 4. CONFIG SELF-CHECK: .gitleaks.toml must contain no real identifiers ──────
 # gitleaks refuses to scan its own config, so copy it under a different name and scan that.
-echo "  [4/4] .gitleaks.toml carries no real identifiers ..."
+echo "  [4/5] .gitleaks.toml carries no real identifiers ..."
 cp "$CONFIG" "$TMP/config-copy.txt"
 if ! gitleaks detect --source "$TMP" --no-git --no-banner --redact -c "$CONFIG" >/dev/null 2>&1; then
   fail "a real identifier appears inside .gitleaks.toml. gitleaks does NOT scan its own
@@ -106,4 +111,34 @@ if ! gitleaks detect --source "$TMP" --no-git --no-banner --redact -c "$CONFIG" 
 fi
 echo "        OK — config clean"
 
-echo "PHI guard healthy: tree clean, all rules fire, placeholder allowed, config clean."
+# ── 5. MEMORY STORE: no personal paths committed, private/ stays private ───────
+echo "  [5/5] memory store carries no personal paths ..."
+
+# Only TRACKED files matter: .agents/memory/private/ is gitignored by design and is where
+# machine-local notes belong.
+LEAKED="$(cd "$REPO_ROOT" && git ls-files -z .agents/memory \
+  | xargs -0 grep -lE '(/Users/|/home/)[A-Za-z0-9._-]+' 2>/dev/null || true)"
+if [ -n "$LEAKED" ]; then
+  fail "these committed memory files contain an absolute home path:
+$(echo "$LEAKED" | sed 's/^/         /')
+       .agents/memory/ is symlinked in as the Claude memory store and is PUBLIC. Put
+       machine-local facts in .agents/memory/private/ (gitignored), or rewrite the fact
+       \$HOME-relative."
+fi
+
+# The private dir must actually be ignored, or the whole scheme is a trap.
+PRIVATE_DIR="$REPO_ROOT/.agents/memory/private"
+mkdir -p "$PRIVATE_DIR"
+PROBE="$PRIVATE_DIR/.gitignore-probe"
+: > "$PROBE"
+if (cd "$REPO_ROOT" && git check-ignore -q "$PROBE"); then
+  rm -f "$PROBE"
+else
+  rm -f "$PROBE"
+  fail ".agents/memory/private/ is NOT gitignored — machine-local notes written there
+       would be committed to a public repo. Restore the rule in .gitignore."
+fi
+echo "        OK — no personal paths tracked, private/ is ignored"
+
+echo "PHI guard healthy: tree clean, all rules fire, placeholder allowed, config clean,
+                   memory store free of personal paths."
