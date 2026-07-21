@@ -97,19 +97,27 @@ jobs:
         # Pinned rather than "latest-stable" so a new Nextflow release cannot turn CI red
         # without a deliberate bump. Both were verified locally when #80 landed.
         nxf_ver: ["25.04.6", "26.04.6"]
+    env:
+      # Job-scoped, not step-scoped: the launcher consults NXF_VER at run time too, so
+      # scoping it to the install step alone would let the actual test run on some other
+      # version and quietly make this matrix meaningless.
+      NXF_VER: ${{ matrix.nxf_ver }}
     steps:
       - uses: actions/checkout@v5
 
+      # Nextflow 25.04 does not start on a JDK newer than 21 ("Unsupported class file major
+      # version"), so pin 17 rather than inheriting whatever the runner ships.
       - name: Set up Java (Nextflow requires 17+)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
+      # Installed from RUNNER_TEMP, not the checkout: the installer writes a file called
+      # `nextflow`, and the repo already has a directory of that name, which makes it abort.
       - name: Install Nextflow ${{ matrix.nxf_ver }}
-        env:
-          NXF_VER: ${{ matrix.nxf_ver }}
         run: |
+          cd "$RUNNER_TEMP"
           curl -fsSL https://get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
           nextflow -v
