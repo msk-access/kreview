@@ -19,11 +19,23 @@ ablate → eval cpu/gpu → fuse → multimodal → report`). Full module map:
 ## Load-bearing invariants (don't break these)
 
 <!-- protected:start reason="these encode the recurring-bug root causes; do not weaken without review" -->
-1. **nbdev is the source of truth.** Never hand-edit `kreview/*.py` and consider it done.
-   Edit `nbs/*.ipynb`, then `nbdev_export`; or edit `.py` then `nbdev_update`. Always end
-   with `nbdev_export` producing **zero git diff** (idempotency check) and regenerate
-   `_modidx.py`. Exceptions (no notebook, edit directly): `kreview/scoreboard.py`,
-   `kreview/feature_cards.py`. See `.agents/rules/nbdev-conventions.md`.
+1. **nbdev is the source of truth — and the commands are not the obvious ones.**
+   `python3 -m nbdev.export` and `python3 -m nbdev.doclinks` are **silent no-ops** (exit 0,
+   write nothing); `nbdev_export`/`nbdev_test` (underscores) **do not exist**. Any
+   "zero diff, therefore in sync" check built on those proves nothing — that mistake let
+   three PRs and a CI gate report success on no evidence. Use:
+   - notebook → `.py`: **`nbdev-export && black kreview/`** (nbdev does not implement
+     `black_formatting` — verified absent from both 3.0.12 and 3.3.0 — so black must run
+     after export, or `black --check` in CI fails)
+   - `.py` → notebook: **`python3 -m nbdev.sync --fname kreview/<mod>.py`** (this one works)
+   Never hand-edit `kreview/*.py` and consider it done. Always end with export+black
+   producing **zero git diff**. **Never put code above the first `# %% ../nbs/…` marker** —
+   that header is regenerated and `nbdev.sync` cannot rescue it. Exceptions (no notebook,
+   edit directly): `kreview/scoreboard.py`, `kreview/feature_cards.py`,
+   `kreview/reproducibility.py`. nbdev and black are **pinned exactly** in the `[dev]` extra because they generate
+   committed source — install with `pip install -e .[dev]`, never bare `pip install nbdev`.
+   Enforced by `.claude/hooks/nbdev-noop-guard.py`.
+   See `.agents/skills/nbdev-patterns/SKILL.md`.
 2. **One implementation per behaviour.** Monolithic (`kreview run`) and decomposed
    (`kreview select`/`eval`/`multimodal`) paths must call the **same** shared library
    function, never copy-pasted logic. Most historical bugs came from one path being fixed

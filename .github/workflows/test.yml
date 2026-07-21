@@ -30,12 +30,22 @@ jobs:
       - name: Check version consistency
         run: python3 scripts/check_version_consistency.py
 
+      # Use the CONSOLE SCRIPT (hyphenated). `python3 -m nbdev.export` exits 0 and writes
+      # NOTHING, so a `git diff` against it always passes — this gate was vacuous until
+      # 2026-07 and hid real notebook/module drift. Export must be followed by black:
+      # nbdev 3.0.12 does not implement `black_formatting` (the key is absent from its
+      # source and it never imports black), while lint runs `black --check .`.
       - name: Check nbdev export is in sync (notebooks <-> kreview/*.py)
         run: |
-          pip install nbdev "black[jupyter]"
-          python3 -m nbdev.export
+          # Install the PINNED versions from the dev extra — never bare `pip install nbdev`.
+          # These tools generate committed source, so an unpinned install makes CI and local
+          # produce different trees and this gate fails on a version difference, not a real
+          # drift (observed: CI pulled nbdev 3.3.0 vs local 3.0.12).
+          pip install -e .[dev]
+          nbdev-export
+          black kreview/ -q
           git diff --exit-code -- kreview/ \
-            || { echo "::error::nbs/ and kreview/*.py are out of sync. Run 'nbdev_export' and commit."; exit 1; }
+            || { echo "::error::nbs/ and kreview/*.py are out of sync. Run 'nbdev-export && black kreview/' and commit the result."; exit 1; }
 
       - name: Run tests with pytest
         run: pytest --cov=kreview --cov-report=xml --cov-fail-under=38

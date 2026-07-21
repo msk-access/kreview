@@ -1,25 +1,51 @@
 ---
 name: feedback-nbdev-source-of-truth
-description: nbdev — notebooks are canonical; never leave kreview/*.py edited without syncing back; end with a zero-diff export.
+description: "nbdev — the export/doclinks module forms are silent no-ops and underscore aliases don't exist; use `nbdev-export && black`, sync with `nbdev.sync --fname`, and never write code into the generated header."
 metadata:
   type: feedback
 ---
 
-`kreview/*.py` are generated from `nbs/*.ipynb`. Never hand-edit a generated module and
-consider the job done. Edit the notebook then `nbdev_export`, or edit the `.py` then
-`nbdev_update`; always end with `nbdev_export` producing **zero git diff** and regenerate
-`_modidx.py`. Standalone exceptions: `scoreboard.py`, `feature_cards.py`.
+Never leave `kreview/*.py` edited without a matching notebook change — but the commands to do
+that are **not** the ones the docs used to give. Use exactly:
 
-**Why:** As of the 2026-07 review the committed `.py` tree was black-formatted against
-`black_formatting = False`, so a fresh `nbdev_export` reverted every module; `_modidx.py` was
-~7 weeks stale (39 missing symbols incl. a whole class). This drift is invisible to CI (no
-export-sync check) and ships stale code to PyPI and the containers.
+- notebook → `.py`: `nbdev-export && black kreview/`
+- `.py` → notebook: `python3 -m nbdev.sync --fname kreview/<mod>.py`
+- verify: run export+black **twice**; the second run must produce zero git diff
+
+Never place code above the first `# %% ../nbs/<nb>.ipynb #<cellid>` marker (the module
+docstring / `__all__` / `# %% auto 0` region). nbdev owns and regenerates that block:
+`nbdev.sync` cannot map it back to a cell, and the next export destroys it. Module-level
+constants belong in a real `#| export` cell. The module docstring comes from the notebook's
+first markdown cell (the `>` blockquote), so edit that, not the `.py`.
+
+Standalone exceptions (no notebook, edit directly): `scoreboard.py`, `feature_cards.py`,
+`reproducibility.py`.
+
+**Why:** on 2026-07-21, running the *real* exporter for the first time revealed that
+`python3 -m nbdev.export` and `python3 -m nbdev.doclinks` **exit 0 and write nothing**, and
+that `nbdev_export`/`nbdev_test` (underscores) do not exist in this install — inside a
+pipeline their "command not found" is hidden, because a pipeline's exit status comes from the
+last command. Three merged PRs (#71, #76, #77) and the CI export-sync gate had all reported
+"IDEMPOTENT ✓ / in sync" on the strength of that no-op, so every such check was vacuous. Real
+drift had accumulated unseen: `_GPU_MODEL_NAMES` (used in 6 places) existed in
+`eval_engine.py` but not in its notebook — it had been written into the generated header — so
+the first genuine export would have **deleted live code**. `_modidx.py` was also genuinely
+stale.
+
+**Correction to an earlier belief recorded here:** `black_formatting = True` does nothing.
+nbdev reads config from `pyproject.toml`, not `settings.ini` (check with
+`get_config().config_file`), *and* nbdev 3.0.12 never references `black_formatting` nor
+imports black at all. So export always emits non-black code while CI runs `black --check .`;
+the only convergent workflow is export **then** black. Do not try to "fix" nbdev behaviour by
+editing `settings.ini`.
 
 **How to apply:**
-1. Resolve the formatting policy first (set `black_formatting = True` in `settings.ini` so
-   export emits black-clean `.py`), then re-export once to normalize the tree.
-2. After any change touching `.py` or `.ipynb`: `nbdev_export` twice — the second run must
-   produce no git diff. Run `nbdev.doclinks` to refresh `_modidx.py`.
-3. Add `nbdev_export --check` (or export + `git diff --exit-code`) to CI so drift fails a PR.
+1. Before trusting any tool's success, confirm it actually wrote something (compare a hash or
+   mtime). Exit 0 is not evidence — a no-op and a success look identical.
+2. After any change touching `.py` or `.ipynb`: `nbdev-export && black kreview/`, run twice,
+   the second run must be a zero diff, then `pytest -q`.
+3. If a constant or import "disappears" after an export, look for it in the generated header —
+   that is where it was, and that is why it died.
 
-See [[feedback-parallel-paths-one-impl]].
+Enforced by `.claude/hooks/nbdev-noop-guard.py`. See [[feedback-parallel-paths-one-impl]] and
+`.agents/skills/nbdev-patterns/SKILL.md`.

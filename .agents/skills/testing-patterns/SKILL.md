@@ -259,7 +259,7 @@ python3 -m pytest tests/ --co -q  # should match expected count
 grep -n "def test_.*<your_function_name>" tests/*.py
 
 # 4. Verify nbdev sync didn't break tests
-python3 -m nbdev.export && python3 -m pytest tests/ -x -q
+nbdev-export && black kreview/ && python3 -m pytest tests/ -x -q
 ```
 
 ---
