@@ -845,7 +845,8 @@
 <p>This document describes the decomposed pipeline architecture of <code>kreview</code>, how commands share code through the nbdev notebook-first workflow, and how to add a new pipeline stage.</p>
 <hr>
 <h2 id="pipeline-overview">Pipeline Overview</h2>
-<p>The <code>kreview</code> pipeline is decomposed into independent stages that can run either sequentially (<code>kreview run</code>) or in parallel (Nextflow / <abbr title="High-Performance Computing">HPC</abbr>):</p>
+<p>The <code>kreview</code> pipeline is decomposed into independent stages, orchestrated in parallel by the
+Nextflow multistage <abbr title="Directed Acyclic Graph">DAG</abbr>. Each stage is also a standalone CLI command for debugging:</p>
 <div class="panzoom-box" data-key="none" id="panzoom0" oncontextmenu="return false;">
 <nav class="panzoom-nav">
 <button class="panzoom-info panzoom-button">
@@ -1012,12 +1013,6 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <td>Re-generate HTML dashboards</td>
 </tr>
 <tr>
-<td><code>kreview run</code></td>
-<td><code>cli.py:run()</code></td>
-<td><code>nbs/90_cli.ipynb</code></td>
-<td>Full pipeline orchestrator</td>
-</tr>
-<tr>
 <td><code>kreview features-list</code></td>
 <td><code>cli.py:features_list()</code></td>
 <td><code>nbs/90_cli.ipynb</code></td>
@@ -1040,13 +1035,13 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <td><code>selection.py</code></td>
 <td><code>nbs/04_selection.ipynb</code></td>
 <td><code>score_features()</code>, <code>select_features()</code>, <code>build_binary_target()</code>, <code>MODEL_LABELS</code>, <code>POSITIVE_LABELS</code></td>
-<td><code>kreview run</code>, <code>kreview select</code>, report templates</td>
+<td><code>kreview select</code>, report templates</td>
 </tr>
 <tr>
 <td><code>eval_engine.py</code></td>
 <td><code>nbs/02_eval_engine.ipynb</code></td>
 <td><code>cpu_models()</code>, <code>gpu_models()</code>, <code>univariate_auc()</code>, <code>mutual_info_score()</code>, <code>load_model_results()</code>, <code>load_all_model_results()</code>, <code>identify_feature_groups()</code>, <code>generate_subsets()</code>, <code>ablate_feature_groups()</code>, <code>merge_ablation()</code>, <code>_compute_oof_metrics()</code>, <code>multimodal_prep()</code>, <code>multimodal_single()</code>, <code>multimodal_ablation()</code>, <code>multimodal_merge()</code></td>
-<td><code>kreview run</code>, <code>kreview eval cpu/gpu</code>, <code>kreview eval ablate *</code>, <code>kreview eval multimodal *</code>, <code>selection.py</code>, <code>scoreboard.py</code>, report templates</td>
+<td><code>kreview eval cpu/gpu</code>, <code>kreview eval ablate *</code>, <code>kreview eval multimodal *</code>, <code>selection.py</code>, <code>scoreboard.py</code>, report templates</td>
 </tr>
 <tr>
 <td><code>scoreboard.py</code></td>
@@ -1064,17 +1059,24 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <td><code>registry.py</code></td>
 <td><code>nbs/03_registry.ipynb</code></td>
 <td><code>get_all_evaluators()</code></td>
-<td><code>kreview run</code>, <code>kreview extract</code>, <code>kreview features-list</code></td>
+<td><code>kreview extract</code>, <code>kreview features-list</code></td>
 </tr>
 </tbody>
 </table>
 <hr>
 <h2 id="shared-code-principle">Shared Code Principle</h2>
-<p><code>kreview run</code> is an <strong>orchestrator</strong> — it calls the same shared functions as the standalone commands. This guarantees that local runs and <abbr title="High-Performance Computing">HPC</abbr> runs produce <strong>identical results</strong> given the same inputs.</p>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-0-1" id="__codelineno-0-1" name="__codelineno-0-1"></a><span class="c1"># selection.py — used by BOTH kreview run AND kreview select</span>
+<p>Every stage command calls into the shared library modules rather than re-implementing logic,
+so a stage produces the same result whether Nextflow invokes it or you run it by hand.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The former <code>kreview run</code> orchestrator was removed in v0.0.29 (#55). It was a second
+implementation of the whole pipeline and the largest source of fix-one-path-miss-the-other
+bugs. There is now exactly one run path.</p>
+</div>
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-0-1" id="__codelineno-0-1" name="__codelineno-0-1"></a><span class="c1"># selection.py — used by kreview select AND the report templates</span>
 <a href="#__codelineno-0-2" id="__codelineno-0-2" name="__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">kreview.selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">score_features</span><span class="p">,</span> <span class="n">select_features</span>
 <a href="#__codelineno-0-3" id="__codelineno-0-3" name="__codelineno-0-3"></a>
-<a href="#__codelineno-0-4" id="__codelineno-0-4" name="__codelineno-0-4"></a><span class="c1"># eval_engine.py — used by BOTH kreview run AND kreview eval cpu/gpu</span>
+<a href="#__codelineno-0-4" id="__codelineno-0-4" name="__codelineno-0-4"></a><span class="c1"># eval_engine.py — used by kreview eval cpu/gpu AND the multimodal stages</span>
 <a href="#__codelineno-0-5" id="__codelineno-0-5" name="__codelineno-0-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">kreview.eval_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">cpu_models</span><span class="p">,</span> <span class="n">gpu_models</span>
 </code></pre></div>
 <p>When editing these shared functions, always edit the <strong>source notebook</strong> (<code>nbs/*.ipynb</code>) and run <code>nbdev-export &amp;&amp; black kreview/</code> to regenerate the <code>.py</code> modules.</p>
@@ -1104,7 +1106,7 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <hr>
 <h2 id="nextflow-parallelism">Nextflow Parallelism</h2>
 <p>See <a href="../../operations/nextflow/">Nextflow Integration</a> for full <abbr title="High-Performance Computing">HPC</abbr> execution docs.</p>
-<p>In Nextflow multistage mode (<code>params.pipeline_mode = 'multistage'</code>), the <abbr title="Directed Acyclic Graph">DAG</abbr> executes as:</p>
+<p>The Nextflow <abbr title="Directed Acyclic Graph">DAG</abbr> executes as:</p>
 <div class="highlight"><pre><span></span><code><a href="#__codelineno-2-1" id="__codelineno-2-1" name="__codelineno-2-1"></a>LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── [ABLATE_CPU ×N] ──┬── EVAL_CPU ────┬── MULTIMODAL_PREP
 <a href="#__codelineno-2-2" id="__codelineno-2-2" name="__codelineno-2-2"></a>                                          ├── [ABLATE_GPU ×N] ──┤      (optional)  ├── EVAL_GPU ────┤
 <a href="#__codelineno-2-3" id="__codelineno-2-3" name="__codelineno-2-3"></a>                                          │  [MERGE_ABLATION] ──┘                  └── FUSE ────────┘
@@ -1274,7 +1276,7 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <li><strong>Create a CLI notebook</strong> (e.g., <code>nbs/93_cli_new_stage.ipynb</code>) with the thin CLI wrapper</li>
 <li>Run <code>nbdev-export &amp;&amp; black kreview/</code> to generate <code>kreview/cli_new_stage.py</code></li>
 <li>Register in <code>nbs/90_cli.ipynb</code> via <code>app.command()</code> or <code>app.add_typer()</code></li>
-<li>Update <code>kreview run</code> in the same notebook to call the shared functions</li>
+<li>Wire the new stage into the Nextflow <abbr title="Directed Acyclic Graph">DAG</abbr> (<code>nextflow/workflows/kreview_eval.nf</code>)</li>
 <li>Create a Nextflow process in <code>nextflow/modules/local/kreview/new_stage.nf</code></li>
 <li>Wire into <code>nextflow/workflows/kreview_eval.nf</code></li>
 <li>Add tests in <code>tests/test_new_stage.py</code></li>
@@ -1289,7 +1291,7 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 21, 2026 14:15:42 UTC"><span class="timeago" datetime="2026-07-21T14:15:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 21, 2026 14:15:42 UTC">2026-07-21</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 21, 2026 15:22:35 UTC"><span class="timeago" datetime="2026-07-21T15:22:35+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 21, 2026 15:22:35 UTC">2026-07-21</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">

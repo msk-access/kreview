@@ -874,11 +874,9 @@
 </ul>
 </li>
 </ul>
-<p>The pipeline supports two modes controlled by <code>params.pipeline_mode</code>:</p>
-<ul>
-<li><strong><code>monolithic</code></strong> (default) — Single-process <code>KREVIEW_RUN</code> for backward compatibility.</li>
-<li><strong><code>multistage</code></strong> — Decomposed <abbr title="Directed Acyclic Graph">DAG</abbr> with per-evaluator parallelism:</li>
-</ul>
+<p>The pipeline is a single decomposed <abbr title="Directed Acyclic Graph">DAG</abbr> with per-evaluator parallelism. (The former
+<code>monolithic</code> mode and its <code>params.pipeline_mode</code> switch were removed in v0.0.29 — it was a
+second, unmaintained implementation of the same pipeline.)</p>
 <div class="panzoom-box" data-key="none" id="panzoom0" oncontextmenu="return false;">
 <nav class="panzoom-nav">
 <button class="panzoom-info panzoom-button">
@@ -1001,19 +999,18 @@ Use mouse to pan and zoom
 <a href="#__codelineno-2-4" id="__codelineno-2-4" name="__codelineno-2-4"></a><span class="w">  </span>--healthy_xs2_samplesheet<span class="w"> </span>/data/healthy2.csv<span class="w"> </span><span class="se">\</span>
 <a href="#__codelineno-2-5" id="__codelineno-2-5" name="__codelineno-2-5"></a><span class="w">  </span>--cbioportal_dir<span class="w"> </span>/data/msk_solid_heme/<span class="w"> </span><span class="se">\</span>
 <a href="#__codelineno-2-6" id="__codelineno-2-6" name="__codelineno-2-6"></a><span class="w">  </span>--krewlyzer_dir<span class="w"> </span>/data/krewlyzer_parquets/<span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-7" id="__codelineno-2-7" name="__codelineno-2-7"></a><span class="w">  </span>--pipeline_mode<span class="w"> </span>multistage<span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-8" id="__codelineno-2-8" name="__codelineno-2-8"></a><span class="w">  </span>--run_gpu_eval<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-9" id="__codelineno-2-9" name="__codelineno-2-9"></a><span class="w">  </span>--gpu_models<span class="w"> </span><span class="s2">"tabpfn,tabpfn_ft,tabicl,tabicl_ft"</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-10" id="__codelineno-2-10" name="__codelineno-2-10"></a><span class="w">  </span>--run_multimodal_eval<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-11" id="__codelineno-2-11" name="__codelineno-2-11"></a><span class="w">  </span>--multimodal_selection<span class="w"> </span>boruta_shap<span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-12" id="__codelineno-2-12" name="__codelineno-2-12"></a><span class="w">  </span>--multimodal_gpu_models<span class="w"> </span><span class="s2">"tabpfn_ft,tabicl_ft"</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-13" id="__codelineno-2-13" name="__codelineno-2-13"></a><span class="w">  </span>--run_ablation<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-14" id="__codelineno-2-14" name="__codelineno-2-14"></a><span class="w">  </span>--ablation_inner_folds<span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-15" id="__codelineno-2-15" name="__codelineno-2-15"></a><span class="w">  </span>--ch_hotspot_maf<span class="w"> </span>/path/to/ch_hotspots.maf<span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-16" id="__codelineno-2-16" name="__codelineno-2-16"></a><span class="w">  </span>--max_gpu_features<span class="w"> </span><span class="m">150</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-17" id="__codelineno-2-17" name="__codelineno-2-17"></a><span class="w">  </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-18" id="__codelineno-2-18" name="__codelineno-2-18"></a><span class="w">  </span>--deterministic<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a href="#__codelineno-2-19" id="__codelineno-2-19" name="__codelineno-2-19"></a><span class="w">  </span>-profile<span class="w"> </span>iris
+<a href="#__codelineno-2-7" id="__codelineno-2-7" name="__codelineno-2-7"></a><span class="w">  </span>--run_gpu_eval<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-8" id="__codelineno-2-8" name="__codelineno-2-8"></a><span class="w">  </span>--gpu_models<span class="w"> </span><span class="s2">"tabpfn,tabpfn_ft,tabicl,tabicl_ft"</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-9" id="__codelineno-2-9" name="__codelineno-2-9"></a><span class="w">  </span>--run_multimodal_eval<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-10" id="__codelineno-2-10" name="__codelineno-2-10"></a><span class="w">  </span>--multimodal_selection<span class="w"> </span>boruta_shap<span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-11" id="__codelineno-2-11" name="__codelineno-2-11"></a><span class="w">  </span>--multimodal_gpu_models<span class="w"> </span><span class="s2">"tabpfn_ft,tabicl_ft"</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-12" id="__codelineno-2-12" name="__codelineno-2-12"></a><span class="w">  </span>--run_ablation<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-13" id="__codelineno-2-13" name="__codelineno-2-13"></a><span class="w">  </span>--ablation_inner_folds<span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-14" id="__codelineno-2-14" name="__codelineno-2-14"></a><span class="w">  </span>--ch_hotspot_maf<span class="w"> </span>/path/to/ch_hotspots.maf<span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-15" id="__codelineno-2-15" name="__codelineno-2-15"></a><span class="w">  </span>--max_gpu_features<span class="w"> </span><span class="m">150</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-16" id="__codelineno-2-16" name="__codelineno-2-16"></a><span class="w">  </span>--seed<span class="w"> </span><span class="m">42</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-17" id="__codelineno-2-17" name="__codelineno-2-17"></a><span class="w">  </span>--deterministic<span class="w"> </span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a href="#__codelineno-2-18" id="__codelineno-2-18" name="__codelineno-2-18"></a><span class="w">  </span>-profile<span class="w"> </span>iris
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Targeted Nextflow Execution</p>
@@ -1074,7 +1071,7 @@ Singularity images are cached to <code>~/.singularity_cache/</code> on the login
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 9, 2026 18:15:45 UTC"><span class="timeago" datetime="2026-06-09T18:15:45+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 9, 2026 18:15:45 UTC">2026-06-09</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 21, 2026 15:22:35 UTC"><span class="timeago" datetime="2026-07-21T15:22:35+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 21, 2026 15:22:35 UTC">2026-07-21</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">
