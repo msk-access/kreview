@@ -128,7 +128,7 @@ diff kreview/<module>.py /tmp/check.py && echo "IDEMPOTENT ✓"
 | `nbs/03_registry.ipynb` | `kreview/registry.py` | `get_all_evaluators()` |
 | `nbs/04_selection.ipynb` | `kreview/selection.py` | `score_features()`, `select_features()`, `build_binary_target()` |
 | `nbs/05_report.ipynb` | `kreview/report.py` | Report rendering |
-| `nbs/90_cli.ipynb` | `kreview/cli.py` | `run`, `label`, `extract`, `fuse`, `report` commands |
+| `nbs/90_cli.ipynb` | `kreview/cli.py` | `label`, `extract`, `fuse`, `report`, `features-list` commands |
 | `nbs/91_cli_eval.ipynb` | `kreview/cli_eval.py` | `kreview eval cpu\|gpu\|multimodal` |
 | `nbs/92_cli_select.ipynb` | `kreview/cli_select.py` | `kreview select` command |
 
@@ -188,15 +188,18 @@ app.command(name="select")(select)
 
 ## Deduplication Rules
 
-When logic is shared between `kreview run` (monolithic) and a standalone
-command (e.g. `kreview select`), follow this pattern:
+When logic is shared between CLI stage commands (e.g. `kreview eval cpu` and
+`kreview eval gpu`), follow this pattern:
 
-1. **Define the logic** in a library module (e.g. `selection.py`)
-2. **Import and call** from both `cli.py` (the `run` function) and the
-   standalone CLI module (e.g. `cli_select.py`)
+1. **Define the logic** in a library module (e.g. `selection.py`, `eval_engine.py`)
+2. **Import and call** it from each CLI module that needs it
 3. **Never** copy-paste logic inline — use the shared function
 
-### Current shared functions (selection.py → used by cli.py + cli_select.py):
+> The monolithic `kreview run` was deleted in #55 precisely because it was a second
+> implementation of the whole pipeline. Nextflow multistage drives the stage subcommands and
+> is the only run path; don't add a wrapper that re-implements a stage.
+
+### Current shared functions (selection.py → used by cli_select.py):
 - `score_features()` — univariate AUC + mutual information scoring
 - `select_features()` — mRMR (default) or hybrid-union feature selection + variance guard
 - `build_binary_target()` — label filtering + binary target construction

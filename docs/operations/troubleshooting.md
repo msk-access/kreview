@@ -44,7 +44,7 @@ Common issues and their solutions.
 
     **Fix:** Reduce the chunk size:
     ```bash
-    kreview run ... --chunk-size 100
+    nextflow run ... --chunk_size 100
     ```
 
     The pipeline also has built-in exponential backoff retry (3 attempts with 1s/2s/4s delays), so transient failures are handled automatically.
@@ -136,7 +136,7 @@ Common issues and their solutions.
 
     Alternatively, skip reports entirely:
     ```bash
-    kreview run ... --skip-report
+    nextflow run ... --skip_report
     ```
 
 ??? info "SHAP plots show blank — only RF appears, no XGBoost"

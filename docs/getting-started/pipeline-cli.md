@@ -6,7 +6,9 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 
 ## Available Commands
 
-`kreview` provides a modular CLI where each pipeline stage can run independently or together via `kreview run`:
+`kreview` provides a modular CLI: each pipeline stage is its own command. The stages are
+orchestrated by the **Nextflow multistage DAG**, which is the supported way to run the full
+pipeline; the individual commands are for debugging or re-running a single step.
 
 | Command | Purpose | Pipeline Order |
 |---------|---------|---------------|
@@ -25,7 +27,6 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 | `kreview eval multimodal ablation` | Feature ablation analysis | 5c |
 | `kreview eval multimodal merge` | Aggregate stacking + ablation results | 5d |
 | `kreview report` | Re-generate HTML dashboards | 6 |
-| `kreview run` | Full pipeline: all of the above in sequence | — |
 | `kreview features-list` | List registered evaluators | — |
 
 !!! note "Steps 4a, 4b, and 4c are independent"
@@ -39,160 +40,38 @@ The backbone of `kreview` is run through a highly modular `typer` CLI. It connec
 
 ---
 
-## Basic Execution
+## Running the Pipeline
 
-!!! warning "Disable Python Buffering"
-    When running over terminal orchestrators (like `nohup`, standard piping, or SLURM), it is critical to run Python with `PYTHONUNBUFFERED=1` so that the `structlog` progress output streams in real-time.
+The full pipeline is one Nextflow invocation. Stage flags are exposed as Nextflow params
+(underscored rather than hyphenated):
 
-=== "Standard Run (All Features)"
+```bash
+nextflow run nextflow/main.nf \
+  --cancer_samplesheet /path/to/cancer.csv \
+  --healthy_xs1_samplesheet /path/to/xs1.csv \
+  --healthy_xs2_samplesheet /path/to/xs2.csv \
+  --cbioportal_dir /path/to/msk_solid_heme/ \
+  --krewlyzer_dir /path/to/results/ \
+  --outdir output/ \
+  -profile docker            # or iris / slurm on HPC
+```
 
-    ```bash
-    PYTHONUNBUFFERED=1 kreview run \
-      --cancer-samplesheet "/path/to/samplesheet.csv" \
-      --healthy-xs1-samplesheet "/path/to/healthy1.csv" \
-      --healthy-xs2-samplesheet "/path/to/healthy2.csv" \
-      --cbioportal-dir "/path/to/msk_solid_heme_cbioportal" \
-      --krewlyzer-dir "/path/to/feature_parquets" \
-      --output output/ \
-      --strategy mrmr \
-      --ch-hotspot-maf /path/to/ch_hotspots.maf \
-      --export-duckdb
-    ```
-    *Note: `--export-duckdb` automatically writes a persistent SQL-queryable `kreview_lake.duckdb` after processing.*
+Common options (see `nextflow/nextflow.config` for the full list):
 
-=== "Using a Manifest File"
+| Goal | Param |
+|------|-------|
+| Restrict to specific evaluators | `--features "FSCOnTarget,AtacOnTarget"` |
+| Restrict by tier | `--tier 1` |
+| Feature selection | `--strategy mrmr`, `--top_percentile 10` |
+| Nested-CV ablation | `--run_ablation true` |
+| GPU models | `--run_gpu_eval true --gpu_models "tabpfn,tabicl"` |
+| Multimodal stacking | `--run_multimodal_eval true --multimodal_selection boruta_shap` |
+| SHAP / dashboards | `--shap_samples 500`, `--shap_features 10`, `--cvd_safe true` |
+| I/O-constrained hosts | `--chunk_size 100` |
+| Skip dashboards | `--skip_report true` |
 
-    If your Krewlyzer results span multiple directories, create a `manifest.txt` listing one directory per line, then pass it down:
-
-    ```bash
-    kreview run \
-      --cancer-samplesheet ... \
-      --krewlyzer-dir manifest.txt \
-      --output output/
-    ```
-
-=== "Machine Learning Tuning"
-
-    Control statistical parameters and cross-validation:
-
-    ```bash
-    kreview run \
-      --cancer-samplesheet ... \
-      --krewlyzer-dir ... \
-      --cv-folds 5 \
-      --impute-strategy median
-    ```
-    *Options for imputation: `median`, `mean`, `zero`. Folds must be `3-20`.*
-
-=== "SHAP & Visualization"
-
-    Control SHAP explainability and display:
-
-    ```bash
-    kreview run \
-      --cancer-samplesheet ... \
-      --krewlyzer-dir ... \
-      --shap-samples 5000 \
-      --shap-features 10 \
-      --top-percentile 20
-    ```
-
-    | Flag | Default | Description |
-    |------|---------|-------------|
-    | `--shap-samples` | 500 | Max samples for SHAP computation (higher = slower but more stable) |
-    | `--shap-features` | 10 | Number of features to show in SHAP beeswarm/waterfall |
-    | `--top-percentile` | 10.0 | Top X% of features per metric (AUC, MI). Union of both sets feeds models. |
-
-=== "Accessibility & Theme"
-
-    ```bash
-    kreview run \
-      --cancer-samplesheet ... \
-      --krewlyzer-dir ... \
-      --cvd-safe
-    ```
-
-    The `--cvd-safe` flag switches all dashboard visualizations to the Okabe-Ito color palette, which is accessible for red-green colorblindness. By default, kreview uses a curated neon palette optimized for dark backgrounds.
-
-=== "Feature Selection"
-
-    ```bash
-    kreview run \
-      --cancer-samplesheet ... \
-      --krewlyzer-dir ... \
-      --top-percentile 20
-    ```
-
-    Feature selection uses **mRMR (Minimum Redundancy Maximum Relevance)** by default. It selects features that are highly correlated with the target but mutually dissimilar, preventing multi-collinearity. A legacy **Hybrid Union** strategy (top X% by AUC ∪ top X% by MI) is also available.
-
-    | Flag | Default | Description |
-    |------|---------|-------------|
-    | `--strategy` | mrmr | Feature selection strategy: `mrmr` or `hybrid_union` |
-    | `--top-percentile` | 10.0 | Percentile cutoff. For mRMR, this controls `K` features to select. |
-    | `--compute-univariate-auc` | True | Compute per-feature LR AUC (required for hybrid selection). |
-    | `--no-compute-univariate-auc` | — | Opt-out: degrades selection to MI-only with a warning. |
-
-    !!! note "Deprecated: `--top-n`"
-        The `--top-n` flag is deprecated since v0.0.9 and will be removed in v0.1.0. Use `--top-percentile` instead.
-
-=== "Safe Load Mode (I/O Constraints)"
-
-    If you see `PermissionError` during large cohort loading, reduce the parquet chunk-size:
-
-    ```bash
-    kreview run \
-      --cancer-samplesheet ... \
-      --krewlyzer-dir ... \
-      --chunk-size 100
-    ```
-
----
-
-## Targeted Execution
-
-=== "Isolating Features"
-
-    Use the `--features` flag with a comma-separated list to run only specific evaluators:
-
-    ```bash
-    kreview run \
-      ...
-      --features "BreakPointMotifOnTarget,EndMotifOnTarget"
-    ```
-
-=== "Running by Tier"
-
-    Run only Tier 1 (fragment size) or Tier 2 (nucleosome/motif) features:
-
-    ```bash
-    kreview run \
-      ...
-      --tier 1
-    ```
-
-=== "Skipping Reports"
-
-    If you are running in headless CI environments and don't need HTML dashboards:
-
-    ```bash
-    kreview run \
-      ...
-      --skip-report
-    ```
-    *Note: When `--skip-report` is omitted, `kreview` generates both interactive Plotly `output/reports/*.html` dashboards and a `static_plots/` subdirectory containing 2x-scaled `.png` versions of every chart.*
-
-=== "Resume Mode"
-
-    Skip evaluators that already have model results (useful for incremental HPC re-runs):
-
-    ```bash
-    kreview run \
-      ...
-      --resume
-    ```
-    *This checks for existing `*_model_results.json` files and skips extractors that have already completed.*
-
----
+Nextflow's own `-resume` re-uses cached stage outputs, so a failed run continues from the
+last successful stage rather than restarting.
 
 ## Modular Pipeline (HPC / Nextflow)
 
@@ -245,7 +124,7 @@ kreview eval gpu --matrices-dir selected/ --output results/ \
 # 4c: Fuse selected matrices → super-matrix
 kreview fuse --output-dir selected/
 
-# Step 5: Multimodal evaluation (monolithic — runs all stages in one command)
+# Step 5: Multimodal evaluation (single-shot: prep -> single -> ablation -> merge in one process)
 kreview eval multimodal run \
     --results-dir results/ \
     --super-matrix selected/super_matrix.parquet \
@@ -322,17 +201,21 @@ This produces a single Parquet file with sample IDs, clinical metadata, the assi
 
 ---
 
-## Data Lake Integration
+## Querying the Feature Matrices
 
-Every time `kreview run` executes, feature matrices are loaded into memory, evaluated, and then destroyed. If you want a **persistent output** for downstream analysis:
+Feature matrices are written as parquet under `output/`, so downstream analysis can query them
+directly with DuckDB or pandas without re-running the pipeline:
 
-```bash
-kreview run \
-  ...
-  --export-duckdb
+```python
+import duckdb
+duckdb.sql("SELECT * FROM 'output/*_matrix.parquet' LIMIT 10").df()
 ```
 
-This creates or merges an immutable `kreview_lake.duckdb` file in your `output/` directory. Downstream researchers can then query it directly with DuckDB or Pandas without re-running the pipeline.
+!!! note
+    The `--export-duckdb` flag (which packed the matrices into a single `kreview_lake.duckdb`)
+    was removed in v0.0.29 along with `kreview run`. It was only ever reachable from the
+    monolithic path, never from the Nextflow DAG. Query the parquet files directly instead.
+
 
 ---
 

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **`kreview run` (monolithic pipeline command)** and everything that existed only to serve
+  it: the Nextflow `KREVIEW_RUN` process (`run.nf`), the `params.pipeline_mode` switch, and
+  its `withName` resource block. The Nextflow multistage DAG is now the only way to run the
+  pipeline. `kreview run` was a second, drifting implementation of the whole pipeline — the
+  largest single source of the fix-one-path-miss-the-other bugs (see #55) — and was neither
+  used nor exercised by CI. Individual stages remain available as subcommands
+  (`kreview label|extract|select|eval|fuse|report`) for debugging.
+- **`--export-duckdb`**. It existed only on `kreview run` and was unreachable from the
+  Nextflow DAG, so it was never usable on HPC. Feature matrices are written as parquet under
+  the output directory and can be queried directly with DuckDB or pandas.
+- **Four orphaned Nextflow modules** (`eval_cpu.nf`, `eval_gpu.nf`, `select.nf`,
+  `eval_multimodal.nf`). They were included by zero workflows and encoded an older DAG that
+  ran straight off `EXTRACT`, bypassing `SELECT`/`ABLATE` — re-enabling one would have
+  produced different, incorrect results.
+
+### Changed
+- Documentation now presents a single run path. `--pipeline_mode multistage` is no longer
+  needed (or accepted); use `-profile docker` locally and `-profile iris`/`slurm` on HPC.
+
 ## [0.0.28] - 2026-07-09
 
 ### Fixed

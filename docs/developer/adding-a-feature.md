@@ -1,6 +1,6 @@
 # Adding a Feature
 
-Extending the pipeline is incredibly easy! Thanks to our dynamic class registry (`registry.get_all_evaluators`), any feature you construct will be automatically mapped, tested, and reported upon by `kreview run` globally.
+Extending the pipeline is incredibly easy! Thanks to our dynamic class registry (`registry.get_all_evaluators`), any feature you construct will be automatically mapped, tested, and reported upon by the pipeline globally.
 
 ---
 
@@ -61,4 +61,4 @@ class GCEvaluator(FeatureEvaluator):
 
 Run `nbdev-export`. Your class will be scraped and published into `kreview/features/gc_evaluator.py`.
 
-Because `GCEvaluator` subclasses our root `FeatureEvaluator`, `registry.py` will actively discover it the next time you call `kreview run`, bind it to the CLI tree, build the biological ctDNA cohorts, inject it into the DuckDB data lake aggregator, run Sklearn metrics across it, and publish an HTML dashboard for it!
+Because `GCEvaluator` subclasses our root `FeatureEvaluator`, `registry.py` will actively discover it the next time the pipeline runs, bind it to the CLI tree, build the biological ctDNA cohorts, inject it into the DuckDB data lake aggregator, run Sklearn metrics across it, and publish an HTML dashboard for it!

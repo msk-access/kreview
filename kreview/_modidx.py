@@ -29,7 +29,6 @@ d = {
             "kreview.cli.label": ("cli.html#label", "kreview/cli.py"),
             "kreview.cli.main": ("cli.html#main", "kreview/cli.py"),
             "kreview.cli.report": ("cli.html#report", "kreview/cli.py"),
-            "kreview.cli.run": ("cli.html#run", "kreview/cli.py"),
             "kreview.cli.version_callback": (
                 "cli.html#version_callback",
                 "kreview/cli.py",

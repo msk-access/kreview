@@ -11,9 +11,10 @@ stacking, and Quarto dashboards. Ships as a pip package, CPU/GPU Docker images, 
 Nextflow HPC (SLURM/Singularity) pipeline.
 
 **Architecture:** `nbdev` project. Source of truth is the notebooks in `nbs/`; the
-`kreview/*.py` modules are **generated**. Two run modes share one library: monolithic
-`kreview run` (single machine) and the decomposed Nextflow DAG (`label → extract → select →
-ablate → eval cpu/gpu → fuse → multimodal → report`). Full module map:
+`kreview/*.py` modules are **generated**. There is exactly **one** way to run the pipeline:
+the Nextflow multistage DAG (`label → extract → select → ablate → eval cpu/gpu → fuse →
+multimodal → scoreboard → report`), which scatters per-evaluator and drives the `kreview`
+stage subcommands. Supported Nextflow: **v25–v26**. Full module map:
 `.agents/rules/nbdev-conventions.md`.
 
 ## Load-bearing invariants (don't break these)
@@ -36,11 +37,13 @@ ablate → eval cpu/gpu → fuse → multimodal → report`). Full module map:
    committed source — install with `pip install -e .[dev]`, never bare `pip install nbdev`.
    Enforced by `.claude/hooks/nbdev-noop-guard.py`.
    See `.agents/skills/nbdev-patterns/SKILL.md`.
-2. **One implementation per behaviour.** Monolithic (`kreview run`) and decomposed
-   (`kreview select`/`eval`/`multimodal`) paths must call the **same** shared library
-   function, never copy-pasted logic. Most historical bugs came from one path being fixed
-   and its twin forgotten (sample_labels, best_auc, metadata-column drops). New shared
-   logic goes in a library module and is imported by both.
+2. **One implementation per behaviour.** Never stand up a second code path for work that
+   already has one — no "convenience" wrapper that re-implements a stage, no bulk variant
+   beside a scattered one. Most historical bugs came from one path being fixed and its twin
+   forgotten (sample_labels, best_auc, metadata-column drops, the H1 ablation bug). The
+   monolithic `kreview run` and the Gen-1 bulk `.nf` modules were **deleted** for exactly
+   this reason (#55); do not reintroduce them. Shared logic lives in a library module and is
+   imported wherever it is needed.
 3. **Fail loud, not to 0.0.** Do not let a metric default to `0.0`/empty on failure, or a
    report exit `0` when it failed. Distinguish transient I/O (retry) from schema/programming
    errors (raise). A silent degenerate result is worse than a crash in an evaluation engine.

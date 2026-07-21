@@ -25,7 +25,7 @@ docker run --rm \
   -v /path/to/data:/app/data \
   -v /path/to/output:/app/results \
   ghcr.io/msk-access/kreview:latest \
-  kreview run \
+  label \
     --cancer-samplesheet /app/data/samplesheet.csv \
     --healthy-xs1-samplesheet /app/data/healthy_xs1.csv \
     --healthy-xs2-samplesheet /app/data/healthy_xs2.csv \

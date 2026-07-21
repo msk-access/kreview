@@ -367,7 +367,7 @@ All randomization points in kreview are parameterized via `--seed` (default: 42)
 
 ```bash
 # Default (seed=42, deterministic GPU ops)
-kreview run ... --seed 42 --deterministic
+nextflow run ... --seed 42 --deterministic
 
 # Custom seed, faster GPU (non-deterministic cuDNN)
 kreview eval gpu ... --seed 123 --no-deterministic

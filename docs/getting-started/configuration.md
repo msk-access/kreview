@@ -71,7 +71,7 @@ When enabled, ablation runs between feature selection and model evaluation. It u
 
 ```bash
 # Enable ablation with 3-fold inner CV
-kreview run ... --run-ablation --ablation-inner-folds 3
+nextflow run ... --run_ablation --ablation_inner_folds 3
 
 # Nextflow
 nextflow run ... --run_ablation true --ablation_inner_folds 3
@@ -108,7 +108,7 @@ conn.execute("SET memory_limit='4GB';")
 If your system still crashes mid-read, lower the batch load via the CLI:
 
 ```bash
-kreview run ... --chunk-size 100
+nextflow run ... --chunk_size 100
 ```
 
 See the [DuckDB Architecture](../developer/duckdb-architecture.md) page for the full technical deep-dive.
