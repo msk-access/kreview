@@ -28,7 +28,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
 <body data-md-color-accent="custom" data-md-color-primary="custom" data-md-color-scheme="default" dir="ltr">
 <input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox">
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
@@ -556,6 +556,28 @@
 </a>
 </li>
 <li class="md-nav__item">
+<a class="md-nav__link" href="#supported-nextflow-versions">
+<span class="md-ellipsis">
+      
+        Supported Nextflow versions
+      
+    </span>
+</a>
+<nav aria-label="Supported Nextflow versions" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#smoke-testing-the-dag-profile-stub">
+<span class="md-ellipsis">
+      
+        Smoke-testing the DAG (-profile stub)
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
 <a class="md-nav__link" href="#profiling-scaling-slurm">
 <span class="md-ellipsis">
       
@@ -775,6 +797,28 @@
       
     </span>
 </a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#supported-nextflow-versions">
+<span class="md-ellipsis">
+      
+        Supported Nextflow versions
+      
+    </span>
+</a>
+<nav aria-label="Supported Nextflow versions" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#smoke-testing-the-dag-profile-stub">
+<span class="md-ellipsis">
+      
+        Smoke-testing the DAG (-profile stub)
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
 </li>
 <li class="md-nav__item">
 <a class="md-nav__link" href="#profiling-scaling-slurm">
@@ -1021,6 +1065,27 @@ Use mouse to pan and zoom
 </code></pre></div><p></p>
 </div>
 <hr>
+<h2 id="supported-nextflow-versions">Supported Nextflow versions</h2>
+<p><code>kreview</code> supports <strong>Nextflow v25–v26</strong>. <code>manifest.nextflowVersion</code> pins a hard floor of
+<code>25.04.0</code>, so an older Nextflow fails immediately with a clear message instead of a confusing
+parse error. <abbr title="Continuous Integration">CI</abbr> runs the stub test against both ends of the range (25.04.6 and 26.04.6).</p>
+<p>The floor exists because <code>nextflow.config</code> uses <code>env('VAR')</code> to read environment variables,
+which Nextflow added in 24.11. Older releases also accepted <code>try</code>/<code>catch</code> and <code>${HOME}</code>
+interpolation in config; Nextflow 24+ rejects both, which is why the config was reworked.</p>
+<h3 id="smoke-testing-the-dag-profile-stub">Smoke-testing the <abbr title="Directed Acyclic Graph">DAG</abbr> (<code>-profile stub</code>)</h3>
+<p>Every process declares a <code>stub:</code> block that creates its declared outputs and nothing else.
+Combined with <code>-stub-run</code>, this exercises the whole <abbr title="Directed Acyclic Graph">DAG</abbr> — config parsing, profile resolution,
+module includes and channel wiring — in seconds, with no data and no containers:</p>
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-4-1" id="__codelineno-4-1" name="__codelineno-4-1"></a>bash<span class="w"> </span>scripts/nextflow_stub_test.sh<span class="w">            </span><span class="c1"># uses `nextflow` from PATH</span>
+<a href="#__codelineno-4-2" id="__codelineno-4-2" name="__codelineno-4-2"></a>bash<span class="w"> </span>scripts/nextflow_stub_test.sh<span class="w"> </span>/path/to/nextflow
+</code></pre></div>
+<p>The script checks every profile resolves, runs both the <code>eval</code> and <code>label</code> workflows, and
+asserts from <code>execution_trace.txt</code> that all 17 processes ran and every task reached
+<code>COMPLETED</code>. It also fails on a <code>withName:</code> selector naming a process that no longer exists —
+silent config rot that Nextflow only reports as a warning.</p>
+<p>This is a <strong>wiring</strong> test, not a correctness test: no real computation happens. Run it after
+changing any <code>.nf</code> file, the <abbr title="Directed Acyclic Graph">DAG</abbr>, or <code>nextflow.config</code>.</p>
+<hr>
 <h2 id="profiling-scaling-slurm">Profiling &amp; Scaling (<abbr title="Simple Linux Utility for Resource Management">SLURM</abbr>)</h2>
 <p>Because <code>kreview</code> accesses thousands of files aggressively using DuckDB, network filesystem socket limits (<code>Ulimit N</code>) behave entirely differently between a desktop Mac and a remote <abbr title="High-Performance Computing">HPC</abbr> <abbr title="Simple Linux Utility for Resource Management">SLURM</abbr> cluster.</p>
 <h3 id="1-local-docker">1. Local (Docker)</h3>
@@ -1054,7 +1119,7 @@ Use mouse to pan and zoom
 <div class="admonition warning">
 <p class="admonition-title">IRIS Compute Nodes Lack Internet</p>
 <p>On IRIS, compute nodes cannot pull containers from <abbr title="GitHub Container Registry">GHCR</abbr>. Use a <strong>local clone</strong> of the kreview repo instead of the <code>-r</code> GitHub remote:
-</p><div class="highlight"><pre><span></span><code><a href="#__codelineno-4-1" id="__codelineno-4-1" name="__codelineno-4-1"></a>nextflow<span class="w"> </span>run<span class="w"> </span>/usersoftware/shahr2/github/kreview/nextflow/main.nf<span class="w"> </span>...
+</p><div class="highlight"><pre><span></span><code><a href="#__codelineno-5-1" id="__codelineno-5-1" name="__codelineno-5-1"></a>nextflow<span class="w"> </span>run<span class="w"> </span>/usersoftware/shahr2/github/kreview/nextflow/main.nf<span class="w"> </span>...
 </code></pre></div>
 Singularity images are cached to <code>~/.singularity_cache/</code> on the login node.<p></p>
 </div>
@@ -1071,7 +1136,7 @@ Singularity images are cached to <code>~/.singularity_cache/</code> on the login
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 21, 2026 15:22:35 UTC"><span class="timeago" datetime="2026-07-21T15:22:35+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 21, 2026 15:22:35 UTC">2026-07-21</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 21, 2026 16:18:44 UTC"><span class="timeago" datetime="2026-07-21T16:18:44+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 21, 2026 16:18:44 UTC">2026-07-21</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">
