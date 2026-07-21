@@ -1077,7 +1077,7 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <a href="#__codelineno-0-4" id="__codelineno-0-4" name="__codelineno-0-4"></a><span class="c1"># eval_engine.py — used by BOTH kreview run AND kreview eval cpu/gpu</span>
 <a href="#__codelineno-0-5" id="__codelineno-0-5" name="__codelineno-0-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">kreview.eval_engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">cpu_models</span><span class="p">,</span> <span class="n">gpu_models</span>
 </code></pre></div>
-<p>When editing these shared functions, always edit the <strong>source notebook</strong> (<code>nbs/*.ipynb</code>) and run <code>nbdev_export</code> to regenerate the <code>.py</code> modules.</p>
+<p>When editing these shared functions, always edit the <strong>source notebook</strong> (<code>nbs/*.ipynb</code>) and run <code>nbdev-export &amp;&amp; black kreview/</code> to regenerate the <code>.py</code> modules.</p>
 <hr>
 <h2 id="data-flow">Data Flow</h2>
 <p>Each stage communicates through <strong>parquet files</strong> on disk:</p>
@@ -1270,9 +1270,9 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 <h2 id="adding-a-new-pipeline-stage">Adding a New Pipeline Stage</h2>
 <ol>
 <li><strong>Create the source notebook</strong> (e.g., <code>nbs/04_new_stage.ipynb</code>) with the shared logic functions</li>
-<li>Run <code>nbdev_export</code> to generate <code>kreview/new_stage.py</code></li>
+<li>Run <code>nbdev-export &amp;&amp; black kreview/</code> to generate <code>kreview/new_stage.py</code></li>
 <li><strong>Create a CLI notebook</strong> (e.g., <code>nbs/93_cli_new_stage.ipynb</code>) with the thin CLI wrapper</li>
-<li>Run <code>nbdev_export</code> to generate <code>kreview/cli_new_stage.py</code></li>
+<li>Run <code>nbdev-export &amp;&amp; black kreview/</code> to generate <code>kreview/cli_new_stage.py</code></li>
 <li>Register in <code>nbs/90_cli.ipynb</code> via <code>app.command()</code> or <code>app.add_typer()</code></li>
 <li>Update <code>kreview run</code> in the same notebook to call the shared functions</li>
 <li>Create a Nextflow process in <code>nextflow/modules/local/kreview/new_stage.nf</code></li>
@@ -1282,14 +1282,14 @@ The legacy monolithic <code>kreview eval multimodal run</code> can also execute 
 </ol>
 <div class="admonition warning">
 <p class="admonition-title">Remember the Golden Rule</p>
-<p>Always edit the <strong>notebook</strong> first, then <code>nbdev_export</code>. See <a href="../nbdev-workflow/">nbdev Workflow</a> for details.</p>
+<p>Always edit the <strong>notebook</strong> first, then <code>nbdev-export &amp;&amp; black kreview/</code>. See <a href="../nbdev-workflow/">nbdev Workflow</a> for details.</p>
 </div>
 <aside class="md-source-file">
 <span class="md-source-file__fact">
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 9, 2026 18:15:45 UTC"><span class="timeago" datetime="2026-06-09T18:15:45+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 9, 2026 18:15:45 UTC">2026-06-09</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="July 21, 2026 14:15:42 UTC"><span class="timeago" datetime="2026-07-21T14:15:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="July 21, 2026 14:15:42 UTC">2026-07-21</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">
