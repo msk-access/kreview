@@ -205,3 +205,22 @@ jobs:
           docker run --rm kreview:test-cpu --help
           docker run --rm --entrypoint quarto kreview:test-cpu --version
           docker run --rm --entrypoint python kreview:test-cpu -c "import papermill, BorutaShap, xgboost, shap, kreview; print('kreview imports OK')"
+
+      # run_hpc.sh runs `--multimodal_selection boruta_shap`, so the RELEASE container must not
+      # just IMPORT BorutaShap but actually RUN the strategy end to end — the shap/xgboost/scipy
+      # /numpy runtime break only surfaces on execution, not import. Verified on the v0.0.29 image
+      # (numpy 2.0.0 / sklearn 1.9 / xgboost 3.3 / shap 0.52; kreview's binom_test + numpy-NaN
+      # shims bridge the compat). This is the guarantee that the shipped container works.
+      - name: Smoke test cpu image — boruta_shap runs end to end (run_hpc.sh workflow)
+        if: matrix.target == 'cpu'
+        run: |
+          docker run --rm --entrypoint python kreview:test-cpu - <<'PY'
+          import numpy as np, pandas as pd
+          from kreview.eval_engine import _select_multimodal_features
+          rng = np.random.RandomState(42)
+          X = pd.DataFrame(rng.randn(100, 10), columns=[f"f{i}" for i in range(10)])
+          y = np.array([0] * 50 + [1] * 50); X.iloc[:50, 0] += 3.0
+          _sel, names = _select_multimodal_features(X, y, top_percentile=50.0, strategy="boruta_shap")
+          assert len(names) > 0, "boruta_shap selected no features"
+          print(f"boruta_shap OK in container: {len(names)} features -> {names}")
+          PY
