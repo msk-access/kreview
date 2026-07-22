@@ -39,6 +39,9 @@ dependencies = [
 arfs = [
     "arfs>=2.3.0",
     "lightgbm>=4.0.0",
+    # arfs imports the deprecated `pkg_resources`, which setuptools 81 removed. Pin below that
+    # so `import arfs` works on Python 3.12+ (a clean 3.12 venv ships no pkg_resources at all).
+    "setuptools<81",
 ]
 jupyter = [
     "jupyter>=1.0.0",
@@ -83,6 +86,7 @@ gpu = [
 all = [
     "arfs>=2.3.0",
     "lightgbm>=4.0.0",
+    "setuptools<81",   # arfs needs the deprecated pkg_resources (removed in setuptools 81)
     "jupyter>=1.0.0",
     "matplotlib>=3.7.0",
     "pytest>=7.0.0",

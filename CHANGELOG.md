@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Test coverage for the CLI, `report.py`, and the multimodal strategies** (#63). Added a
+  `report.py` smoke test (0% → 57% — covers the matrix-not-found guard) and CliRunner `--help`
+  tests across the full nested command tree (`eval ablate *`, `eval multimodal *`), which guard
+  command registration/wiring. A new `test-strategies` CI job installs the `arfs` extra and runs
+  the multimodal strategy tests, which **previously skipped in every environment** — the same
+  "looks protected, isn't" pattern that hid the original BorutaShap outage. Un-skipping them
+  immediately surfaced that **all three are broken against modern deps** (not kreview bugs — the
+  strategy dispatch is correct): `arfs` 2.4 is incompatible with sklearn 1.9 (`force_all_finite`,
+  breaks `leshy`) and lightgbm 4.x (`categorical_feature`, breaks `grootcv`) — #91; and
+  `boruta_shap` hits a BorutaShap→shap xgboost-parser error on some versions — #92. All three are
+  now `xfail(strict=False)` with tracked issues so the breakage is visible rather than invisibly
+  skipped (they xpass and alert when the deps are fixed). The `arfs` extra also now pins
+  `setuptools<81` (arfs imports the removed `pkg_resources`). Overall coverage 44% → 46%; CI
+  floor 38% → 42%.
+  (No `nf-test` harness — the Nextflow `-stub-run` in `scripts/nextflow_stub_test.sh` covers the
+  workflow wiring, per the #80 maintainer decision.)
+
 ### Changed
 - **Centralized the HPC env setup and fixed inconsistent hardening** (#58). The Singularity
   read-only-`/home` / cache-redirect env was copy-pasted across five modules and had drifted:

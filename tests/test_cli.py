@@ -89,11 +89,23 @@ class TestEvalSubcommands:
         result = runner.invoke(app, ["eval", "--help"])
         assert result.exit_code == 0, result.output
 
-    @pytest.mark.parametrize("sub", ["cpu", "gpu", "multimodal"])
+    @pytest.mark.parametrize("sub", ["cpu", "gpu", "multimodal", "ablate"])
     def test_eval_sub_help(self, sub):
         """``kreview eval <sub> --help`` returns exit code 0."""
         result = runner.invoke(app, ["eval", sub, "--help"])
         assert result.exit_code == 0, f"eval {sub}: {result.output}"
+
+    @pytest.mark.parametrize("sub", ["cpu", "gpu", "merge"])
+    def test_eval_ablate_sub_help(self, sub):
+        """``kreview eval ablate <sub> --help`` returns exit code 0 (full nested tree)."""
+        result = runner.invoke(app, ["eval", "ablate", sub, "--help"])
+        assert result.exit_code == 0, f"eval ablate {sub}: {result.output}"
+
+    @pytest.mark.parametrize("sub", ["run", "prep", "single", "ablation", "merge"])
+    def test_eval_multimodal_sub_help(self, sub):
+        """``kreview eval multimodal <sub> --help`` returns exit code 0 (full nested tree)."""
+        result = runner.invoke(app, ["eval", "multimodal", sub, "--help"])
+        assert result.exit_code == 0, f"eval multimodal {sub}: {result.output}"
 
 
 # ── Parameter validation ──
