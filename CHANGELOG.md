@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Centralized the HPC env setup and fixed inconsistent hardening** (#58). The Singularity
+  read-only-`/home` / cache-redirect env was copy-pasted across five modules and had drifted:
+  `PYTORCH_CUDA_ALLOC_CONF` (the CUDA-OOM guard) was set in `multimodal_single` but **missing**
+  from `eval_gpu_single` and `ablate_gpu_single`, and the report modules **lacked**
+  `HOME`/`TMPDIR`/`MPLCONFIGDIR`. It is now defined once each (`params.gpu_env_setup`,
+  `params.report_env_setup`) and interpolated into every module's `script:`, so the hardening
+  is applied identically everywhere. `scoreboard.nf`'s `python3` heredoc now fails loud with a
+  clear message if the interpreter is missing (Singularity PATH strip) instead of a cryptic
+  exit 127.
+
+  Two deliberate design choices, contrary to the issue's original suggestion, because the
+  nf-core **iris** institutional config sets its own `beforeScript`, `withLabel` resources,
+  `errorStrategy` and `cache`: (1) the env stays **in-script**, not in a `beforeScript`, which
+  is a single non-additive directive that would clobber (or be clobbered by) iris's; (2) the
+  per-`withName` resource ladders stay as they are — they are defensive armour against iris's
+  `withLabel` override, and Nextflow 24+ forbids the `def`-closure hoisting that would dedup
+  them. Rationale recorded in `.agents/memory/reference-iris-config-interaction.md`.
+
 ### Fixed
 - **Published output nested a working-directory prefix** (#84). Because a process' `output:`
   path carries the working subdir (`selected/`, `fused/`, `output/`, `prep_out/`, …) and

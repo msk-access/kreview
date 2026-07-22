@@ -37,15 +37,8 @@ process KREVIEW_ABLATE_GPU_SINGLE {
     echo "=== KREVIEW_ABLATE_GPU_SINGLE: ${evaluator} ==="
     echo "Models: ${models_arg}, Device: ${device_arg}"
 
-    # Singularity env setup (same as eval_gpu_single.nf)
-    export HOME=\${PWD}/.home && mkdir -p \$HOME
-    export TMPDIR=\${PWD}/tmp && mkdir -p \$TMPDIR
-    export XDG_CACHE_HOME=\${PWD}/.cache && mkdir -p \$XDG_CACHE_HOME
-    export HF_HOME=\${XDG_CACHE_HOME}/huggingface
-    export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
-    export TABPFN_MODEL_CACHE_DIR=\${XDG_CACHE_HOME}/tabpfn
-    export TABPFN_NO_BROWSER=true
-    export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
+    # Shared GPU env centralized in nextflow.config (params.gpu_env_setup, #58).
+    ${params.gpu_env_setup}
     ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set"}
 
     # Build eval-stats flag
