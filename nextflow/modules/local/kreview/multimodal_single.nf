@@ -18,7 +18,8 @@
 process KREVIEW_MULTIMODAL_SINGLE_CPU {
     tag "multimodal-single-${model_name}"
     label 'process_medium'
-    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (single_out/).
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     val(model_name)
@@ -65,7 +66,8 @@ process KREVIEW_MULTIMODAL_SINGLE_CPU {
 process KREVIEW_MULTIMODAL_SINGLE_GPU {
     tag "multimodal-single-gpu-${model_name}"
     label 'process_gpu'
-    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (single_out/).
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     val(model_name)

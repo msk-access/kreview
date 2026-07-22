@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Published output nested a working-directory prefix** (#84). Because a process' `output:`
+  path carries the working subdir (`selected/`, `fused/`, `output/`, `prep_out/`, …) and
+  `publishDir` already named the destination folder, results landed at
+  `matrices/selected/selected/…`, `matrices/fused/fused/…`, `models/multimodal/prep_out/…`.
+  Added `saveAs: { fn -> file(fn).name }` to the seven affected modules so files publish by
+  basename — the tree now matches the documented structure (`matrices/selected/X`,
+  `models/multimodal/X`). Publish-path only; nothing consumes `params.outdir` (all
+  inter-process data flows through channels), so the DAG is unaffected. Guarded by a new
+  flatness assertion in `scripts/nextflow_stub_test.sh`.
 - **DuckDB reads masked failures as empty results** (#61). Both chunked-read paths
   (`_read_parquet_chunk`, `run_feature_sql`) retried on *any* exception and then returned an
   empty DataFrame — indistinguishable from a legitimate 0-row read, so a persistently failing

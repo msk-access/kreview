@@ -13,7 +13,9 @@
 process KREVIEW_MULTIMODAL_PREP {
     tag "multimodal-prep"
     label 'process_medium'
-    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (prep_out/) so files land in
+    // models/multimodal/ instead of models/multimodal/prep_out/.
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     path(results_jsons)   // Collected *_model_results.json files

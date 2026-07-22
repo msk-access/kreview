@@ -12,7 +12,8 @@
 process KREVIEW_MULTIMODAL_MERGE {
     tag "multimodal-merge"
     label 'process_low'
-    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (merge_out/).
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     path(stacking_results)   // Collected stacking_*_results.json from single

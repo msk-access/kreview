@@ -161,6 +161,21 @@ for m in eval_gpu_single ablate_gpu_single multimodal_single; do
 done
 [ "$fail" -eq 0 ] && echo "   all GPU wrappers retain the retry-then-degrade guard"
 
+# --- 8. #84 regression: published tree must not nest a working-dir prefix ---------------
+# A publishDir whose leaf matches the output-path subdir (or a leaked working dir like
+# prep_out/) double-nests: matrices/selected/selected/…, models/multimodal/prep_out/…. The
+# eval run above publishes to out_eval; assert none of those working-dir prefixes survive.
+echo "== #84 published-tree flatness"
+nested="$(find "$WORK/out_eval" -type f 2>/dev/null \
+    | grep -E '/(selected/selected|fused/fused|raw/output|prep_out|single_out|ablation_out|merge_out)/' || true)"
+if [ -n "$nested" ]; then
+    echo "FAILED: published output nests a working-dir prefix (#84 regression):" >&2
+    echo "$nested" | sed 's/^/    /' >&2
+    fail=1
+else
+    echo "   published tree is flat (no working-dir prefixes leaked)"
+fi
+
 [ "$fail" -eq 0 ] || exit 1
 
-echo "OK: DAG wires end to end on $("$NF" -v 2>&1) (eval + label workflows; #59/#60 guards pass)."
+echo "OK: DAG wires end to end on $("$NF" -v 2>&1) (eval + label workflows; #59/#60/#84 guards pass)."
