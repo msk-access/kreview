@@ -48,10 +48,36 @@ jobs:
             || { echo "::error::nbs/ and kreview/*.py are out of sync. Run 'nbdev-export && black kreview/' and commit the result."; exit 1; }
 
       - name: Run tests with pytest
-        run: pytest --cov=kreview --cov-report=xml --cov-fail-under=38
+        # Floor raised 38 -> 42 after #63 added report.py (0 -> 57%) and CLI-tree smoke tests.
+        # Locks in the gain; ratchet up as coverage grows (a full CLI-body harness with fixture
+        # data is a separate effort).
+        run: pytest --cov=kreview --cov-report=xml --cov-fail-under=42
 
       - name: Test Python Package Build
         run: python -m build
+
+  # ── Multimodal strategy tests (arfs extra installed) ────────────────────────
+  # #63: leshy/grootcv/boruta_shap skip when their deps aren't installed — which was EVERY
+  # environment, so the strategy code paths were never exercised ("looks protected, isn't":
+  # the same class that hid the original BorutaShap outage). This job installs the arfs extra
+  # so leshy actually runs; grootcv/boruta_shap are xfail (tracked third-party incompatibilities
+  # #91/#92) and stay visible here rather than invisibly skipped.
+  test-strategies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install with the arfs extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[arfs,test]"
+      - name: Assert strategy deps are importable (fail loud if the extra breaks)
+        run: python -c "import arfs, lightgbm; print('arfs', arfs.__version__, 'lightgbm', lightgbm.__version__)"
+      - name: Run multimodal strategy tests (leshy runs; grootcv/boruta_shap xfail)
+        run: pytest tests/test_selection.py -v -rxs -k "leshy or grootcv or boruta_shap or strategy"
 
   # ── Secret + PHI scan ───────────────────────────────────────────────────────
   # The gitleaks pre-push hook only protects contributors who wired it locally. This job

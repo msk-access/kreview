@@ -387,6 +387,13 @@ class TestMultimodalFeatureSelection:
         )
         assert len(names) == 20
 
+    @pytest.mark.xfail(
+        reason="third-party incompatibility (#92): BorutaShap->shap xgboost tree parser "
+        "raises ValueError('could not convert string to float'). Not a kreview bug; kreview's "
+        "strategy call is correct. Tracked separately; xfail keeps it VISIBLE instead of the "
+        "old invisible skip.",
+        strict=False,
+    )
     def test_boruta_shap_passes_through(self):
         """Boruta-SHAP strategy should not crash on small data."""
         try:
@@ -455,6 +462,12 @@ class TestMultimodalFeatureSelection:
         assert len(names) > 0
         assert len(names) <= p
 
+    @pytest.mark.xfail(
+        reason="third-party incompatibility (#91): arfs 2.4 passes categorical_feature to "
+        "lightgbm 4.x train(), which removed it. Not a kreview bug; kreview's strategy call is "
+        "correct (leshy, same dep, passes). xfail keeps it VISIBLE instead of the old skip.",
+        strict=False,
+    )
     def test_grootcv_passes_through(self):
         """GrootCV strategy should not crash on small data."""
         try:
