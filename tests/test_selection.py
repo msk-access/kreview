@@ -437,6 +437,12 @@ class TestMultimodalFeatureSelection:
 
         assert _VALID_MULTIMODAL_STRATEGIES == {"mi", "boruta_shap", "leshy", "grootcv"}
 
+    @pytest.mark.xfail(
+        reason="third-party incompatibility (#91): arfs 2.4 calls sklearn check_X_y("
+        "force_all_finite=...), removed in sklearn 1.9. Not a kreview bug (dispatch is correct); "
+        "passes on older sklearn. xfail keeps it VISIBLE instead of the old skip.",
+        strict=False,
+    )
     def test_leshy_passes_through(self):
         """Leshy strategy should not crash on small data."""
         try:

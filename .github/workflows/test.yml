@@ -57,11 +57,13 @@ jobs:
         run: python -m build
 
   # ── Multimodal strategy tests (arfs extra installed) ────────────────────────
-  # #63: leshy/grootcv/boruta_shap skip when their deps aren't installed — which was EVERY
-  # environment, so the strategy code paths were never exercised ("looks protected, isn't":
-  # the same class that hid the original BorutaShap outage). This job installs the arfs extra
-  # so leshy actually runs; grootcv/boruta_shap are xfail (tracked third-party incompatibilities
-  # #91/#92) and stay visible here rather than invisibly skipped.
+  # #63: leshy/grootcv/boruta_shap skipped in EVERY environment because their deps were never
+  # installed, so the strategy code paths were never exercised ("looks protected, isn't" — the
+  # same class that hid the original BorutaShap outage). This job installs the arfs extra so the
+  # tests actually RUN. Un-skipping revealed all three are broken against modern deps (arfs vs
+  # sklearn 1.9 / lightgbm 4.x — #91; BorutaShap->shap — #92), so they are xfail(strict=False):
+  # the breakage is now VISIBLE and tracked here rather than invisibly skipped, and the job still
+  # proves kreview's strategy dispatch reaches each library. xfails xpass (alert) when deps are fixed.
   test-strategies:
     runs-on: ubuntu-latest
     steps:

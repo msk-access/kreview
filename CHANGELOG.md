@@ -14,10 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command registration/wiring. A new `test-strategies` CI job installs the `arfs` extra and runs
   the multimodal strategy tests, which **previously skipped in every environment** — the same
   "looks protected, isn't" pattern that hid the original BorutaShap outage. Un-skipping them
-  immediately surfaced two **third-party** incompatibilities (not kreview bugs): `grootcv` (arfs
-  passes `categorical_feature` to lightgbm 4.x, removed there — #91) and `boruta_shap`
-  (BorutaShap→shap xgboost parser — #92). Both are now `xfail(strict=False)` with tracked issues
-  so they stay visible; `leshy` runs and passes. Overall coverage 44% → 46%; CI floor 38% → 42%.
+  immediately surfaced that **all three are broken against modern deps** (not kreview bugs — the
+  strategy dispatch is correct): `arfs` 2.4 is incompatible with sklearn 1.9 (`force_all_finite`,
+  breaks `leshy`) and lightgbm 4.x (`categorical_feature`, breaks `grootcv`) — #91; and
+  `boruta_shap` hits a BorutaShap→shap xgboost-parser error on some versions — #92. All three are
+  now `xfail(strict=False)` with tracked issues so the breakage is visible rather than invisibly
+  skipped (they xpass and alert when the deps are fixed). The `arfs` extra also now pins
+  `setuptools<81` (arfs imports the removed `pkg_resources`). Overall coverage 44% → 46%; CI
+  floor 38% → 42%.
   (No `nf-test` harness — the Nextflow `-stub-run` in `scripts/nextflow_stub_test.sh` covers the
   workflow wiring, per the #80 maintainer decision.)
 
