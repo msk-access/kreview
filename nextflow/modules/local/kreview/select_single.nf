@@ -15,7 +15,9 @@
 process KREVIEW_SELECT_SINGLE {
     tag "select-${matrix.baseName.replace('_matrix', '')}"
     label 'process_medium'
-    publishDir "${params.outdir}/matrices/selected", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (selected/) so files land in
+    // matrices/selected/ instead of matrices/selected/selected/.
+    publishDir "${params.outdir}/matrices/selected", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     path(matrix)  // Single *_matrix.parquet file

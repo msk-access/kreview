@@ -17,7 +17,9 @@
 process KREVIEW_EXTRACT {
     tag "extract-${evaluator_name}"
     label 'process_high'
-    publishDir "${params.outdir}/matrices/raw", mode: 'copy', pattern: 'output/*_matrix.parquet'
+    // #84: saveAs flattens the working-dir prefix (output/) so files land directly in
+    // matrices/raw/ instead of matrices/raw/output/ — matches the documented structure.
+    publishDir "${params.outdir}/matrices/raw", mode: 'copy', pattern: 'output/*_matrix.parquet', saveAs: { fn -> file(fn).name }
 
     input:
     path(cancer_sheet,  stageAs: 'cancer_samplesheet.csv')
