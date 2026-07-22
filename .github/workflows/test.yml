@@ -73,9 +73,9 @@ jobs:
       - name: Install with the arfs extra
         run: |
           python -m pip install --upgrade pip
-          # setuptools is required explicitly: arfs imports the deprecated `pkg_resources`
-          # (from setuptools), which a clean Python 3.12 venv no longer ships by default.
-          pip install -e ".[arfs,test]" setuptools
+          # The arfs extra pins setuptools<81 so arfs's deprecated pkg_resources import works
+          # (setuptools 81 removed it; a clean py3.12 venv ships none).
+          pip install -e ".[arfs,test]"
       - name: Assert strategy deps are importable (fail loud if the extra breaks)
         run: python -c "import arfs, lightgbm; print('arfs', arfs.__version__, 'lightgbm', lightgbm.__version__)"
       - name: Run multimodal strategy tests (leshy runs; grootcv/boruta_shap xfail)
