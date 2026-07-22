@@ -37,15 +37,8 @@ process KREVIEW_ABLATE_GPU_SINGLE {
     echo "=== KREVIEW_ABLATE_GPU_SINGLE: ${evaluator} ==="
     echo "Models: ${models_arg}, Device: ${device_arg}"
 
-    # Singularity env setup (same as eval_gpu_single.nf)
-    export HOME=\${PWD}/.home && mkdir -p \$HOME
-    export TMPDIR=\${PWD}/tmp && mkdir -p \$TMPDIR
-    export XDG_CACHE_HOME=\${PWD}/.cache && mkdir -p \$XDG_CACHE_HOME
-    export HF_HOME=\${XDG_CACHE_HOME}/huggingface
-    export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
-    export TABPFN_MODEL_CACHE_DIR=\${XDG_CACHE_HOME}/tabpfn
-    export TABPFN_NO_BROWSER=true
-    export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
+    # Shared GPU env centralized in nextflow.config (params.gpu_env_setup, #58).
+    ${params.gpu_env_setup}
     ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set"}
 
     # Build eval-stats flag
@@ -69,14 +62,29 @@ process KREVIEW_ABLATE_GPU_SINGLE {
     GPU_EXIT=\$?
     set -e
 
-    # Always produce output — even on failure
+    # Failure handling — see #59 and the collect() deadlock history (commits 698c72e /
+    # dcfe356). Fail loud first (exit non-zero) so errorStrategy='retry' climbs the
+    # memory/partition ladder; degrade gracefully (error-JSON + exit 0) only once retries
+    # are exhausted, keeping the channel-closing invariant so collect() cannot deadlock.
     if ! ls *_ablation_gpu.json 1>/dev/null 2>&1; then
-        echo "WARNING: GPU ablation failed for ${evaluator} (exit=\$GPU_EXIT)" >&2
+        if [ ${task.attempt} -le ${task.maxRetries} ]; then
+            RETRY_CODE=\$GPU_EXIT; [ "\$RETRY_CODE" -eq 0 ] && RETRY_CODE=1
+            echo "ERROR: GPU ablation failed for ${evaluator} (exit=\$GPU_EXIT), attempt ${task.attempt}/\$((${task.maxRetries}+1)) — failing to trigger retry + memory/partition escalation" >&2
+            exit \$RETRY_CODE
+        fi
+        echo "WARNING: GPU ablation failed for ${evaluator} (exit=\$GPU_EXIT) after ${task.maxRetries} retries — emitting error JSON and continuing" >&2
         echo '{"evaluator": "${evaluator}", "error": "gpu_ablation_failed", "exit_code": '\$GPU_EXIT'}' \
             > "${evaluator}_ablation_gpu.json"
     fi
 
     echo "Output: \$(ls *_ablation_gpu.json)"
     echo "=== KREVIEW_ABLATE_GPU_SINGLE: ${evaluator} DONE ==="
+    """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    def evaluator = matrix.baseName.replace('_matrix', '')
+    """
+    echo '{}' > ${evaluator}_ablation_gpu.json
     """
 }

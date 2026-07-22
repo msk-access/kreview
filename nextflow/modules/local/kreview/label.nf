@@ -40,4 +40,10 @@ process KREVIEW_LABEL {
         ${ch_maf_flag} \\
         --output labels.parquet
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    touch labels.parquet
+    """
 }

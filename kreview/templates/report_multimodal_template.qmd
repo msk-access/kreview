@@ -629,8 +629,26 @@ else:
 ```{python}
 #| title: "Evaluator Scoreboard"
 if scoreboard_df is not None:
+    # Surface failures loudly (#59/#60) — see report_template.qmd for the rationale.
+    if "status" in scoreboard_df.columns:
+        degraded = scoreboard_df[
+            scoreboard_df["status"].isin(["FAILED", "PARTIAL", "NO_RESULTS"])
+        ]
+        if not degraded.empty:
+            has_detail = "error_detail" in scoreboard_df.columns
+            lines = []
+            for r in degraded.itertuples():
+                detail = ""
+                if has_detail and pd.notna(r.error_detail):
+                    detail = f" — {r.error_detail}"
+                lines.append(f"- **{r.evaluator}**: {r.status}{detail}")
+            display(Markdown(
+                "> ⚠️ **Degraded evaluators** — the following did not produce complete "
+                "results. They are flagged here rather than silently dropped:\n\n"
+                + "\n".join(lines)
+            ))
     display_cols = [
-        "evaluator", "best_model", "best_auc",
+        "evaluator", "status", "best_model", "best_auc",
         "holdout_auc", "auc_drop",
         "sensitivity", "specificity",
         "sens_at_100spec", "sens_at_95spec",
@@ -648,7 +666,7 @@ if scoreboard_df is not None:
         pageLength=10
     )
 else:
-    display(Markdown("> Scoreboard not available. Run `kreview run` with multiple evaluators to generate."))
+    display(Markdown("> Scoreboard not available. Run the Nextflow pipeline with multiple evaluators to generate it."))
 ```
 
 ### Column {width="40%"}

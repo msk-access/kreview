@@ -6,27 +6,29 @@ description: Run full feature evaluation pipeline — labels + extraction + stat
 
 ## Steps
 
-1. **Run the full pipeline**:
+1. **Run the full pipeline** (Nextflow multistage — the only run path):
    ```bash
-   kreview run \
-     --cancer-samplesheet /path/to/samplesheet.csv \
-     --healthy-xs1-samplesheet /path/to/xs1/samplesheet.csv \
-     --healthy-xs2-samplesheet /path/to/xs2/samplesheet.csv \
-     --cbioportal-dir /path/to/msk_solid_heme/ \
-     --krewlyzer-dir /path/to/results/ \
-     --output output/ \
-     --min-vaf 0.01 \
-     --min-variants 1
+   nextflow run nextflow/main.nf \
+     --cancer_samplesheet /path/to/samplesheet.csv \
+     --healthy_xs1_samplesheet /path/to/xs1/samplesheet.csv \
+     --healthy_xs2_samplesheet /path/to/xs2/samplesheet.csv \
+     --cbioportal_dir /path/to/msk_solid_heme/ \
+     --krewlyzer_dir /path/to/results/ \
+     --outdir output/ \
+     --min_vaf 0.01 \
+     --min_variants 1 \
+     -profile docker      # or iris/slurm on HPC
    ```
 
-2. **Run a single feature** (for debugging):
+2. **Restrict to a subset of evaluators**:
    ```bash
-   kreview run --features FSC_gene --min-vaf 0.01
+   nextflow run nextflow/main.nf --features FSC_gene --min_vaf 0.01 -profile docker
    ```
 
-3. **Run by tier**:
+3. **Debug one stage outside the DAG** (stage subcommands still exist):
    ```bash
-   kreview run --tier 1  # Tier 1 only (FSC, FSD, FSR)
+   kreview label --cancer-samplesheet ... --output output/
+   kreview extract --features FSC_gene --output output/
    ```
 
 4. **Check scoreboard**:

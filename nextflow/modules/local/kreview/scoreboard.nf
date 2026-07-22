@@ -27,6 +27,9 @@ process KREVIEW_SCOREBOARD {
 
     # All JSONs are symlinked in the work directory by Nextflow — no staging needed.
     # Python load_all_model_results() natively discovers and merges CPU+GPU JSONs.
+    # Fail loud if the interpreter is missing (Singularity can strip the container PATH → a
+    # bare `python3` would otherwise exit 127 with a cryptic message; #58).
+    command -v python3 >/dev/null || { echo "ERROR: python3 not found on PATH (Singularity PATH strip?)" >&2; exit 127; }
     python3 << 'EOF'
 import traceback, sys
 from kreview.scoreboard import build_scoreboard
@@ -45,5 +48,12 @@ print(f'Scoreboard: {len(sb)} evaluators', flush=True)
 if len(sb) > 0:
     print(f"  Best: {sb.iloc[0]['evaluator']} (AUC={sb.iloc[0]['best_auc']:.3f})", flush=True)
 EOF
+    """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    touch scoreboard_combined__all.parquet
+    touch scoreboard_combined__all.csv
     """
 }

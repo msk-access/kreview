@@ -215,3 +215,60 @@ class TestDataLoaders:
 
         with pytest.raises((FileNotFoundError, Exception)):
             load_clinical_sample("/nonexistent/path/clinical.txt")
+
+
+# ── #61: DuckDB reads must fail loud, not return an empty DataFrame ──────────────
+import duckdb  # noqa: E402
+import kreview.core as _core  # noqa: E402
+
+
+class _RaisingConn:
+    """Minimal DuckDB connection stub whose execute() always raises a given exception."""
+
+    def __init__(self, exc):
+        self.exc = exc
+        self.calls = 0
+
+    def execute(self, *args, **kwargs):
+        self.calls += 1
+        raise self.exc
+
+
+class TestDuckDBFailLoud:
+    """#61: schema/programming errors raise immediately; transient I/O retries then raises.
+
+    The old behaviour retried on *any* exception and then returned an empty DataFrame, which
+    is indistinguishable from a legitimate 0-row read — silently dropping those samples.
+    """
+
+    def test_schema_error_raises_immediately_no_retry(self):
+        conn = _RaisingConn(duckdb.BinderException("Referenced column 'foo' not found"))
+        with pytest.raises(duckdb.BinderException):
+            _core._read_parquet_chunk(conn, ["/x/a.parquet"], "FSC", "1/1")
+        assert conn.calls == 1, "a schema error must NOT be retried"
+
+    def test_data_error_raises_immediately(self):
+        conn = _RaisingConn(
+            duckdb.ConversionException("Could not convert string to DOUBLE")
+        )
+        with pytest.raises(duckdb.ConversionException):
+            _core._read_parquet_chunk(conn, ["/x/a.parquet"], "FSC", "1/1")
+        assert conn.calls == 1
+
+    def test_transient_io_retries_then_raises(self, monkeypatch):
+        monkeypatch.setattr(_core.time, "sleep", lambda *_: None)  # no real backoff
+        conn = _RaisingConn(duckdb.IOException("temporary network filesystem failure"))
+        with pytest.raises(duckdb.IOException):
+            _core._read_parquet_chunk(conn, ["/x/a.parquet"], "FSC", "1/1")
+        assert (
+            conn.calls == 3
+        ), "transient I/O retries max_retries times, then raises (not empty)"
+
+    def test_run_feature_sql_schema_error_raises(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            _core, "_discover_feature_paths", lambda *a, **k: ["/x/a.parquet"]
+        )
+        conn = _RaisingConn(duckdb.BinderException("bad column"))
+        with pytest.raises(duckdb.BinderException):
+            _core.run_feature_sql("SELECT 1", "FSC", [tmp_path], conn=conn)
+        assert conn.calls == 1

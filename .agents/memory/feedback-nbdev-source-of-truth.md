@@ -1,0 +1,51 @@
+---
+name: feedback-nbdev-source-of-truth
+description: "nbdev — the export/doclinks module forms are silent no-ops and underscore aliases don't exist; use `nbdev-export && black`, sync with `nbdev.sync --fname`, and never write code into the generated header."
+metadata:
+  type: feedback
+---
+
+Never leave `kreview/*.py` edited without a matching notebook change — but the commands to do
+that are **not** the ones the docs used to give. Use exactly:
+
+- notebook → `.py`: `nbdev-export && black kreview/`
+- `.py` → notebook: `python3 -m nbdev.sync --fname kreview/<mod>.py`
+- verify: run export+black **twice**; the second run must produce zero git diff
+
+Never place code above the first `# %% ../nbs/<nb>.ipynb #<cellid>` marker (the module
+docstring / `__all__` / `# %% auto 0` region). nbdev owns and regenerates that block:
+`nbdev.sync` cannot map it back to a cell, and the next export destroys it. Module-level
+constants belong in a real `#| export` cell. The module docstring comes from the notebook's
+first markdown cell (the `>` blockquote), so edit that, not the `.py`.
+
+Standalone exceptions (no notebook, edit directly): `scoreboard.py`, `feature_cards.py`,
+`reproducibility.py`.
+
+**Why:** on 2026-07-21, running the *real* exporter for the first time revealed that
+`python3 -m nbdev.export` and `python3 -m nbdev.doclinks` **exit 0 and write nothing**, and
+that `nbdev_export`/`nbdev_test` (underscores) do not exist in this install — inside a
+pipeline their "command not found" is hidden, because a pipeline's exit status comes from the
+last command. Three merged PRs (#71, #76, #77) and the CI export-sync gate had all reported
+"IDEMPOTENT ✓ / in sync" on the strength of that no-op, so every such check was vacuous. Real
+drift had accumulated unseen: `_GPU_MODEL_NAMES` (used in 6 places) existed in
+`eval_engine.py` but not in its notebook — it had been written into the generated header — so
+the first genuine export would have **deleted live code**. `_modidx.py` was also genuinely
+stale.
+
+**Correction to an earlier belief recorded here:** `black_formatting = True` does nothing.
+nbdev reads config from `pyproject.toml`, not `settings.ini` (check with
+`get_config().config_file`), *and* nbdev 3.0.12 never references `black_formatting` nor
+imports black at all. So export always emits non-black code while CI runs `black --check .`;
+the only convergent workflow is export **then** black. Do not try to "fix" nbdev behaviour by
+editing `settings.ini`.
+
+**How to apply:**
+1. Before trusting any tool's success, confirm it actually wrote something (compare a hash or
+   mtime). Exit 0 is not evidence — a no-op and a success look identical.
+2. After any change touching `.py` or `.ipynb`: `nbdev-export && black kreview/`, run twice,
+   the second run must be a zero diff, then `pytest -q`.
+3. If a constant or import "disappears" after an export, look for it in the generated header —
+   that is where it was, and that is why it died.
+
+Enforced by `.claude/hooks/nbdev-noop-guard.py`. See [[feedback-parallel-paths-one-impl]] and
+`.agents/skills/nbdev-patterns/SKILL.md`.

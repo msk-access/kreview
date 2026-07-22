@@ -3,6 +3,8 @@
 # %% ../nbs/02_eval_engine.ipynb #792e3b1f
 from __future__ import annotations
 import json
+import shutil
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 import pandas as pd
@@ -26,6 +28,12 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_is_fitted
 
 log = structlog.get_logger()
+
+# GPU model names — single source of truth for dispatch logic.
+# NOTE: this must live in an exported CELL, not in the generated `# %% auto 0`
+# header. Code placed in that header cannot be synced back and is destroyed by
+# the next `nbdev-export`.
+_GPU_MODEL_NAMES = frozenset({"tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"})
 
 # %% auto #0
 __all__ = [
@@ -52,20 +60,18 @@ __all__ = [
     "ablate_feature_groups",
     "merge_ablation",
     "evaluate_model",
+    "evaluate_holdout",
     "cpu_models",
+    "GPUModelCVAdapter",
     "gpu_models",
-    "multimodal_eval",
     "load_model_results",
     "load_all_model_results",
-    "GPUModelCVAdapter",
+    "multimodal_eval",
     "multimodal_prep",
     "multimodal_single",
     "multimodal_ablation",
     "multimodal_merge",
 ]
-
-# GPU model names — single source of truth for dispatch logic
-_GPU_MODEL_NAMES = frozenset({"tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft"})
 
 
 # %% ../nbs/02_eval_engine.ipynb #01bc33b3
@@ -215,7 +221,8 @@ def mutual_info_score(
 
     Returns:
         Mutual information score (float, >= 0). Higher means more informative.
-        Returns 0.0 if the feature is constant or computation fails.
+        Returns 0.0 if the feature is constant; raises if the MI computation itself
+        fails (a malformed matrix is a bug, not a zero-information feature).
     """
     from sklearn.feature_selection import mutual_info_classif
 
@@ -230,8 +237,12 @@ def mutual_info_score(
         mi = mutual_info_classif(X, y, random_state=random_state, n_neighbors=3)
         return float(mi[0])
     except Exception as exc:
-        log.warning("mutual_info_failed", error=str(exc))
-        return 0.0
+        # Fail loud, not to 0.0 (#61). The only benign degenerate case -- a constant feature --
+        # is handled by the np.std(X) == 0 guard above, so any exception here is a real error
+        # (a malformed matrix: object dtype, shape mismatch) that would otherwise masquerade as
+        # a zero-information feature. Surface it with context instead of scoring it 0.
+        log.error("mutual_info_failed", error=str(exc))
+        raise
 
 
 # %% ../nbs/02_eval_engine.ipynb #69946ce8
@@ -1017,13 +1028,42 @@ def _inner_cv_sensitivity(
                 fold_sensitivities.append(0.0)
 
         except Exception as e:
-            log.debug("inner_cv_fold_error", fold=fold_idx, error=str(e))
-            fold_sensitivities.append(0.0)
+            # Fail loud, not to 0.0 (#61). The benign degenerate cases -- <2 classes, too few
+            # samples per class -- are handled before the fold loop, and StratifiedKFold keeps
+            # both classes in each fold, so an exception here is a real error (a malformed
+            # matrix reaching model.fit). Appending 0.0 would let a systematically broken
+            # matrix score every fold 0 and drive ablation off garbage. Surface it instead.
+            log.error("inner_cv_fold_error", fold=fold_idx, error=str(e))
+            raise
 
     if not fold_sensitivities:
         return 0.0
 
     return float(np.mean(fold_sensitivities))
+
+
+def _numeric_feature_columns(df, meta_cols):
+    """Numeric feature columns of a matrix, with the metadata columns removed.
+
+    Also fails loud on a data-plumbing bug (#61): a column that is neither numeric nor known
+    metadata should have been a numeric feature, so an object dtype there means a feature was
+    not coerced upstream. ``select_dtypes`` would drop it silently and the model would quietly
+    train on fewer features than intended; instead this logs it at error level with the
+    offending dtypes. Logged, not raised: ``meta_cols`` may not enumerate every possible
+    metadata column, and over-crashing a long HPC run on an unlisted string column would be
+    worse than a loud, visible flag.
+    """
+    numeric = set(df.select_dtypes(include=np.number).columns)
+    feature_cols = [c for c in df.columns if c in numeric and c not in meta_cols]
+    suspicious = [c for c in df.columns if c not in numeric and c not in meta_cols]
+    if suspicious:
+        log.error(
+            "non_numeric_feature_columns_dropped",
+            columns=suspicious,
+            dtypes={c: str(df[c].dtype) for c in suspicious},
+            impact="excluded from the feature matrix -- likely a data-plumbing bug (#61)",
+        )
+    return feature_cols
 
 
 def ablate_feature_groups(
@@ -1120,11 +1160,7 @@ def ablate_feature_groups(
     sample_labels = model_df["label"].values  # 4-tier labels for inner CV
 
     # ── 3. Identify feature columns and groups ──
-    feature_cols = [
-        c
-        for c in model_df.select_dtypes(include=np.number).columns
-        if c not in LABEL_META_COLS
-    ]
+    feature_cols = _numeric_feature_columns(model_df, LABEL_META_COLS)
     if not feature_cols:
         log.error("ablation_no_features", evaluator=evaluator)
         return {"evaluator": evaluator, "error": "no_feature_columns"}
@@ -4057,7 +4093,7 @@ def multimodal_eval(
     random_state: int = 42,
     multimodal_selection: str = "mi",
 ) -> dict:
-    """Cross-evaluator multimodal evaluation.
+    """Cross-evaluator multimodal evaluation, run in a single process.
 
     Implements three complementary strategies:
 
@@ -4072,6 +4108,19 @@ def multimodal_eval(
 
     3. **Ablation**: Leave-one-evaluator-out analysis on the stacking
        matrix, showing each evaluator's marginal contribution.
+
+    This function is a **thin orchestrator**: it owns no evaluation logic of its own and
+    simply drives the decomposed stages in sequence —
+    ``multimodal_prep`` -> ``multimodal_single`` (once per model) -> ``multimodal_ablation``
+    -> ``multimodal_merge``. Those same stages are what the Nextflow multistage pipeline
+    scatters across jobs, so the single-machine and HPC paths execute **one implementation**.
+    They previously had separate implementations, which is how a fix applied to one path
+    silently missed the other.
+
+    Intermediate artifacts (stacking matrix, per-model JSONs, ablation JSON) are written to
+    a temporary directory that is removed on exit, preserving this function's contract of
+    returning results without leaving files behind — callers persist the returned dict
+    themselves.
 
     Args:
         results_dir: Directory with ``*_model_results.json`` files.
@@ -4088,303 +4137,148 @@ def multimodal_eval(
             ('mi', 'boruta_shap', 'leshy', or 'grootcv').
 
     Returns:
-        A comprehensive results dict with keys for each strategy.
+        The merged results dict (see ``multimodal_merge``), plus ``models_requested`` and
+        ``gpu_models_requested``, and ``model_errors`` if any individual model failed.
+
+    Raises:
+        ValueError: No models requested.
+        RuntimeError: Every requested model failed, so there is nothing to report.
+        Exception: Propagated from ``multimodal_prep``/``multimodal_merge`` — without a
+            stacking matrix or merged output there is no result, so these fail loudly
+            rather than returning a partial dict that reads as success.
     """
-    from kreview.core import LABEL_META_COLS
-
-    # GPU-specific kwargs for _build_model dispatch.
-    # NOTE: random_state is NOT included here — it is already passed as a
-    # positional argument to _build_model(model_name, random_state, **kwargs).
-    # Including it in gpu_kwargs would cause:
-    #   TypeError: got multiple values for argument 'random_state'
-    gpu_kwargs = dict(
-        device=device,
-        finetune_epochs=finetune_epochs,
-        finetune_lr=finetune_lr,
-    )
-    # Merge CPU + GPU model lists for unified iteration
+    results_dir = Path(results_dir)
     all_models = list(models) + list(gpu_models)
-
-    results = {
-        "strategy": "multimodal",
-        "models_requested": all_models,
-        "gpu_models_requested": list(gpu_models),
-    }
-
-    # ── Load baselines ──
-    log.info("multimodal_eval_start", results_dir=str(results_dir))
-    baselines = _load_per_evaluator_baselines(results_dir)
-    results["n_evaluators"] = len(baselines)
-    results["evaluators"] = sorted(baselines.keys())
-
-    # Capture per-evaluator best AUCs for comparison
-    single_aucs = {}
-    for eval_name, info in baselines.items():
-        if info.get("best_auc") is not None:
-            single_aucs[eval_name] = info["best_auc"]
-    results["single_evaluator_aucs"] = single_aucs
-
-    best_single_name = max(single_aucs, key=single_aucs.get) if single_aucs else None
-    best_single_auc = (
-        single_aucs.get(best_single_name, 0.0) if best_single_name else 0.0
-    )
-    results["best_single_evaluator"] = best_single_name
-    results["best_single_auc"] = best_single_auc
-
-    # ── Strategy 1: Stacking ──
-    log.info("multimodal_stacking_start")
-    try:
-        stacking_df, y_stack, _sample_ids, _sample_labels = _build_stacking_matrix(
-            baselines
+    if not all_models:
+        raise ValueError(
+            "multimodal_eval: no models requested (models and gpu_models are both empty)"
         )
-
-        # Impute NaNs from outer-join mismatches
-        n_nans = int(stacking_df.isna().sum().sum())
-        if n_nans > 0:
-            stacking_df = stacking_df.fillna(0.5)  # Neutral probability
-            log.info("stacking_nan_imputed", n_nans=n_nans, fill_value=0.5)
-
-        cv = StratifiedKFold(
-            n_splits=min(n_folds, len(y_stack) // 2),
-            shuffle=True,
-            random_state=random_state,
-        )
-
-        stacking_results = {}
-        for model_name in all_models:
-            try:
-                is_gpu = model_name in _GPU_MODEL_NAMES
-                model = _build_model(
-                    model_name, random_state, **(gpu_kwargs if is_gpu else {})
-                )
-                if model is None:
-                    log.warning(
-                        "stacking_model_skipped",
-                        model=model_name,
-                        reason="build returned None (import failed?)",
-                    )
-                    continue
-                res, _ = evaluate_model(
-                    model,
-                    stacking_df.values,
-                    y_stack,
-                    cv,
-                    f"stacking_{model_name}",
-                    feature_names=list(stacking_df.columns),
-                    random_state=random_state,
-                    sample_labels=_sample_labels,
-                )
-                stacking_results.update(res)
-
-                stacking_auc = res.get(f"auc_stacking_{model_name}")
-                if stacking_auc is not None and best_single_auc > 0:
-                    delta = stacking_auc - best_single_auc
-                    stacking_results[f"stacking_{model_name}_vs_best_single"] = delta
-                    log.info(
-                        "stacking_model_complete",
-                        model=model_name,
-                        auc=stacking_auc,
-                        delta_vs_best_single=delta,
-                        is_gpu=is_gpu,
-                    )
-            except Exception as e:
-                log.error("stacking_model_failed", model=model_name, error=str(e))
-                stacking_results[f"stacking_{model_name}_error"] = str(e)
-
-        results["stacking"] = stacking_results
-        results["stacking_n_features"] = len(stacking_df.columns)
-        results["stacking_features"] = list(stacking_df.columns)
-
-    except Exception as e:
-        log.error("multimodal_stacking_failed", error=str(e))
-        results["stacking_error"] = str(e)
-
-    # ── Strategy 2: Raw features (optional) ──
-    if super_matrix_path is not None:
-        log.info("multimodal_raw_start", super_matrix=str(super_matrix_path))
-        try:
-            super_df = pd.read_parquet(super_matrix_path)
-            log.info(
-                "super_matrix_loaded",
-                n_samples=len(super_df),
-                n_cols=len(super_df.columns),
-            )
-
-            # Extract labels
-            if "label" not in super_df.columns:
-                raise ValueError("super_matrix must contain 'label' column")
-
-            # Use shared build_binary_target to filter and encode labels
-            # — single source of truth for label → binary mapping.
-            from kreview.selection import build_binary_target
-
-            super_df, y_raw = build_binary_target(super_df, "label")
-
-            # Select numeric feature columns (exclude metadata)
-            feature_cols = [
-                c
-                for c in super_df.select_dtypes(include=np.number).columns
-                if c not in LABEL_META_COLS
-            ]
-
-            if not feature_cols:
-                raise ValueError("No numeric feature columns in super_matrix")
-
-            X_raw = super_df[feature_cols]
-            X_selected, selected_names = _select_multimodal_features(
-                X_raw,
-                y_raw,
-                top_percentile=top_percentile,
-                strategy=multimodal_selection,
-                random_state=random_state,
-            )
-
-            if X_selected.empty:
-                raise ValueError("No features survived selection")
-
-            cv_raw = StratifiedKFold(
-                n_splits=min(n_folds, len(y_raw) // 2),
-                shuffle=True,
-                random_state=random_state,
-            )
-
-            # Extract 4-tier text labels for healthy-normal specificity (v0.0.28+)
-            raw_sample_labels = (
-                super_df["label"].values if "label" in super_df.columns else None
-            )
-
-            raw_results = {}
-            for model_name in all_models:
-                try:
-                    is_gpu = model_name in _GPU_MODEL_NAMES
-                    model = _build_model(
-                        model_name, random_state, **(gpu_kwargs if is_gpu else {})
-                    )
-                    if model is None:
-                        log.warning(
-                            "raw_model_skipped",
-                            model=model_name,
-                            reason="build returned None (import failed?)",
-                        )
-                        continue
-                    res, _ = evaluate_model(
-                        model,
-                        X_selected.values,
-                        y_raw,
-                        cv_raw,
-                        f"raw_{model_name}",
-                        feature_names=selected_names,
-                        random_state=random_state,
-                        sample_labels=raw_sample_labels,
-                    )
-                    raw_results.update(res)
-
-                    raw_auc = res.get(f"auc_raw_{model_name}")
-                    if raw_auc is not None and best_single_auc > 0:
-                        raw_results[f"raw_{model_name}_vs_best_single"] = (
-                            raw_auc - best_single_auc
-                        )
-                except Exception as e:
-                    log.error("raw_model_failed", model=model_name, error=str(e))
-                    raw_results[f"raw_{model_name}_error"] = str(e)
-
-            results["raw_features"] = raw_results
-            results["raw_n_features_selected"] = len(selected_names)
-            results["raw_features_selected"] = selected_names[:20]
-            results["raw_features_selection_method"] = multimodal_selection
-
-        except Exception as e:
-            log.error("multimodal_raw_failed", error=str(e))
-            results["raw_features_error"] = str(e)
-
-    # ── Strategy 3: Ablation (leave-one-evaluator-out) ──
-    if "stacking" in results and "stacking_error" not in results:
-        log.info("multimodal_ablation_start")
-        try:
-            ablation = {}
-            # Use the best stacking model for ablation
-            best_stack_model = None
-            best_stack_auc = 0.0
-            for mn in all_models:
-                auc_val = results["stacking"].get(f"auc_stacking_{mn}", 0.0)
-                if auc_val and auc_val > best_stack_auc:
-                    best_stack_auc = auc_val
-                    best_stack_model = mn
-
-            if best_stack_model is not None:
-                # Drop each evaluator's columns and retrain
-                for eval_name in sorted(baselines.keys()):
-                    cols_to_drop = [
-                        c for c in stacking_df.columns if c.startswith(f"{eval_name}_")
-                    ]
-                    if not cols_to_drop:
-                        continue
-
-                    X_ablated = stacking_df.drop(columns=cols_to_drop)
-                    if X_ablated.empty:
-                        continue
-
-                    try:
-                        model = _build_model(best_stack_model, random_state)
-                        res, _ = evaluate_model(
-                            model,
-                            X_ablated.values,
-                            y_stack,
-                            cv,
-                            f"ablation_{eval_name}",
-                            feature_names=list(X_ablated.columns),
-                            random_state=random_state,
-                        )
-                        ablated_auc = res.get(f"auc_ablation_{eval_name}", 0.0)
-                        delta = best_stack_auc - (ablated_auc or 0.0)
-                        ablation[eval_name] = {
-                            "auc_without": ablated_auc,
-                            "delta": delta,
-                            "n_cols_removed": len(cols_to_drop),
-                        }
-                        log.info(
-                            "ablation_evaluator",
-                            evaluator=eval_name,
-                            auc_without=ablated_auc,
-                            delta=delta,
-                        )
-                    except Exception as e:
-                        log.error(
-                            "ablation_evaluator_failed",
-                            evaluator=eval_name,
-                            error=str(e),
-                        )
-                        ablation[eval_name] = {"error": str(e)}
-
-                # Sort by delta (most important first)
-                ablation_sorted = dict(
-                    sorted(
-                        ablation.items(),
-                        key=lambda x: x[1].get("delta", 0.0),
-                        reverse=True,
-                    )
-                )
-                results["ablation"] = ablation_sorted
-                results["ablation_model"] = best_stack_model
-                results["ablation_baseline_auc"] = best_stack_auc
-
-        except Exception as e:
-            log.error("multimodal_ablation_failed", error=str(e))
-            results["ablation_error"] = str(e)
 
     log.info(
-        "multimodal_eval_complete",
-        strategies=["stacking"]
-        + (["raw_features"] if "raw_features" in results else [])
-        + (["ablation"] if "ablation" in results else []),
-        n_evaluators=len(baselines),
+        "multimodal_eval_start",
+        results_dir=str(results_dir),
+        models=all_models,
+        gpu_models=list(gpu_models),
     )
 
-    return results
+    work_dir = Path(tempfile.mkdtemp(prefix="kreview-multimodal-"))
+    try:
+        # ── Stage 1: prep ── build the stacking (and optional raw) matrices.
+        # A failure here is terminal: every later stage reads these artifacts.
+        metadata = multimodal_prep(
+            results_dir=results_dir,
+            super_matrix_path=super_matrix_path,
+            multimodal_selection=multimodal_selection,
+            top_percentile=top_percentile,
+            random_state=random_state,
+            output_dir=work_dir,
+        )
+        stacking_path = work_dir / "stacking_matrix.parquet"
+        raw_path = work_dir / "raw_features_matrix.parquet"
+        raw_features_path = raw_path if raw_path.exists() else None
+        best_single_auc = metadata.get("best_single_auc") or 0.0
+
+        # ── Stage 2: one evaluation per model ──
+        # One model failing is tolerated (a GPU model may be unavailable) but is recorded
+        # and logged; ALL of them failing means there is nothing to report, so we raise
+        # instead of returning an empty result that would read as a successful run.
+        model_errors: dict[str, str] = {}
+        for model_name in all_models:
+            try:
+                multimodal_single(
+                    stacking_matrix_path=stacking_path,
+                    model_name=model_name,
+                    raw_features_path=raw_features_path,
+                    n_folds=n_folds,
+                    random_state=random_state,
+                    device=device,
+                    finetune_epochs=finetune_epochs,
+                    finetune_lr=finetune_lr,
+                    best_single_auc=best_single_auc,
+                    output_dir=work_dir,
+                )
+            except Exception as exc:
+                model_errors[model_name] = str(exc)
+                log.error("multimodal_model_failed", model=model_name, error=str(exc))
+
+        if len(model_errors) == len(all_models):
+            raise RuntimeError(
+                "multimodal_eval: every requested model failed, so no multimodal result "
+                f"was produced. Errors: {model_errors}"
+            )
+
+        # ── Stage 3: ablation ── best-effort.
+        # Ablation is a diagnostic on top of stacking; if it cannot run (e.g. a single
+        # evaluator, so there is nothing to leave out) the stacking results are still
+        # valid. The reason is logged AND surfaced in the results so its absence is
+        # never silent.
+        ablation_path: Path | None = None
+        ablation_error: str | None = None
+        try:
+            multimodal_ablation(
+                stacking_matrix_path=stacking_path,
+                stacking_results_dir=work_dir,
+                n_folds=n_folds,
+                random_state=random_state,
+                output_dir=work_dir,
+            )
+            ablation_path = work_dir / "ablation_results.json"
+        except Exception as exc:
+            ablation_error = str(exc)
+            log.warning("multimodal_ablation_skipped", error=ablation_error)
+
+        # ── Stage 4: merge ── assemble the unified results dict.
+        results = multimodal_merge(
+            stacking_results_dir=work_dir,
+            prep_metadata_path=work_dir / "prep_metadata.json",
+            ablation_path=ablation_path,
+            output_dir=work_dir,
+        )
+
+        # Orchestrator-level facts. These describe *this* invocation, so they cannot come
+        # from merge (the scattered Nextflow path has no single orchestrator to report
+        # them). Errors are attached so a partially-failed run is visible in the artifact
+        # rather than only in the logs.
+        results["models_requested"] = all_models
+        results["gpu_models_requested"] = list(gpu_models)
+        if model_errors:
+            results["model_errors"] = model_errors
+        if ablation_error is not None:
+            results["ablation_error"] = ablation_error
+
+        log.info(
+            "multimodal_eval_complete",
+            n_models=len(all_models),
+            n_failed=len(model_errors),
+            has_ablation=ablation_path is not None,
+        )
+        return results
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
-# ── Decomposed Multimodal Pipeline ────────────────────────────────────────────
-#
+# Metadata columns that `multimodal_prep` writes into the stacking / raw-feature
+# parquets alongside the numeric features. They are NOT features:
+#   _label        - the binary target
+#   _sample_id    - string, for joining predictions back to labels.parquet
+#   _sample_label - string 4-tier label, for healthy-normal specificity
+# Every consumer that builds a model matrix MUST drop these. Defined once here because
+# a consumer that drops only a subset leaves string columns in the matrix, which makes
+# model.fit() raise for every evaluator. Kept as a module constant so the set cannot
+# drift between multimodal_single() and multimodal_ablation().
+_STACKING_META_COLS = ("_label", "_sample_id", "_sample_label")
+
+
+def _drop_stacking_metadata(df: "pd.DataFrame") -> tuple["pd.DataFrame", list[str]]:
+    """Return ``(features_only, dropped)`` for a stacking / raw-feature matrix.
+
+    Returns the dropped column names as well so callers can log exactly what was
+    removed — silently dropping columns is how a shape mismatch goes unnoticed.
+    """
+    dropped = [c for c in _STACKING_META_COLS if c in df.columns]
+    return df.drop(columns=dropped), dropped
+
+
 # These functions implement the same logic as `multimodal_eval()` but as
 # independent stages that can be run in parallel or sequentially.  The
 # monolithic `multimodal_eval()` above is preserved for backward compat
@@ -4514,11 +4408,7 @@ def multimodal_prep(
 
         super_df, y_raw = build_binary_target(super_df, "label")
 
-        feature_cols = [
-            c
-            for c in super_df.select_dtypes(include=np.number).columns
-            if c not in LABEL_META_COLS
-        ]
+        feature_cols = _numeric_feature_columns(super_df, LABEL_META_COLS)
         if not feature_cols:
             raise ValueError("No numeric feature columns in super_matrix")
 
@@ -4662,9 +4552,8 @@ def multimodal_single(
             hint="Pre-v0.0.28 stacking matrix; healthy specificity unavailable",
         )
 
-    meta_cols = ["_label", "_sample_id", "_sample_label"]
-    drop_cols = [c for c in meta_cols if c in stacking_full.columns]
-    stacking_df = stacking_full.drop(columns=drop_cols)
+    # Single source of truth for the metadata column set — see _STACKING_META_COLS.
+    stacking_df, _dropped_meta = _drop_stacking_metadata(stacking_full)
 
     # GPU-specific kwargs for _build_model dispatch.
     # NOTE: random_state is NOT included — already passed positionally to
@@ -4728,10 +4617,9 @@ def multimodal_single(
             if "_sample_label" in raw_full.columns:
                 sample_labels_raw = raw_full["_sample_label"].values
 
-            # Drop metadata columns before training
-            raw_meta = ["_label", "_sample_id", "_sample_label"]
-            raw_drop = [c for c in raw_meta if c in raw_full.columns]
-            X_raw = raw_full.drop(columns=raw_drop)
+            # Drop metadata columns before training — same single source of truth as the
+            # stacking path, so the raw-feature matrix cannot drift out of sync with it.
+            X_raw, _raw_dropped_meta = _drop_stacking_metadata(raw_full)
 
             model_raw = _build_model(
                 model_name, random_state, **(gpu_kwargs if is_gpu else {})
@@ -4825,10 +4713,21 @@ def multimodal_ablation(
         results_dir=str(stacking_results_dir),
     )
 
-    # Load stacking matrix
+    # Load stacking matrix.
+    # multimodal_prep always writes _sample_id (and _sample_label when 4-tier labels
+    # exist) next to the features. Dropping only _label would leave those STRING columns
+    # in the matrix: every model.fit() below then raises "could not convert string to
+    # float", the per-evaluator handler records {"error": ...} for every evaluator, and
+    # the stage still reports success — a silently empty ablation. Drop the same set
+    # multimodal_single drops.
     stacking_full = pd.read_parquet(stacking_matrix_path)
     y_stack = stacking_full["_label"].values.astype(int)
-    stacking_df = stacking_full.drop(columns=["_label"])
+    stacking_df, dropped_meta = _drop_stacking_metadata(stacking_full)
+    log.info(
+        "ablation_matrix_prepared",
+        n_features=stacking_df.shape[1],
+        dropped_metadata=dropped_meta,
+    )
 
     # Find best stacking model from partial results
     best_stack_model = None
@@ -4873,10 +4772,25 @@ def multimodal_ablation(
         random_state=random_state,
     )
 
-    # Discover unique evaluator prefixes from column names
+    # Discover unique evaluator prefixes from the FEATURE column names.
+    # Columns are named "<evaluator>_<model>". Any internal column (leading underscore)
+    # is excluded explicitly: a stray "_sample_id" would otherwise rsplit into a phantom
+    # "_sample" evaluator that produces a meaningless delta while looking legitimate.
+    # The guard is belt-and-braces — _drop_stacking_metadata already removed the known
+    # ones — so a metadata column added later cannot silently become a fake evaluator.
     evaluator_names = sorted(
-        {col.rsplit("_", 1)[0] for col in stacking_df.columns if "_" in col}
+        {
+            col.rsplit("_", 1)[0]
+            for col in stacking_df.columns
+            if "_" in col and not col.startswith("_")
+        }
     )
+    if not evaluator_names:
+        raise ValueError(
+            f"No evaluator columns found in {stacking_matrix_path}. Expected columns "
+            f"named '<evaluator>_<model>'; got {list(stacking_df.columns)[:10]}."
+        )
+    log.info("ablation_evaluators_discovered", evaluators=evaluator_names)
 
     ablation = {}
     for eval_name in evaluator_names:
@@ -4899,8 +4813,16 @@ def multimodal_ablation(
                 feature_names=list(X_ablated.columns),
                 random_state=random_state,
             )
-            ablated_auc = res.get(f"auc_ablation_{eval_name}", 0.0)
-            delta = best_stack_auc - (ablated_auc or 0.0)
+            # Do NOT default a missing AUC to 0.0: that silently turns "the metric was
+            # never produced" into "this evaluator scored zero", which reads as a real
+            # (and dramatic) ablation effect. A missing key is a programming error.
+            ablated_auc = res.get(f"auc_ablation_{eval_name}")
+            if ablated_auc is None:
+                raise KeyError(
+                    f"evaluate_model did not return 'auc_ablation_{eval_name}'; "
+                    f"got keys {sorted(res)[:10]}"
+                )
+            delta = best_stack_auc - ablated_auc
             ablation[eval_name] = {
                 "auc_without": ablated_auc,
                 "delta": delta,
@@ -4921,11 +4843,30 @@ def multimodal_ablation(
             )
             ablation[eval_name] = {"error": str(e)}
 
-    # Sort by delta (most important first)
+    # Fail loud on a systematic failure. One evaluator erroring can be legitimate (e.g.
+    # a degenerate subset), but EVERY evaluator erroring means the input or the matrix is
+    # wrong — the exact signature of metadata columns leaking in. Returning a dict of
+    # errors here would report success and ship an empty ablation downstream.
+    failed = {k: v["error"] for k, v in ablation.items() if "error" in v}
+    if failed and len(failed) == len(ablation):
+        raise RuntimeError(
+            "multimodal_ablation: every evaluator failed, so no ablation was produced. "
+            "This usually means non-numeric columns reached the feature matrix. "
+            f"Errors: {failed}"
+        )
+    if failed:
+        log.warning(
+            "ablation_partial_failure",
+            n_failed=len(failed),
+            n_total=len(ablation),
+            failed=sorted(failed),
+        )
+
+    # Sort by delta (most important first); errored entries have no delta and sort last.
     ablation_sorted = dict(
         sorted(
             ablation.items(),
-            key=lambda x: x[1].get("delta", 0.0),
+            key=lambda x: x[1].get("delta", float("-inf")),
             reverse=True,
         )
     )

@@ -81,3 +81,21 @@ results/
 nohup.out
 reports/
 static_plots/
+
+# graphify knowledge graph (generated, rebuildable via `graphify update .`)
+graphify-out/
+
+# Agent harness — machine-local session settings (personal auto-approvals, local paths)
+.claude/settings.local.json
+
+# Nextflow run artifacts — created by local runs and by scripts/nextflow_stub_test.sh
+.nextflow/
+.nextflow.log*
+work/
+
+# Machine-local agent memory. .agents/memory/ is symlinked in as the Claude memory store
+# and is COMMITTED to this public repo, so facts that are only true on one machine
+# (absolute paths, env names, cluster/account specifics) go in private/ instead.
+# The README is kept so the convention travels with the repo; nothing else does.
+.agents/memory/private/*
+!.agents/memory/private/README.md

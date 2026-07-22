@@ -6,7 +6,8 @@ This document describes the decomposed pipeline architecture of `kreview`, how c
 
 ## Pipeline Overview
 
-The `kreview` pipeline is decomposed into independent stages that can run either sequentially (`kreview run`) or in parallel (Nextflow / HPC):
+The `kreview` pipeline is decomposed into independent stages, orchestrated in parallel by the
+Nextflow multistage DAG. Each stage is also a standalone CLI command for debugging:
 
 ```mermaid
 graph LR
@@ -69,34 +70,39 @@ Every module in `kreview` is auto-generated from an nbdev notebook in `nbs/`. **
 | `kreview eval multimodal ablation` | `cli_eval.py:multimodal_ablation()` | `nbs/91_cli_eval.ipynb` | Feature ablation analysis |
 | `kreview eval multimodal merge` | `cli_eval.py:multimodal_merge()` | `nbs/91_cli_eval.ipynb` | Aggregate stacking + ablation results |
 | `kreview report` | `cli.py:report()` | `nbs/90_cli.ipynb` | Re-generate HTML dashboards |
-| `kreview run` | `cli.py:run()` | `nbs/90_cli.ipynb` | Full pipeline orchestrator |
 | `kreview features-list` | `cli.py:features_list()` | `nbs/90_cli.ipynb` | List registered evaluators |
 
 ### Shared Libraries
 
 | Module | Source Notebook | Functions | Used By |
 |--------|-----------------|-----------|---------|
-| `selection.py` | `nbs/04_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()`, `MODEL_LABELS`, `POSITIVE_LABELS` | `kreview run`, `kreview select`, report templates |
-| `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()`, `load_model_results()`, `load_all_model_results()`, `identify_feature_groups()`, `generate_subsets()`, `ablate_feature_groups()`, `merge_ablation()`, `_compute_oof_metrics()`, `multimodal_prep()`, `multimodal_single()`, `multimodal_ablation()`, `multimodal_merge()` | `kreview run`, `kreview eval cpu/gpu`, `kreview eval ablate *`, `kreview eval multimodal *`, `selection.py`, `scoreboard.py`, report templates |
+| `selection.py` | `nbs/04_selection.ipynb` | `score_features()`, `select_features()`, `build_binary_target()`, `MODEL_LABELS`, `POSITIVE_LABELS` | `kreview select`, report templates |
+| `eval_engine.py` | `nbs/02_eval_engine.ipynb` | `cpu_models()`, `gpu_models()`, `univariate_auc()`, `mutual_info_score()`, `load_model_results()`, `load_all_model_results()`, `identify_feature_groups()`, `generate_subsets()`, `ablate_feature_groups()`, `merge_ablation()`, `_compute_oof_metrics()`, `multimodal_prep()`, `multimodal_single()`, `multimodal_ablation()`, `multimodal_merge()` | `kreview eval cpu/gpu`, `kreview eval ablate *`, `kreview eval multimodal *`, `selection.py`, `scoreboard.py`, report templates |
 | `scoreboard.py` | Standalone | `build_scoreboard()` | `kreview report`, `KREVIEW_SCOREBOARD` |
 | `core.py` | `nbs/00_core.ipynb` | `LABEL_META_COLS`, `Paths`, `LabelConfig` | All commands |
-| `registry.py` | `nbs/03_registry.ipynb` | `get_all_evaluators()` | `kreview run`, `kreview extract`, `kreview features-list` |
+| `registry.py` | `nbs/03_registry.ipynb` | `get_all_evaluators()` | `kreview extract`, `kreview features-list` |
 
 ---
 
 ## Shared Code Principle
 
-`kreview run` is an **orchestrator** — it calls the same shared functions as the standalone commands. This guarantees that local runs and HPC runs produce **identical results** given the same inputs.
+Every stage command calls into the shared library modules rather than re-implementing logic,
+so a stage produces the same result whether Nextflow invokes it or you run it by hand.
+
+!!! note
+    The former `kreview run` orchestrator was removed in v0.0.29 (#55). It was a second
+    implementation of the whole pipeline and the largest source of fix-one-path-miss-the-other
+    bugs. There is now exactly one run path.
 
 ```python
-# selection.py — used by BOTH kreview run AND kreview select
+# selection.py — used by kreview select AND the report templates
 from kreview.selection import score_features, select_features
 
-# eval_engine.py — used by BOTH kreview run AND kreview eval cpu/gpu
+# eval_engine.py — used by kreview eval cpu/gpu AND the multimodal stages
 from kreview.eval_engine import cpu_models, gpu_models
 ```
 
-When editing these shared functions, always edit the **source notebook** (`nbs/*.ipynb`) and run `nbdev_export` to regenerate the `.py` modules.
+When editing these shared functions, always edit the **source notebook** (`nbs/*.ipynb`) and run `nbdev-export && black kreview/` to regenerate the `.py` modules.
 
 ---
 
@@ -132,7 +138,7 @@ Report:   → reports/{evaluator}.html  (interactive dashboards)
 
 See [Nextflow Integration](../operations/nextflow.md) for full HPC execution docs.
 
-In Nextflow multistage mode (`params.pipeline_mode = 'multistage'`), the DAG executes as:
+The Nextflow DAG executes as:
 
 ```
 LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── [ABLATE_CPU ×N] ──┬── EVAL_CPU ────┬── MULTIMODAL_PREP
@@ -183,15 +189,15 @@ Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 ## Adding a New Pipeline Stage
 
 1. **Create the source notebook** (e.g., `nbs/04_new_stage.ipynb`) with the shared logic functions
-2. Run `nbdev_export` to generate `kreview/new_stage.py`
+2. Run `nbdev-export && black kreview/` to generate `kreview/new_stage.py`
 3. **Create a CLI notebook** (e.g., `nbs/93_cli_new_stage.ipynb`) with the thin CLI wrapper
-4. Run `nbdev_export` to generate `kreview/cli_new_stage.py`
+4. Run `nbdev-export && black kreview/` to generate `kreview/cli_new_stage.py`
 5. Register in `nbs/90_cli.ipynb` via `app.command()` or `app.add_typer()`
-6. Update `kreview run` in the same notebook to call the shared functions
+6. Wire the new stage into the Nextflow DAG (`nextflow/workflows/kreview_eval.nf`)
 7. Create a Nextflow process in `nextflow/modules/local/kreview/new_stage.nf`
 8. Wire into `nextflow/workflows/kreview_eval.nf`
 9. Add tests in `tests/test_new_stage.py`
 10. Update this document and [Pipeline CLI](../getting-started/pipeline-cli.md)
 
 !!! warning "Remember the Golden Rule"
-    Always edit the **notebook** first, then `nbdev_export`. See [nbdev Workflow](nbdev-workflow.md) for details.
+    Always edit the **notebook** first, then `nbdev-export && black kreview/`. See [nbdev Workflow](nbdev-workflow.md) for details.

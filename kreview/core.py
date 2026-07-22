@@ -489,19 +489,27 @@ def _read_parquet_chunk(
             hive_partitioning=false
         )
     """
+    # Fail loud, not to empty (#61). Classify the error instead of blanket-retrying and then
+    # returning an empty DataFrame: an empty frame is indistinguishable from a legitimate
+    # 0-row read, so a persistent failure would silently drop those samples.
+    #   OperationalError (I/O, resource, OOM) -> transient: back off and retry; if it still
+    #     fails on the last attempt, RAISE (a required feature that cannot be read is a hard
+    #     error, and the raised exception lets Nextflow retry the task with more memory).
+    #   ProgrammingError / DataError (bad column, malformed SQL, type mismatch) -> not
+    #     transient: retrying only wastes time and masks, so raise immediately.
+    # A non-DuckDB exception (a programming bug) is left uncaught and propagates -- also loud.
     max_retries = 3
     for attempt in range(max_retries):
         try:
             return conn.execute(query, [file_paths]).df()
-        except Exception as e:
-            err_str = str(e)
+        except duckdb.OperationalError as e:
             if attempt < max_retries - 1:
                 log.warning(
                     "duckdb_io_retry",
                     feature=feature_suffix,
                     attempt=attempt + 1,
                     chunk=chunk_label,
-                    error=err_str,
+                    error=str(e),
                 )
                 time.sleep(2**attempt)  # Exponential backoff for transient I/O
             else:
@@ -509,10 +517,23 @@ def _read_parquet_chunk(
                     "duckdb_chunk_read_failed",
                     feature=feature_suffix,
                     chunk=chunk_label,
-                    error=err_str,
+                    error=str(e),
                 )
-                return pd.DataFrame()
-    return pd.DataFrame()
+                raise
+        except (duckdb.ProgrammingError, duckdb.DataError) as e:
+            log.error(
+                "duckdb_chunk_read_schema_error",
+                feature=feature_suffix,
+                chunk=chunk_label,
+                error=str(e),
+            )
+            raise
+    # Unreachable: the final OperationalError attempt raises. Guard anyway rather than
+    # silently returning empty, which would re-introduce the masking this fix removes.
+    raise RuntimeError(
+        f"_read_parquet_chunk exhausted retries without returning for "
+        f"{feature_suffix} [{chunk_label}]"
+    )
 
 
 def _calculate_dynamic_chunk_size(
@@ -751,6 +772,8 @@ def run_feature_sql(
         conn = get_duckdb_conn()
 
     start = time.time()
+    # Fail loud, not to empty (#61) -- same classification as _read_parquet_chunk. A legitimate
+    # "no files" case already returned empty above; here the query itself failing is an error.
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -767,7 +790,7 @@ def run_feature_sql(
                 elapsed_sec=round(elapsed, 1),
             )
             return df
-        except Exception as exc:
+        except duckdb.OperationalError as exc:
             if attempt < max_retries - 1:
                 log.warning(
                     "sql_pushdown_retry",
@@ -782,8 +805,18 @@ def run_feature_sql(
                     feature=feature_suffix,
                     error=str(exc),
                 )
-                return pd.DataFrame()
-    return pd.DataFrame()
+                raise
+        except (duckdb.ProgrammingError, duckdb.DataError) as exc:
+            log.error(
+                "sql_pushdown_schema_error",
+                feature=feature_suffix,
+                error=str(exc),
+            )
+            raise
+    # Unreachable guard (see _read_parquet_chunk) -- never silently return empty.
+    raise RuntimeError(
+        f"run_feature_sql exhausted retries without returning for {feature_suffix}"
+    )
 
 
 # %% ../nbs/00_core.ipynb #6d814a93

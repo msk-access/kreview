@@ -12,6 +12,6 @@
 
 ## File Naming Convention
 - Feature suffix: `{sample_id}.{FEATURE}.{target_mode}.parquet`
-- Example: `P-0000280-T02-XS1.FSC.ontarget.parquet`
-- Some features have no target_mode: `P-0000280-T02-XS1.FSC.gene.parquet`
+- Example: `P-0000000-T01-XS1.FSC.ontarget.parquet`
+- Some features have no target_mode: `P-0000000-T01-XS1.FSC.gene.parquet`
 - See §3 and §4 of the implementation plan for the complete file inventory.

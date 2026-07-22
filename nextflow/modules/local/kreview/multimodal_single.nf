@@ -18,7 +18,8 @@
 process KREVIEW_MULTIMODAL_SINGLE_CPU {
     tag "multimodal-single-${model_name}"
     label 'process_medium'
-    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (single_out/).
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     val(model_name)
@@ -52,13 +53,21 @@ process KREVIEW_MULTIMODAL_SINGLE_CPU {
         ${params.deterministic ? '--deterministic' : '--no-deterministic'} \\
         --output single_out
     """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p single_out
+    echo '{}' > single_out/stacking_${model_name}_results.json
+    """
 }
 
 
 process KREVIEW_MULTIMODAL_SINGLE_GPU {
     tag "multimodal-single-gpu-${model_name}"
     label 'process_gpu'
-    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (single_out/).
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     val(model_name)
@@ -79,18 +88,9 @@ process KREVIEW_MULTIMODAL_SINGLE_GPU {
     set -euo pipefail
     mkdir -p single_out
 
-    # Singularity --no-home workarounds
-    export HOME=\${PWD}/.home && mkdir -p \$HOME
-    export TMPDIR=\${PWD}/tmp && mkdir -p \$TMPDIR
-    export XDG_CACHE_HOME=\${PWD}/.cache && mkdir -p \$XDG_CACHE_HOME
-    export IPYTHONDIR=\${PWD}/.ipython && mkdir -p \$IPYTHONDIR
-    export HF_HOME=\${XDG_CACHE_HOME}/huggingface
-    export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
-    export TABPFN_MODEL_CACHE_DIR=\${XDG_CACHE_HOME}/tabpfn
-    export TABPFN_NO_BROWSER=true
-    export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
-    # Reduce CUDA OOM risk on shared GPU nodes by using expandable segments
-    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    # Shared GPU env centralized in nextflow.config (params.gpu_env_setup, #58) — includes the
+    # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA-OOM guard.
+    ${params.gpu_env_setup}
     ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set"}
 
     # Debug: verify environment is functional
@@ -121,12 +121,27 @@ process KREVIEW_MULTIMODAL_SINGLE_GPU {
     GPU_EXIT=\$?
     set -e
 
-    # Always produce output JSON — even on total failure.
+    # Failure handling — see #59 and the collect() deadlock history (commits 698c72e /
+    # dcfe356). Fail loud first (exit non-zero) so errorStrategy='retry' climbs the
+    # memory/partition ladder; degrade gracefully (error-JSON + exit 0) only once retries
+    # are exhausted, keeping the channel-closing invariant so collect() cannot deadlock.
     if [ ! -f single_out/stacking_${model_name}_results.json ]; then
-        echo "WARNING: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT), emitting error JSON" >&2
+        if [ ${task.attempt} -le ${task.maxRetries} ]; then
+            RETRY_CODE=\$GPU_EXIT; [ "\$RETRY_CODE" -eq 0 ] && RETRY_CODE=1
+            echo "ERROR: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT), attempt ${task.attempt}/\$((${task.maxRetries}+1)) — failing to trigger retry + memory/partition escalation" >&2
+            exit \$RETRY_CODE
+        fi
+        echo "WARNING: Multimodal GPU eval failed for ${model_name} (exit=\$GPU_EXIT) after ${task.maxRetries} retries — emitting error JSON and continuing" >&2
         echo '{"model": "${model_name}", "error": "gpu_eval_failed", "exit_code": '\$GPU_EXIT'}' > "single_out/stacking_${model_name}_results.json"
     fi
 
     echo "=== KREVIEW_MULTIMODAL_SINGLE_GPU: ${model_name} DONE ==="
+    """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p single_out
+    echo '{}' > single_out/stacking_${model_name}_results.json
     """
 }

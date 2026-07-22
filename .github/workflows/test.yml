@@ -27,11 +27,133 @@ jobs:
           python -m pip install --upgrade pip build
           pip install -e .[test]
 
+      - name: Check version consistency
+        run: python3 scripts/check_version_consistency.py
+
+      # Use the CONSOLE SCRIPT (hyphenated). `python3 -m nbdev.export` exits 0 and writes
+      # NOTHING, so a `git diff` against it always passes — this gate was vacuous until
+      # 2026-07 and hid real notebook/module drift. Export must be followed by black:
+      # nbdev 3.0.12 does not implement `black_formatting` (the key is absent from its
+      # source and it never imports black), while lint runs `black --check .`.
+      - name: Check nbdev export is in sync (notebooks <-> kreview/*.py)
+        run: |
+          # Install the PINNED versions from the dev extra — never bare `pip install nbdev`.
+          # These tools generate committed source, so an unpinned install makes CI and local
+          # produce different trees and this gate fails on a version difference, not a real
+          # drift (observed: CI pulled nbdev 3.3.0 vs local 3.0.12).
+          pip install -e .[dev]
+          nbdev-export
+          black kreview/ -q
+          git diff --exit-code -- kreview/ \
+            || { echo "::error::nbs/ and kreview/*.py are out of sync. Run 'nbdev-export && black kreview/' and commit the result."; exit 1; }
+
       - name: Run tests with pytest
-        run: pytest --cov=kreview --cov-report=xml
+        # Floor raised 38 -> 42 after #63 added report.py (0 -> 57%) and CLI-tree smoke tests.
+        # Locks in the gain; ratchet up as coverage grows (a full CLI-body harness with fixture
+        # data is a separate effort).
+        run: pytest --cov=kreview --cov-report=xml --cov-fail-under=42
 
       - name: Test Python Package Build
         run: python -m build
+
+  # ── Multimodal strategy tests (arfs extra installed) ────────────────────────
+  # #63: leshy/grootcv/boruta_shap skipped in EVERY environment because their deps were never
+  # installed, so the strategy code paths were never exercised ("looks protected, isn't" — the
+  # same class that hid the original BorutaShap outage). This job installs the arfs extra so the
+  # tests actually RUN. Un-skipping revealed all three are broken against modern deps (arfs vs
+  # sklearn 1.9 / lightgbm 4.x — #91; BorutaShap->shap — #92), so they are xfail(strict=False):
+  # the breakage is now VISIBLE and tracked here rather than invisibly skipped, and the job still
+  # proves kreview's strategy dispatch reaches each library. xfails xpass (alert) when deps are fixed.
+  test-strategies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install with the arfs extra
+        run: |
+          python -m pip install --upgrade pip
+          # The arfs extra pins setuptools<81 so arfs's deprecated pkg_resources import works
+          # (setuptools 81 removed it; a clean py3.12 venv ships none).
+          pip install -e ".[arfs,test]"
+      - name: Assert strategy deps are importable (fail loud if the extra breaks)
+        run: python -c "import arfs, lightgbm; print('arfs', arfs.__version__, 'lightgbm', lightgbm.__version__)"
+      - name: Run multimodal strategy tests (leshy runs; grootcv/boruta_shap xfail)
+        run: pytest tests/test_selection.py -v -rxs -k "leshy or grootcv or boruta_shap or strategy"
+
+  # ── Secret + PHI scan ───────────────────────────────────────────────────────
+  # The gitleaks pre-push hook only protects contributors who wired it locally. This job
+  # is the backstop: it scans every push/PR regardless of anyone's local setup. kreview is
+  # PUBLIC and commits an agent memory store, so PHI leaking here is unrecoverable.
+  phi-secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0          # full history — the scan runs in git mode
+
+      - name: Install gitleaks (pinned)
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      # Asserts the rules actually fire. A scanner that silently stops matching would
+      # otherwise pass this job forever while detecting nothing.
+      - name: Verify PHI guard rules (clean tree, rules fire, placeholder allowed)
+        run: bash scripts/check_phi_guard.sh
+
+      - name: Scan repository for secrets and PHI
+        run: gitleaks detect --source . --no-banner --redact --exit-code 1
+
+  # ── Nextflow DAG smoke test ──────────────────────────────────────────────────
+  # Guards the regression class from #80: nextflow.config used constructs (try/catch around
+  # includeConfig, ${manifest.version}, ${HOME}) that modern Nextflow rejects, so the pipeline
+  # would not even parse — and nothing in CI noticed, because CI never ran Nextflow.
+  #
+  # The matrix pins both ends of the supported range (v25 and v26) so a construct that works
+  # on one but not the other cannot land. This is a wiring test only: every process runs its
+  # `stub:` block. A full nf-test harness is out of scope by maintainer decision.
+  nextflow-stub:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor and ceiling of the documented support range (manifest.nextflowVersion).
+        # Pinned rather than "latest-stable" so a new Nextflow release cannot turn CI red
+        # without a deliberate bump. Both were verified locally when #80 landed.
+        nxf_ver: ["25.04.6", "26.04.6"]
+    env:
+      # Job-scoped, not step-scoped: the launcher consults NXF_VER at run time too, so
+      # scoping it to the install step alone would let the actual test run on some other
+      # version and quietly make this matrix meaningless.
+      NXF_VER: ${{ matrix.nxf_ver }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Nextflow 25.04 does not start on a JDK newer than 21 ("Unsupported class file major
+      # version"), so pin 17 rather than inheriting whatever the runner ships.
+      - name: Set up Java (Nextflow requires 17+)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Installed from RUNNER_TEMP, not the checkout: the installer writes a file called
+      # `nextflow`, and the repo already has a directory of that name, which makes it abort.
+      - name: Install Nextflow ${{ matrix.nxf_ver }}
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL https://get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+          nextflow -v
+
+      - name: Stub-run the DAG (config parses, all profiles resolve, wiring holds)
+        run: bash scripts/nextflow_stub_test.sh
 
   # ── Docker image builds (both targets, in parallel) ─────────────────────────
   docker:
@@ -66,6 +188,39 @@ jobs:
         with:
           context: .
           push: false                              # build only, do not publish
+          load: ${{ matrix.target == 'cpu' }}      # load cpu into the daemon so we can run it
           target: ${{ matrix.target }}             # cpu or gpu, from the matrix
           tags: kreview:test-${{ matrix.target }}
           platforms: linux/amd64
+
+      # Smoke-test the CPU image: importing the CLI exercises the full dependency
+      # chain (papermill, BorutaShap, xgboost, shap, quarto) — exactly the class of
+      # breakage that shipped in v0.0.24-0.0.28 and slipped past a build-only CI.
+      # The GPU image needs a GPU runtime to execute, so it is build-verified only.
+      # The image ENTRYPOINT is ["kreview"], so pass args directly for the CLI, and
+      # override --entrypoint for the tool/import checks.
+      - name: Smoke test cpu image (CLI imports + tools present)
+        if: matrix.target == 'cpu'
+        run: |
+          docker run --rm kreview:test-cpu --help
+          docker run --rm --entrypoint quarto kreview:test-cpu --version
+          docker run --rm --entrypoint python kreview:test-cpu -c "import papermill, BorutaShap, xgboost, shap, kreview; print('kreview imports OK')"
+
+      # run_hpc.sh runs `--multimodal_selection boruta_shap`, so the RELEASE container must not
+      # just IMPORT BorutaShap but actually RUN the strategy end to end — the shap/xgboost/scipy
+      # /numpy runtime break only surfaces on execution, not import. Verified on the v0.0.29 image
+      # (numpy 2.0.0 / sklearn 1.9 / xgboost 3.3 / shap 0.52; kreview's binom_test + numpy-NaN
+      # shims bridge the compat). This is the guarantee that the shipped container works.
+      - name: Smoke test cpu image — boruta_shap runs end to end (run_hpc.sh workflow)
+        if: matrix.target == 'cpu'
+        run: |
+          docker run --rm --entrypoint python kreview:test-cpu - <<'PY'
+          import numpy as np, pandas as pd
+          from kreview.eval_engine import _select_multimodal_features
+          rng = np.random.RandomState(42)
+          X = pd.DataFrame(rng.randn(100, 10), columns=[f"f{i}" for i in range(10)])
+          y = np.array([0] * 50 + [1] * 50); X.iloc[:50, 0] += 3.0
+          _sel, names = _select_multimodal_features(X, y, top_percentile=50.0, strategy="boruta_shap")
+          assert len(names) > 0, "boruta_shap selected no features"
+          print(f"boruta_shap OK in container: {len(names)} features -> {names}")
+          PY

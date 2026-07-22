@@ -73,6 +73,22 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
                 best_model = max(all_aucs, key=all_aucs.get)
                 best_auc = all_aucs[best_model]
 
+            # Failure status (#59/#60). A GPU wrapper that exhausts its retry ladder emits
+            # {"error": ...} instead of metrics; that JSON merges into `data` as an "error"
+            # key. Detect it so a failed evaluator is flagged loudly instead of rendered as
+            # an innocent all-NaN "low signal" row. States:
+            #   FAILED     — an error and no usable AUC (e.g. GPU-only eval that failed)
+            #   PARTIAL    — an error but some AUCs survived (e.g. GPU failed, CPU succeeded)
+            #   NO_RESULTS — no error but no AUC either (no model produced a score)
+            #   OK         — usable results, no error
+            error_detail = data.get("error")
+            if error_detail:
+                status = "PARTIAL" if all_aucs else "FAILED"
+            elif not all_aucs:
+                status = "NO_RESULTS"
+            else:
+                status = "OK"
+
             # Extract sensitivity/specificity for the BEST model
             cr = {}
             if best_model:
@@ -107,6 +123,8 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
 
             rec = {
                 "evaluator": evaluator_name,
+                "status": status,
+                "error_detail": error_detail,
                 "best_auc": best_auc,
                 "best_model": best_model,
                 "n_features": len(data.get("top_features", [])),
@@ -178,10 +196,21 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
 
             records.append(rec)
         except Exception as exc:
-            log.warning(
+            # Do NOT drop the evaluator silently (#60 spirit): a valid-JSON result that
+            # throws while extracting metrics is a real failure. Emit a FAILED row so it is
+            # visible in the scoreboard rather than the evaluator vanishing from the table.
+            log.error(
                 "scoreboard_evaluator_parse_failed",
                 evaluator=evaluator_name,
                 error=str(exc),
+            )
+            records.append(
+                {
+                    "evaluator": evaluator_name,
+                    "status": "FAILED",
+                    "error_detail": f"scoreboard_parse_error: {exc}",
+                    "best_auc": np.nan,
+                }
             )
             continue
 
@@ -190,6 +219,23 @@ def build_scoreboard(output_dir: Path) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame(records).sort_values("best_auc", ascending=False)
+
+    # Surface degraded/failed evaluators loudly (#59/#60): a failure must not hide as a
+    # silent NaN row. This aggregated log is the scoreboard-layer counterpart to the loud
+    # per-task Nextflow warnings; the report renders `status` so a reader sees it too.
+    if "status" in df.columns:
+        n_failed = int((df["status"] == "FAILED").sum())
+        n_partial = int((df["status"] == "PARTIAL").sum())
+        n_no_results = int((df["status"] == "NO_RESULTS").sum())
+        if n_failed or n_partial or n_no_results:
+            degraded = df[df["status"] != "OK"]
+            log.warning(
+                "scoreboard_degraded_evaluators",
+                n_failed=n_failed,
+                n_partial=n_partial,
+                n_no_results=n_no_results,
+                evaluators={row.evaluator: row.status for row in degraded.itertuples()},
+            )
     log.info(
         "scoreboard_built",
         n_evaluators=len(df),

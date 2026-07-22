@@ -13,7 +13,7 @@ description: Structured debugging workflow for traceback or unexpected behavior
 3. **Isolate**: Narrow down to the smallest reproducing case:
    ```python
    # Try with a single sample first
-   df = load_feature_cohort('.FSC.gene.parquet', results_dir, sample_ids=['P-0000280-T02-XS1'])
+   df = load_feature_cohort('.FSC.gene.parquet', results_dir, sample_ids=['P-0000000-T01-XS1'])
    ```
 
 4. **Add diagnostic logging**:

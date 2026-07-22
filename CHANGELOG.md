@@ -7,6 +7,151 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-07-22
+
+Hardening release: closes the recurring release-breakage classes from the 2026-07 review
+(fail-loud invariants, Nextflow v25–v26, centralized HPC env) and validates the shipped
+container end to end. The `boruta_shap` multimodal workflow (used by `run_hpc.sh`) is now
+smoke-tested inside the built CPU image on every CI run.
+
+### Added
+- **Test coverage for the CLI, `report.py`, and the multimodal strategies** (#63). Added a
+  `report.py` smoke test (0% → 57% — covers the matrix-not-found guard) and CliRunner `--help`
+  tests across the full nested command tree (`eval ablate *`, `eval multimodal *`), which guard
+  command registration/wiring. A new `test-strategies` CI job installs the `arfs` extra and runs
+  the multimodal strategy tests, which **previously skipped in every environment** — the same
+  "looks protected, isn't" pattern that hid the original BorutaShap outage. Un-skipping them
+  immediately surfaced that **all three are broken against modern deps** (not kreview bugs — the
+  strategy dispatch is correct): `arfs` 2.4 is incompatible with sklearn 1.9 (`force_all_finite`,
+  breaks `leshy`) and lightgbm 4.x (`categorical_feature`, breaks `grootcv`) — #91; and
+  `boruta_shap` hits a BorutaShap→shap xgboost-parser error on some versions — #92. All three are
+  now `xfail(strict=False)` with tracked issues so the breakage is visible rather than invisibly
+  skipped (they xpass and alert when the deps are fixed). The `arfs` extra also now pins
+  `setuptools<81` (arfs imports the removed `pkg_resources`). Overall coverage 44% → 46%; CI
+  floor 38% → 42%.
+  (No `nf-test` harness — the Nextflow `-stub-run` in `scripts/nextflow_stub_test.sh` covers the
+  workflow wiring, per the #80 maintainer decision.)
+
+### Changed
+- **Centralized the HPC env setup and fixed inconsistent hardening** (#58). The Singularity
+  read-only-`/home` / cache-redirect env was copy-pasted across five modules and had drifted:
+  `PYTORCH_CUDA_ALLOC_CONF` (the CUDA-OOM guard) was set in `multimodal_single` but **missing**
+  from `eval_gpu_single` and `ablate_gpu_single`, and the report modules **lacked**
+  `HOME`/`TMPDIR`/`MPLCONFIGDIR`. It is now defined once each (`params.gpu_env_setup`,
+  `params.report_env_setup`) and interpolated into every module's `script:`, so the hardening
+  is applied identically everywhere. `scoreboard.nf`'s `python3` heredoc now fails loud with a
+  clear message if the interpreter is missing (Singularity PATH strip) instead of a cryptic
+  exit 127.
+
+  Two deliberate design choices, contrary to the issue's original suggestion, because the
+  nf-core **iris** institutional config sets its own `beforeScript`, `withLabel` resources,
+  `errorStrategy` and `cache`: (1) the env stays **in-script**, not in a `beforeScript`, which
+  is a single non-additive directive that would clobber (or be clobbered by) iris's; (2) the
+  per-`withName` resource ladders stay as they are — they are defensive armour against iris's
+  `withLabel` override, and Nextflow 24+ forbids the `def`-closure hoisting that would dedup
+  them. Rationale recorded in `.agents/memory/reference-iris-config-interaction.md`.
+
+### Fixed
+- **Published output nested a working-directory prefix** (#84). Because a process' `output:`
+  path carries the working subdir (`selected/`, `fused/`, `output/`, `prep_out/`, …) and
+  `publishDir` already named the destination folder, results landed at
+  `matrices/selected/selected/…`, `matrices/fused/fused/…`, `models/multimodal/prep_out/…`.
+  Added `saveAs: { fn -> file(fn).name }` to the seven affected modules so files publish by
+  basename — the tree now matches the documented structure (`matrices/selected/X`,
+  `models/multimodal/X`). Publish-path only; nothing consumes `params.outdir` (all
+  inter-process data flows through channels), so the DAG is unaffected. Guarded by a new
+  flatness assertion in `scripts/nextflow_stub_test.sh`.
+- **DuckDB reads masked failures as empty results** (#61). Both chunked-read paths
+  (`_read_parquet_chunk`, `run_feature_sql`) retried on *any* exception and then returned an
+  empty DataFrame — indistinguishable from a legitimate 0-row read, so a persistently failing
+  feature silently dropped those samples (`iter_feature_chunks` skips an "empty" chunk). They
+  now classify the error: `OperationalError` (I/O, resource, OOM) backs off and retries, and
+  **raises** if it never succeeds; `ProgrammingError` / `DataError` (bad column, malformed SQL,
+  type mismatch) **raises immediately** — no wasted retries, no masking. The legitimate
+  "no files found" case still returns empty.
+- **eval_engine masked errors as low scores** (#61). Two broad excepts turned real failures
+  into a `0.0`: `mutual_info_score` scored a feature 0 on any exception, and the ablation
+  inner-CV appended `0.0` for a fold that raised. Both benign degenerate cases (constant
+  feature, <2 classes, too-few-samples, empty folds) are handled explicitly *before* these
+  points, so both now **raise** with context instead. The four legitimate degenerate
+  `return 0.0` cases are preserved. A new shared `_numeric_feature_columns` helper replaces two
+  duplicated `select_dtypes(include=np.number)` filters and **loudly flags** any non-metadata
+  column that is unexpectedly non-numeric (an object-dtype feature that would otherwise be
+  dropped silently), consolidating the two sites into one implementation.
+- **GPU retry ladder never engaged** (#59). The GPU eval/ablation/multimodal wrappers always
+  exited 0 (emitting an error-JSON on failure) to avoid a `collect()` deadlock — but that also
+  meant `errorStrategy='retry'` never fired, so the 64→256 GB / `gpushort`→`gpu` escalation was
+  dead code for transient CUDA OOM. The wrappers now **fail loud on non-terminal attempts**
+  (exit non-zero → the ladder climbs) and only degrade gracefully (error-JSON + exit 0) once
+  retries are exhausted, preserving the channel-closing invariant that prevents the deadlock
+  (see commits `698c72e` / `dcfe356`).
+- **Silent evaluator drop on ablation failure** (#60). `kreview_eval.nf` paired each matrix
+  with its `best_subset` via `combine(by:0)` — an inner join — so an evaluator whose ablation
+  failed and was ignored upstream was **silently dropped from both CPU and GPU eval** (missing
+  from results entirely, with no error). Now uses `join(by:0, remainder:true)` with a
+  `NO_BEST_SUBSET` fallback (identical to the ablation-off path) and a loud per-evaluator
+  warning, so the evaluator is degraded-but-present, never dropped. This is also strictly
+  safer than the old `combine` + `.ifEmpty` guards when the whole ablation channel is empty.
+- **Failed evaluators masked as blank rows** (#59/#60). A GPU wrapper that exhausts its retry
+  ladder emits `{"error": ...}`; the scoreboard rendered that as an innocent all-NaN row. The
+  scoreboard now carries a `status` column (`OK` / `PARTIAL` / `FAILED` / `NO_RESULTS`) with an
+  `error_detail`, logs degraded evaluators loudly, and **no longer drops an evaluator that
+  throws during metric extraction** (emits a `FAILED` row instead). Both report templates show
+  the `status` column and a "Degraded evaluators" callout, and their stale `kreview run`
+  fallback text (removed in #55) was corrected to the Nextflow invocation.
+
+### Added
+- **`scripts/test_nextflow_join_dropguard.nf`** — a standalone channel-logic regression test
+  for #60 (3 matrices, 2 best_subsets → all 3 survive with a fallback). Run by
+  `scripts/nextflow_stub_test.sh`, which also structurally asserts the #59 retry guard is
+  present in all three GPU wrappers.
+
+### Removed
+- **`kreview run` (monolithic pipeline command)** and everything that existed only to serve
+  it: the Nextflow `KREVIEW_RUN` process (`run.nf`), the `params.pipeline_mode` switch, and
+  its `withName` resource block. The Nextflow multistage DAG is now the only way to run the
+  pipeline. `kreview run` was a second, drifting implementation of the whole pipeline — the
+  largest single source of the fix-one-path-miss-the-other bugs (see #55) — and was neither
+  used nor exercised by CI. Individual stages remain available as subcommands
+  (`kreview label|extract|select|eval|fuse|report`) for debugging.
+- **`--export-duckdb`**. It existed only on `kreview run` and was unreachable from the
+  Nextflow DAG, so it was never usable on HPC. Feature matrices are written as parquet under
+  the output directory and can be queried directly with DuckDB or pandas.
+- **Four orphaned Nextflow modules** (`eval_cpu.nf`, `eval_gpu.nf`, `select.nf`,
+  `eval_multimodal.nf`). They were included by zero workflows and encoded an older DAG that
+  ran straight off `EXTRACT`, bypassing `SELECT`/`ABLATE` — re-enabling one would have
+  produced different, incorrect results.
+
+### Fixed
+- **`nextflow.config` would not parse on Nextflow 24 or newer** (#80), so the pipeline could
+  not start at all on a current Nextflow — an outright adoption blocker, and invisible because
+  nothing in CI ran Nextflow. Three constructs were rejected by the modern config parser:
+  - `try`/`catch` around the nf-core institutional `includeConfig`. Replaced with the nf-core
+    ternary idiom, which also honours `NXF_OFFLINE` (an `if` statement is rejected too).
+  - Five `${manifest.version}` references in container tags — `manifest` is not resolvable
+    from `process`/`profiles` scope. The version now lives in `params.kreview_version`, which
+    the manifest reads back, so there is still exactly one version literal in the file.
+  - `${HOME}` interpolation in the Singularity `cacheDir`, now `env('HOME')`.
+- **Stale `withName:` selectors** for `KREVIEW_EVAL_CPU`/`KREVIEW_EVAL_GPU`, left behind when
+  the Gen-1 bulk modules were deleted. They matched no process and made Nextflow warn on every
+  run; the resource settings they carried applied to nothing.
+
+### Added
+- **Nextflow stub smoke test** (`scripts/nextflow_stub_test.sh`, and a `stub` profile). Every
+  process now declares a `stub:` block, so `-stub-run -profile stub` exercises the entire DAG
+  — config parsing, all four profiles, module includes and channel wiring — in seconds without
+  data or containers. CI runs it against both ends of the supported range. It asserts from
+  `execution_trace.txt` that all 17 processes ran and every task reached `COMPLETED`, and
+  fails on any `withName:` selector naming a process that does not exist.
+
+### Changed
+- Documentation now presents a single run path. `--pipeline_mode multistage` is no longer
+  needed (or accepted); use `-profile docker` locally and `-profile iris`/`slurm` on HPC.
+- **Supported Nextflow range is now declared and enforced: v25–v26.** `manifest.nextflowVersion`
+  was `!>=22.10.1`, an unbounded floor that let a modern Nextflow get far enough to fail with a
+  cryptic parse error. It is now `!>=25.04.0` (the floor `env()` requires), verified against
+  25.04.6, 25.10.6 and 26.04.6.
+
 ## [0.0.28] - 2026-07-09
 
 ### Fixed

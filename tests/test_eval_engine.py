@@ -2019,3 +2019,54 @@ class TestWPSGenomeSQLPushdown:
         clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
         assert "--duckdb-threads" in clean
         assert "--duckdb-memory" in clean
+
+
+# ── #61: eval_engine must fail loud, not mask errors as 0.0 / dropped columns ────
+from kreview.eval_engine import _numeric_feature_columns  # noqa: E402
+
+
+class TestFailLoudEvalEngine:
+    """#61: narrow the masked excepts — a malformed matrix surfaces instead of scoring 0."""
+
+    def test_mutual_info_constant_feature_still_returns_zero(self):
+        """The one legitimate degenerate case (constant feature) is preserved."""
+        from kreview.eval_engine import mutual_info_score
+
+        y = np.array([0, 1, 0, 1, 0, 1])
+        const = np.zeros(6)
+        assert mutual_info_score(const, y) == 0.0
+
+    def test_mutual_info_malformed_input_raises_not_zero(self):
+        """A shape mismatch is a real error, not a zero-information feature."""
+        from kreview.eval_engine import mutual_info_score
+
+        y = np.array([0, 1, 0, 1])  # length 4
+        feature = np.array([0.1, 0.9, 0.2, 0.8, 0.3])  # length 5 — inconsistent
+        with pytest.raises(Exception):
+            mutual_info_score(feature, y)
+
+    def test_numeric_feature_columns_excludes_meta_and_keeps_order(self):
+        df = pd.DataFrame(
+            {
+                "label": ["a", "b"],
+                "f1": [1.0, 2.0],
+                "sample_id": ["s1", "s2"],
+                "f2": [3, 4],
+            }
+        )
+        cols = _numeric_feature_columns(df, {"label", "sample_id"})
+        assert cols == ["f1", "f2"]
+
+    def test_numeric_feature_columns_flags_object_dtype_feature(self, capsys):
+        """An object-dtype non-metadata column is surfaced loudly (data-plumbing bug).
+
+        kreview logs via structlog to stdout, so assert on captured stdout, not caplog.
+        """
+        df = pd.DataFrame({"label": ["a", "b"], "f1": [1.0, 2.0], "f_bad": ["x", "y"]})
+        cols = _numeric_feature_columns(df, {"label"})
+        # f_bad is excluded from features...
+        assert cols == ["f1"]
+        # ...but not silently: it is flagged at error level.
+        out = capsys.readouterr().out
+        assert "non_numeric_feature_columns_dropped" in out
+        assert "f_bad" in out

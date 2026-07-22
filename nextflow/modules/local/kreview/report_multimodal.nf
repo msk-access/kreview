@@ -30,9 +30,9 @@ process KREVIEW_REPORT_MULTIMODAL {
     set -euo pipefail
 
     # Set custom writable cache/data paths for Quarto on HPC/Read-only filesystems
-    export XDG_CACHE_HOME="\$PWD/.quarto_cache"
-    export XDG_DATA_HOME="\$PWD/.quarto_data"
-    export IPYTHONDIR="\$PWD/.ipython"
+    # Shared report/Quarto env centralized in nextflow.config (params.report_env_setup, #58) —
+    # now also sets HOME/TMPDIR/MPLCONFIGDIR for read-only-/home HPC nodes.
+    ${params.report_env_setup}
 
     mkdir -p matrices reports .ipython
 
@@ -47,5 +47,12 @@ process KREVIEW_REPORT_MULTIMODAL {
         --shap-samples ${shap_samples_arg} \\
         --shap-features ${shap_features_arg} \\
         ${cvd_flag}
+    """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p reports
+    touch reports/stub_dashboard.html
     """
 }

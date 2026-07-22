@@ -12,7 +12,9 @@
 process KREVIEW_FUSE {
     tag "kreview-fuse"
     label 'process_medium'
-    publishDir "${params.outdir}/matrices/fused", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (fused/) so the file lands in
+    // matrices/fused/ instead of matrices/fused/fused/.
+    publishDir "${params.outdir}/matrices/fused", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     path(matrix_files)     // Collected from all KREVIEW_EXTRACT outputs
@@ -35,5 +37,12 @@ process KREVIEW_FUSE {
         --output-dir fused \\
         --min-evaluators ${params.min_evaluators ?: 1} \\
         --output-name super_matrix.parquet
+    """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p fused
+    touch fused/super_matrix.parquet
     """
 }

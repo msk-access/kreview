@@ -331,3 +331,51 @@ class TestScoreboardGPUModels:
         # GpuEval (0.95) should be ranked first
         assert df.iloc[0]["evaluator"] == "GpuEval"
         assert df.iloc[0]["best_auc"] == 0.95
+
+
+class TestFailureStatus:
+    """#59/#60: a failed evaluator must be flagged, not rendered as a silent NaN row."""
+
+    def test_error_json_flagged_failed_not_dropped(self, tmp_path):
+        """A GPU error-JSON (no AUCs) yields a FAILED row — the evaluator is NOT dropped."""
+        err = {
+            "evaluator": "Broken",
+            "error": "all_gpu_models_failed",
+            "exit_code": 137,
+        }
+        (tmp_path / "Broken_gpu_model_results.json").write_text(json.dumps(err))
+
+        df = build_scoreboard(tmp_path)
+        assert len(df) == 1, "failed evaluator must still appear (no silent drop)"
+        row = df.iloc[0]
+        assert row["evaluator"] == "Broken"
+        assert row["status"] == "FAILED"
+        assert "all_gpu_models_failed" in str(row["error_detail"])
+        assert np.isnan(row["best_auc"])
+
+    def test_partial_when_cpu_ok_but_gpu_errored(self, tmp_path):
+        """CPU results present + a merged GPU error → PARTIAL (results kept, failure noted)."""
+        cpu = {"auc_rf": 0.80, "auc_lr": 0.75, "top_features": ["a"]}
+        gpu_err = {"error": "gpu_eval_failed", "exit_code": 1}
+        (tmp_path / "Half_model_results.json").write_text(json.dumps(cpu))
+        (tmp_path / "Half_gpu_model_results.json").write_text(json.dumps(gpu_err))
+
+        df = build_scoreboard(tmp_path)
+        assert len(df) == 1
+        row = df.iloc[0]
+        assert row["status"] == "PARTIAL"
+        assert row["best_auc"] == 0.80, "surviving CPU results must be retained"
+
+    def test_ok_status_for_normal_results(self, mock_results):
+        """Healthy evaluators are labelled OK."""
+        df = build_scoreboard(mock_results)
+        assert set(df["status"]) == {"OK"}
+
+    def test_no_results_status_without_error(self, tmp_path):
+        """All-None AUCs and no error key → NO_RESULTS (distinct from a real failure)."""
+        data = {"auc_rf": None, "auc_lr": None, "auc_xgb": None, "top_features": []}
+        (tmp_path / "Silent_model_results.json").write_text(json.dumps(data))
+
+        df = build_scoreboard(tmp_path)
+        assert len(df) == 1
+        assert df.iloc[0]["status"] == "NO_RESULTS"

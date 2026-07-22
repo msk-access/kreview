@@ -1,10 +1,15 @@
-# 4-Tier ctDNA Labeling Hierarchy
+# 5-Tier ctDNA Labeling Hierarchy
 
 ## Label Definitions (strict priority order)
 1. **True ctDNA+**: Any ACCESS somatic variant matched by exact coordinates to paired IMPACT tissue sample (any VAF)
 2. **Possible ctDNA+**: ≥min_variants somatic SNVs with VAF ≥ min_vaf, OR ≥1 somatic SV, OR ≥1 non-neutral CNA
 3. **Possible ctDNA−**: Cancer patient with no qualifying alterations
 4. **Healthy Normal**: Non-cancer plasma donor (from healthy samplesheet)
+5. **Insufficient Data**: Cancer patient with no SNV/SV/CNA signal AND total_fragments_pf < min_fragments (separates low-depth from true signal-negative)
+
+Optional CH-hotspot demotion (`--ch-hotspot-maf`): a Possible ctDNA+ whose only evidence is
+CH variants (n_non_ch_variants == 0, no SV/CNA/IMPACT) is demoted to Possible ctDNA−.
+See the `ctdna-labeling` skill for the full CH logic and continuous-VAF stats.
 
 ## Critical Rules
 - IMPACT rescue is threshold-independent (any VAF counts if tissue-confirmed)

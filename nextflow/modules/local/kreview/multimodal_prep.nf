@@ -13,7 +13,9 @@
 process KREVIEW_MULTIMODAL_PREP {
     tag "multimodal-prep"
     label 'process_medium'
-    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (prep_out/) so files land in
+    // models/multimodal/ instead of models/multimodal/prep_out/.
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     path(results_jsons)   // Collected *_model_results.json files
@@ -44,5 +46,14 @@ process KREVIEW_MULTIMODAL_PREP {
         --top-percentile ${top_pct_arg} \\
         --seed ${params.seed ?: 42} \\
         --output prep_out
+    """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p prep_out
+    touch prep_out/stacking_matrix.parquet
+    touch prep_out/raw_features_matrix.parquet
+    echo '{}' > prep_out/prep_metadata.json
     """
 }

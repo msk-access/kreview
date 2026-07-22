@@ -13,7 +13,8 @@
 process KREVIEW_MULTIMODAL_ABLATION {
     tag "multimodal-ablation"
     label 'process_medium'
-    publishDir "${params.outdir}/models/multimodal", mode: 'copy'
+    // #84: saveAs flattens the working-dir prefix (ablation_out/).
+    publishDir "${params.outdir}/models/multimodal", mode: 'copy', saveAs: { fn -> file(fn).name }
 
     input:
     path(stacking_matrix)     // stacking_matrix.parquet from prep
@@ -39,5 +40,12 @@ process KREVIEW_MULTIMODAL_ABLATION {
         --cv-folds ${cv_folds} \\
         --seed ${params.seed ?: 42} \\
         --output ablation_out
+    """
+
+    // Stub: create declared outputs only — smoke-tests DAG wiring (see issue #80).
+    stub:
+    """
+    mkdir -p ablation_out
+    echo '{}' > ablation_out/ablation_results.json
     """
 }

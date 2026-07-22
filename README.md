@@ -20,7 +20,7 @@
 ## 🚀 Features
 
 - **5-Tier ctDNA Taxonomy**: MSK-IMPACT paired-inference to label `True ctDNA+`, `Possible ctDNA+`, `Possible ctDNA−`, `Healthy Normal`, and `Insufficient Data`. Optional CH hotspot demotion via `--ch-hotspot-maf`.
-- **DuckDB Dynamic Data Lake**: In-memory `read_parquet` bindings with chunked I/O and exponential backoff retry. Builds a merged SQL-queryable `kreview_lake.duckdb` on demand.
+- **DuckDB Query Engine**: In-memory `read_parquet` bindings with chunked I/O and exponential backoff retry for cohort-scale feature loading.
 - **Multi-Model Evaluation**: Logistic Regression, Random Forest, and XGBoost (CPU) plus TabPFN and TabICL (GPU) with Stratified K-Fold CV, SHAP explainability, and subgroup analysis.
 - **Nested CV Feature Ablation**: Automated feature group subset selection via inner-loop cross-validation, eliminating non-informative feature groups before final evaluation. Uses `sensitivity_at_100spec_healthy` as the optimization metric.
 - **Feature Selection**: [mRMR](https://github.com/smazzanti/mrmr) (Minimum Redundancy Maximum Relevance) as default strategy — iteratively selects features maximizing target relevance while minimizing inter-feature redundancy. Legacy `hybrid_union` (AUC ∪ MI) also available.
@@ -50,19 +50,19 @@ graph LR
     I --> K["Report Multimodal"]
 ```
 
-The pipeline supports two modes:
-
-| Mode | Command | Use Case |
-|------|---------|----------|
-| **Monolithic** | `kreview run` | Single-machine, sequential execution |
-| **Multistage** | `nextflow run ... -profile iris` | HPC parallelism, per-evaluator scatter |
+The pipeline runs as a **Nextflow multistage DAG** — one implementation, scattered
+per-evaluator. Use `-profile docker` locally and `-profile iris`/`slurm` on HPC.
+Supported Nextflow: **v25–v26**.
 
 ## ⚙️ Quick Start
 
 ### Installation
 
 > [!IMPORTANT]
-> **Quarto is strictly required** for programmatic dashboard generation. Because `quarto-cli` wrapper packages are unreliable across Python environments, `kreview` assumes the Quarto executable is installed dynamically on your OS or container.
+> **Quarto is required** for programmatic dashboard generation. `kreview` declares `quarto-cli` as a
+> core dependency, so `pip install kreview` provides the Quarto executable automatically (and the
+> Docker images ship it). If the pip-provided binary misbehaves in your environment, install Quarto
+> from your OS package manager as a fallback (see the [Quarto guide](https://quarto.org/docs/get-started/)).
 
 #### Option 1: Docker (Recommended "Batteries-Included" Method)
 The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker containers (hosted on GHCR). They ship with `Python 3.12`, all ML libraries, and `quarto`:
@@ -73,40 +73,46 @@ docker pull ghcr.io/msk-access/kreview:latest
 # GPU image (~8-10 GB) — adds PyTorch, TabPFN, TabICL (requires NVIDIA drivers)
 docker pull ghcr.io/msk-access/kreview:latest-gpu
 
-# Run
+# The images are driven by Nextflow, one container per pipeline stage:
+nextflow run /path/to/kreview/nextflow/main.nf -profile docker --outdir results/ ...
+
+# Individual stages can also be invoked directly for debugging:
 docker run -v /your/data:/data ghcr.io/msk-access/kreview:latest \
-  kreview run --cancer-samplesheet /data/cancer.csv ...
+  label --cancer-samplesheet /data/cancer.csv ...
 ```
 
 #### Option 2: Local Install (Pip)
-If you install via pip, you **must separately install Quarto** via your OS manager:
-1. **Install Quarto:** Follow the [official Quarto Installation Guide](https://quarto.org/docs/get-started/) (e.g. `brew install quarto` on macOS).
-2. **Install kreview:**
+`quarto-cli` is a declared dependency, so a plain pip install provides Quarto. Only if the
+pip-provided binary misbehaves, install Quarto from your OS manager (e.g. `brew install quarto`)
+as a fallback.
 ```bash
 git clone https://github.com/msk-access/kreview.git
 cd kreview
-pip install -e .          # CPU models only
-pip install -e ".[gpu]"   # + TabPFN, TabICL (requires CUDA)
+pip install -e .            # CPU models only
+pip install -e ".[all]"     # + arfs feature selection, docs, dev, test (CPU)
+pip install -e ".[gpu]"     # + TabPFN, TabICL (requires CUDA)
 ```
 
 ### Running the Pipeline
 
-#### Local (Single Machine)
+#### Local (single machine, Docker)
 
 ```bash
-kreview run \
-  --cancer-samplesheet "/path/to/cancer/samplesheet.csv" \
-  --healthy-xs1-samplesheet "/path/to/healthy/xs1/samplesheet.csv" \
-  --healthy-xs2-samplesheet "/path/to/healthy/xs2/samplesheet.csv" \
-  --cbioportal-dir "/path/to/cBioPortal_MAF_CNA_SV/" \
-  --krewlyzer-dir "/path/to/unified_krewlyzer_results" \
-  --output output/ \
+nextflow run /path/to/kreview/nextflow/main.nf \
+  --cancer_samplesheet "/path/to/cancer/samplesheet.csv" \
+  --healthy_xs1_samplesheet "/path/to/healthy/xs1/samplesheet.csv" \
+  --healthy_xs2_samplesheet "/path/to/healthy/xs2/samplesheet.csv" \
+  --cbioportal_dir "/path/to/cBioPortal_MAF_CNA_SV/" \
+  --krewlyzer_dir "/path/to/unified_krewlyzer_results" \
+  --outdir output/ \
   --strategy mrmr \
-  --top-percentile 10 \
-  --compute-univariate-auc \
-  --ch-hotspot-maf "/path/to/ch_hotspots.maf" \
-  --export-duckdb
+  --top_percentile 10 \
+  --ch_hotspot_maf "/path/to/ch_hotspots.maf" \
+  -profile docker
 ```
+
+Individual stages are also available as subcommands (`kreview label`, `extract`, `select`,
+`eval cpu|gpu`, `fuse`, `report`) for debugging a single step outside the DAG.
 
 #### HPC (Nextflow + SLURM)
 
@@ -118,7 +124,6 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --cbioportal_dir /path/to/cbioportal/ \
   --krewlyzer_dir /path/to/manifest.txt \
   --outdir /path/to/output/ \
-  --pipeline_mode multistage \
   --run_gpu_eval true \
   --gpu_models "tabpfn,tabicl" \
   --run_ablation true \
@@ -149,7 +154,7 @@ See [Statistical Evaluation](https://msk-access.github.io/kreview/machine-learni
 
 This project operates as an `nbdev` repo. Do **not** edit `.py` scripts manually in `kreview/`. Build natively inside Jupyter notebooks within `nbs/` and trigger:
 ```bash
-nbdev_export
+nbdev-export && black kreview/   # note: `python3 -m nbdev.export` is a silent no-op
 ```
 
 ## 📚 Resources
