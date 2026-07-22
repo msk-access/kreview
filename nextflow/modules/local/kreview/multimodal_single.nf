@@ -88,18 +88,9 @@ process KREVIEW_MULTIMODAL_SINGLE_GPU {
     set -euo pipefail
     mkdir -p single_out
 
-    # Singularity --no-home workarounds
-    export HOME=\${PWD}/.home && mkdir -p \$HOME
-    export TMPDIR=\${PWD}/tmp && mkdir -p \$TMPDIR
-    export XDG_CACHE_HOME=\${PWD}/.cache && mkdir -p \$XDG_CACHE_HOME
-    export IPYTHONDIR=\${PWD}/.ipython && mkdir -p \$IPYTHONDIR
-    export HF_HOME=\${XDG_CACHE_HOME}/huggingface
-    export TABPFN_DATA_DIR=\${XDG_CACHE_HOME}/tabpfn
-    export TABPFN_MODEL_CACHE_DIR=\${XDG_CACHE_HOME}/tabpfn
-    export TABPFN_NO_BROWSER=true
-    export NUMBA_CACHE_DIR=\${PWD}/.numba_cache && mkdir -p \$NUMBA_CACHE_DIR
-    # Reduce CUDA OOM risk on shared GPU nodes by using expandable segments
-    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    # Shared GPU env centralized in nextflow.config (params.gpu_env_setup, #58) — includes the
+    # PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA-OOM guard.
+    ${params.gpu_env_setup}
     ${params.tabpfn_token ? "export TABPFN_TOKEN=\"${params.tabpfn_token}\"" : "# TABPFN_TOKEN not set"}
 
     # Debug: verify environment is functional

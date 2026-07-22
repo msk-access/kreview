@@ -27,6 +27,9 @@ process KREVIEW_SCOREBOARD {
 
     # All JSONs are symlinked in the work directory by Nextflow — no staging needed.
     # Python load_all_model_results() natively discovers and merges CPU+GPU JSONs.
+    # Fail loud if the interpreter is missing (Singularity can strip the container PATH → a
+    # bare `python3` would otherwise exit 127 with a cryptic message; #58).
+    command -v python3 >/dev/null || { echo "ERROR: python3 not found on PATH (Singularity PATH strip?)" >&2; exit 127; }
     python3 << 'EOF'
 import traceback, sys
 from kreview.scoreboard import build_scoreboard

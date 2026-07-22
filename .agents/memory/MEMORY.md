@@ -24,6 +24,9 @@ Keep this file to index lines only; the content lives in the linked files.
   terminate; never silent-drop or silent-substitute.
 - [reference-hpc-singularity-gotchas.md](reference-hpc-singularity-gotchas.md) — Singularity
   PATH stripping, read-only /home, CUDA OOM, cache=lenient: the recurring HPC environment traps.
+- [reference-iris-config-interaction.md](reference-iris-config-interaction.md) — the nf-core
+  iris config sets its own beforeScript/withLabel/errorStrategy; keep kreview env in-script and
+  resources in withName (never beforeScript/withLabel) or iris clobbers them.
 - [reference-nextflow-support-policy.md](reference-nextflow-support-policy.md) — supports
   Nextflow v25–v26 (floor 25.04.0, enforced); config-syntax rules modern Nextflow enforces;
   smoke-test with `scripts/nextflow_stub_test.sh`, stub run only, no nf-test harness.
