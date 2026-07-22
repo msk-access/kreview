@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-07-22
+
+Hardening release: closes the recurring release-breakage classes from the 2026-07 review
+(fail-loud invariants, Nextflow v25–v26, centralized HPC env) and validates the shipped
+container end to end. The `boruta_shap` multimodal workflow (used by `run_hpc.sh`) is now
+smoke-tested inside the built CPU image on every CI run.
+
 ### Added
 - **Test coverage for the CLI, `report.py`, and the multimodal strategies** (#63). Added a
   `report.py` smoke test (0% → 57% — covers the matrix-not-found guard) and CliRunner `--help`
