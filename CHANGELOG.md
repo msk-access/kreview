@@ -5,7 +5,110 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.30] - 2026-08-17
+
+Report + rigor release: the reporting layer is rebuilt as one data-driven, PHI-guarded,
+self-contained page (#79, Quarto path deleted); the train/test split is patient-grouped
+(#101 — found by the new report's own integrity check); and the two terminal failures from
+the first production v0.0.29 iris run are fixed (#97 multimodal-ablation collapse, #98
+stranded dashboards). Holdout metrics from this release onward are not directly comparable
+to earlier runs (see the split entry below).
+
+### Fixed
+- **The train/test split is now grouped by patient** (#101, found by the #79 report's own
+  integrity check on the v0.0.29 run: 1,266 patients had samples in BOTH train and test,
+  optimistically biasing every holdout metric). `_assign_train_test_split` uses
+  `StratifiedGroupKFold` on `PATIENT_ID` — all timepoints of a patient travel together,
+  every timepoint stays usable, label-tier stratification is approximately preserved
+  (verified on the real 16,272-sample labels: 0 leaked patients, test fraction 0.203,
+  per-tier drift ≤ 0.4 pp, deterministic). A post-split assertion makes a leaked patient a
+  hard error. Healthy donors (no cBioPortal record, one sample per donor) now carry
+  `PATIENT_ID = SAMPLE_ID`, keeping the column complete for all grouped consumers.
+  The eval-stage CV folds deliberately stay **ungrouped** — measured on the real v0.0.29
+  matrices, patient-mixing inflates CV AUC by ≤ ~0.001 (an order of magnitude below fold
+  noise); the grouped holdout is the honest headline. Full measurement tables and the
+  documented decision are on #101. Note: holdout numbers from runs ≤ v0.0.29 are **not
+  comparable** to grouped-split runs — expect shifts of ~0.005–0.02 from test-set
+  re-composition (the leaked repeat-timepoint patients were the *harder* cases, so the
+  old numbers were dragged down, not inflated).
+
+
+### Changed
+- **The reporting layer is one data-driven page** (#79). `kreview report` now takes the
+  pipeline `--outdir` and renders a single self-contained HTML (plotly inlined from the
+  installed package — zero CDN, air-gapped-safe) via the new `kreview/report_data.py` data
+  layer: sortable scoreboard with per-evaluator deep-dive modals (per-model AUC+CI, fold
+  AUCs, OOF-computed ROC/PR, calibration, decision curves, subgroup AUCs with an n≥30
+  floor, feature-group ablation stability), multimodal stacking, cohort composition with
+  the train/test split (and a loud patient-leakage warning — see the split issue), and run
+  diagnostics from the execution trace. **Aggregates only**: `assert_no_phi` refuses to
+  emit anything sample-identifying. The #98 manifest semantics carry over (always written,
+  failure recorded). Validated end-to-end on the real iris v0.0.29 outputs: 26 evaluators,
+  5 MB page, rendered in ~3 s.
+- `KREVIEW_REPORT` (Nextflow) stages channel inputs into the canonical outdir layout and
+  runs the new renderer — `process_low`, 8 GB, no more 64→192 GB ladder. The separate
+  `KREVIEW_REPORT_MULTIMODAL` process is **gone** (its content is the report's multimodal
+  tab); multimodal/ablation inputs are optional sentinels (#97 pattern), so a failed
+  optional stage degrades the tab instead of starving the report.
+
+### Removed
+- **The Quarto render path** (#79): both `.qmd` templates (~4,000 lines, 1,009 of them
+  duplicated), `_render_quarto_report`/`_find_quarto`, render-time SHAP, and the
+  `quarto-cli`, `papermill` and `itables` dependencies. `kreview/feature_cards.py` (used
+  only by the deleted templates) is gone too. Report-only params `--shap-samples`,
+  `--shap-features` and `--cvd-safe` removed from the CLI and Nextflow (eval-stage SHAP is
+  untouched).
+
+
+### Fixed
+- **A failed dashboard no longer strands the successful ones** (#98, found on the iris
+  v0.0.29 run where 17/26 rendered dashboards published nothing). `kreview report` still
+  exits 1 when any dashboard fails (fail loud), but the `KREVIEW_REPORT` wrapper now applies
+  the retry-then-degrade pattern from #59: non-terminal attempts fail (the retry ladder gets
+  a chance), and the terminal attempt exits 0 so everything that rendered publishes. The CLI
+  also always writes `reports/report_manifest.json` (succeeded/failed evaluators + pointers
+  to per-failure `*_render.log` Quarto debug logs, which now publish too) — a partial
+  `reports/` directory is loud, never silently incomplete.
+
+### Changed
+- **Multimodal ablation runs in the GPU container when GPU models are in play** (#97
+  follow-up). `KREVIEW_MULTIMODAL_ABLATION` now routes its container, queue, memory, time
+  and cluster options on `params.multimodal_gpu_models` — when GPU stacking models are
+  requested, the ablation gets the GPU image and a GPU slot instead of silently falling
+  back to a CPU model. The #97 loud CPU fallback remains for environments with no GPU.
+- Lint toolchain fully pinned: `mypy==2.3.1` and `ruff==0.15.4` join the exact
+  `nbdev`/`black` pins in the `[dev]`/`[all]` extras — unpinned linter releases twice
+  broke CI on untouched code.
+
+### Added
+- **Vendored the official `migrate-nextflow-code` skill** from nextflow-io/agent-skills
+  (Apache-2.0, attribution in `VENDORED.md`) into `.agents/skills/` — detect → fix → verify
+  procedures for the strict-syntax migration class that produced #80 and the #97 config
+  gotcha. Its detection tool, `nextflow lint` (26.04+), reports the tree at 0 errors / 36
+  style warnings.
+
+
+### Fixed
+- **Multimodal ablation no longer collapses when the best stacking model is GPU-only**
+  (#97, found on the first production v0.0.29 iris run). The LOO ablation stage runs in the
+  CPU container, but picked the best stacking model unconditionally — when that was `tabicl`
+  (GPU-only), `_build_model` returned `None`, all 39 evaluator ablations failed with a
+  baffling sklearn error, and the terminally-failed stage **starved `MULTIMODAL_MERGE` and
+  `REPORT_MULTIMODAL`**, silently losing the merged multimodal results and dashboard.
+  Three fixes, per the terminal-failure policy (degrade AND surface loudly):
+  - `multimodal_ablation` now collects every model's stacking AUC, probes candidates
+    best-first, and **falls back loudly** to the best model the environment can build —
+    re-baselining deltas against the used model's own full-matrix AUC (deltas against an
+    unbuildable model's baseline would be scientifically wrong). The substitution is recorded
+    in `ablation_results.json` (`ablation_model_fallback`: requested/used/AUCs/reason).
+  - If **no** candidate is buildable, it raises one clear `RuntimeError` naming the models —
+    not 39 repeats of `estimator ... Got None instead`.
+  - The workflow now passes `ifEmpty(file('NO_ABLATION'))` on the merge input — the
+    `multimodal_merge` module already handled that sentinel; the workflow just never sent it.
+    Verified behaviourally with a forced-fail ablation stub: merge + multimodal dashboard now
+    survive a terminal ablation failure (and the pre-fix tree provably loses them). Guarded
+    by a structural assertion in `scripts/nextflow_stub_test.sh`.
+
 
 ## [0.0.29] - 2026-07-22
 

@@ -23,16 +23,13 @@ dependencies = [
     "typer>=0.9.0",
     "plotly>=5.14.0",
     "kaleido>=0.2.1",  # For static plot fallbacks
-    "itables>=1.7.0",
     "great_tables>=0.15.0",  # Column-grouped tables (reactable-style)
     "shap>=0.40.0",
     "joblib>=1.3.0",
     "statsmodels>=0.14.0",
     "xgboost>=2.0.0",
-    "quarto-cli>=1.6.0",
     "mrmr-selection>=0.2.8",
     "BorutaShapPlus>=0.1.3",
-    "papermill>=2.5.0",  # Required by Quarto render -P (parameterized dashboards)
 ]
 
 [project.optional-dependencies]
@@ -60,8 +57,10 @@ dev = [
     # deliberately, then re-run `nbdev-export && black kreview/` and commit the result.
     "nbdev==3.3.0",
     "black[jupyter]==26.5.1",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0"
+    "ruff==0.15.4",  # PINNED like nbdev/black: lint gates CI, and an unpinned ruff broke
+                     # lint on untouched code when 0.16 shipped new default rules (PR #99).
+                     # To upgrade: bump the pin, fix new findings, commit together.
+    "mypy==2.3.1"  # PINNED like ruff/black/nbdev (see #99/#102): lint gates CI
 ]
 docs = [
     "mkdocs-material>=9.5.0",
@@ -92,8 +91,10 @@ all = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "black[jupyter]>=23.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
+    "ruff==0.15.4",  # PINNED like nbdev/black: lint gates CI, and an unpinned ruff broke
+                     # lint on untouched code when 0.16 shipped new default rules (PR #99).
+                     # To upgrade: bump the pin, fix new findings, commit together.
+    "mypy==2.3.1",  # PINNED like ruff/black/nbdev (see #99/#102): lint gates CI
     "mkdocs-material>=9.5.0",
     "mkdocstrings[python]>=0.24.0",
     "mkdocs-typer>=0.0.3",

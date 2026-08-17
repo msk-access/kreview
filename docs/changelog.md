@@ -5,7 +5,255 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.30] - 2026-08-17
+
+Report + rigor release: the reporting layer is rebuilt as one data-driven, PHI-guarded,
+self-contained page (#79, Quarto path deleted); the train/test split is patient-grouped
+(#101 — found by the new report's own integrity check); and the two terminal failures from
+the first production v0.0.29 iris run are fixed (#97 multimodal-ablation collapse, #98
+stranded dashboards). Holdout metrics from this release onward are not directly comparable
+to earlier runs (see the split entry below).
+
+### Fixed
+- **The train/test split is now grouped by patient** (#101, found by the #79 report's own
+  integrity check on the v0.0.29 run: 1,266 patients had samples in BOTH train and test,
+  optimistically biasing every holdout metric). `_assign_train_test_split` uses
+  `StratifiedGroupKFold` on `PATIENT_ID` — all timepoints of a patient travel together,
+  every timepoint stays usable, label-tier stratification is approximately preserved
+  (verified on the real 16,272-sample labels: 0 leaked patients, test fraction 0.203,
+  per-tier drift ≤ 0.4 pp, deterministic). A post-split assertion makes a leaked patient a
+  hard error. Healthy donors (no cBioPortal record, one sample per donor) now carry
+  `PATIENT_ID = SAMPLE_ID`, keeping the column complete for all grouped consumers.
+  The eval-stage CV folds deliberately stay **ungrouped** — measured on the real v0.0.29
+  matrices, patient-mixing inflates CV AUC by ≤ ~0.001 (an order of magnitude below fold
+  noise); the grouped holdout is the honest headline. Full measurement tables and the
+  documented decision are on #101. Note: holdout numbers from runs ≤ v0.0.29 are **not
+  comparable** to grouped-split runs — expect shifts of ~0.005–0.02 from test-set
+  re-composition (the leaked repeat-timepoint patients were the *harder* cases, so the
+  old numbers were dragged down, not inflated).
+
+
+### Changed
+- **The reporting layer is one data-driven page** (#79). `kreview report` now takes the
+  pipeline `--outdir` and renders a single self-contained HTML (plotly inlined from the
+  installed package — zero CDN, air-gapped-safe) via the new `kreview/report_data.py` data
+  layer: sortable scoreboard with per-evaluator deep-dive modals (per-model AUC+CI, fold
+  AUCs, OOF-computed ROC/PR, calibration, decision curves, subgroup AUCs with an n≥30
+  floor, feature-group ablation stability), multimodal stacking, cohort composition with
+  the train/test split (and a loud patient-leakage warning — see the split issue), and run
+  diagnostics from the execution trace. **Aggregates only**: `assert_no_phi` refuses to
+  emit anything sample-identifying. The #98 manifest semantics carry over (always written,
+  failure recorded). Validated end-to-end on the real iris v0.0.29 outputs: 26 evaluators,
+  5 MB page, rendered in ~3 s.
+- `KREVIEW_REPORT` (Nextflow) stages channel inputs into the canonical outdir layout and
+  runs the new renderer — `process_low`, 8 GB, no more 64→192 GB ladder. The separate
+  `KREVIEW_REPORT_MULTIMODAL` process is **gone** (its content is the report's multimodal
+  tab); multimodal/ablation inputs are optional sentinels (#97 pattern), so a failed
+  optional stage degrades the tab instead of starving the report.
+
+### Removed
+- **The Quarto render path** (#79): both `.qmd` templates (~4,000 lines, 1,009 of them
+  duplicated), `_render_quarto_report`/`_find_quarto`, render-time SHAP, and the
+  `quarto-cli`, `papermill` and `itables` dependencies. `kreview/feature_cards.py` (used
+  only by the deleted templates) is gone too. Report-only params `--shap-samples`,
+  `--shap-features` and `--cvd-safe` removed from the CLI and Nextflow (eval-stage SHAP is
+  untouched).
+
+
+### Fixed
+- **A failed dashboard no longer strands the successful ones** (#98, found on the iris
+  v0.0.29 run where 17/26 rendered dashboards published nothing). `kreview report` still
+  exits 1 when any dashboard fails (fail loud), but the `KREVIEW_REPORT` wrapper now applies
+  the retry-then-degrade pattern from #59: non-terminal attempts fail (the retry ladder gets
+  a chance), and the terminal attempt exits 0 so everything that rendered publishes. The CLI
+  also always writes `reports/report_manifest.json` (succeeded/failed evaluators + pointers
+  to per-failure `*_render.log` Quarto debug logs, which now publish too) — a partial
+  `reports/` directory is loud, never silently incomplete.
+
+### Changed
+- **Multimodal ablation runs in the GPU container when GPU models are in play** (#97
+  follow-up). `KREVIEW_MULTIMODAL_ABLATION` now routes its container, queue, memory, time
+  and cluster options on `params.multimodal_gpu_models` — when GPU stacking models are
+  requested, the ablation gets the GPU image and a GPU slot instead of silently falling
+  back to a CPU model. The #97 loud CPU fallback remains for environments with no GPU.
+- Lint toolchain fully pinned: `mypy==2.3.1` and `ruff==0.15.4` join the exact
+  `nbdev`/`black` pins in the `[dev]`/`[all]` extras — unpinned linter releases twice
+  broke CI on untouched code.
+
+### Added
+- **Vendored the official `migrate-nextflow-code` skill** from nextflow-io/agent-skills
+  (Apache-2.0, attribution in `VENDORED.md`) into `.agents/skills/` — detect → fix → verify
+  procedures for the strict-syntax migration class that produced #80 and the #97 config
+  gotcha. Its detection tool, `nextflow lint` (26.04+), reports the tree at 0 errors / 36
+  style warnings.
+
+
+### Fixed
+- **Multimodal ablation no longer collapses when the best stacking model is GPU-only**
+  (#97, found on the first production v0.0.29 iris run). The LOO ablation stage runs in the
+  CPU container, but picked the best stacking model unconditionally — when that was `tabicl`
+  (GPU-only), `_build_model` returned `None`, all 39 evaluator ablations failed with a
+  baffling sklearn error, and the terminally-failed stage **starved `MULTIMODAL_MERGE` and
+  `REPORT_MULTIMODAL`**, silently losing the merged multimodal results and dashboard.
+  Three fixes, per the terminal-failure policy (degrade AND surface loudly):
+  - `multimodal_ablation` now collects every model's stacking AUC, probes candidates
+    best-first, and **falls back loudly** to the best model the environment can build —
+    re-baselining deltas against the used model's own full-matrix AUC (deltas against an
+    unbuildable model's baseline would be scientifically wrong). The substitution is recorded
+    in `ablation_results.json` (`ablation_model_fallback`: requested/used/AUCs/reason).
+  - If **no** candidate is buildable, it raises one clear `RuntimeError` naming the models —
+    not 39 repeats of `estimator ... Got None instead`.
+  - The workflow now passes `ifEmpty(file('NO_ABLATION'))` on the merge input — the
+    `multimodal_merge` module already handled that sentinel; the workflow just never sent it.
+    Verified behaviourally with a forced-fail ablation stub: merge + multimodal dashboard now
+    survive a terminal ablation failure (and the pre-fix tree provably loses them). Guarded
+    by a structural assertion in `scripts/nextflow_stub_test.sh`.
+
+
+## [0.0.29] - 2026-07-22
+
+Hardening release: closes the recurring release-breakage classes from the 2026-07 review
+(fail-loud invariants, Nextflow v25–v26, centralized HPC env) and validates the shipped
+container end to end. The `boruta_shap` multimodal workflow (used by `run_hpc.sh`) is now
+smoke-tested inside the built CPU image on every CI run.
+
+### Added
+- **Test coverage for the CLI, `report.py`, and the multimodal strategies** (#63). Added a
+  `report.py` smoke test (0% → 57% — covers the matrix-not-found guard) and CliRunner `--help`
+  tests across the full nested command tree (`eval ablate *`, `eval multimodal *`), which guard
+  command registration/wiring. A new `test-strategies` CI job installs the `arfs` extra and runs
+  the multimodal strategy tests, which **previously skipped in every environment** — the same
+  "looks protected, isn't" pattern that hid the original BorutaShap outage. Un-skipping them
+  immediately surfaced that **all three are broken against modern deps** (not kreview bugs — the
+  strategy dispatch is correct): `arfs` 2.4 is incompatible with sklearn 1.9 (`force_all_finite`,
+  breaks `leshy`) and lightgbm 4.x (`categorical_feature`, breaks `grootcv`) — #91; and
+  `boruta_shap` hits a BorutaShap→shap xgboost-parser error on some versions — #92. All three are
+  now `xfail(strict=False)` with tracked issues so the breakage is visible rather than invisibly
+  skipped (they xpass and alert when the deps are fixed). The `arfs` extra also now pins
+  `setuptools<81` (arfs imports the removed `pkg_resources`). Overall coverage 44% → 46%; CI
+  floor 38% → 42%.
+  (No `nf-test` harness — the Nextflow `-stub-run` in `scripts/nextflow_stub_test.sh` covers the
+  workflow wiring, per the #80 maintainer decision.)
+
+### Changed
+- **Centralized the HPC env setup and fixed inconsistent hardening** (#58). The Singularity
+  read-only-`/home` / cache-redirect env was copy-pasted across five modules and had drifted:
+  `PYTORCH_CUDA_ALLOC_CONF` (the CUDA-OOM guard) was set in `multimodal_single` but **missing**
+  from `eval_gpu_single` and `ablate_gpu_single`, and the report modules **lacked**
+  `HOME`/`TMPDIR`/`MPLCONFIGDIR`. It is now defined once each (`params.gpu_env_setup`,
+  `params.report_env_setup`) and interpolated into every module's `script:`, so the hardening
+  is applied identically everywhere. `scoreboard.nf`'s `python3` heredoc now fails loud with a
+  clear message if the interpreter is missing (Singularity PATH strip) instead of a cryptic
+  exit 127.
+
+  Two deliberate design choices, contrary to the issue's original suggestion, because the
+  nf-core **iris** institutional config sets its own `beforeScript`, `withLabel` resources,
+  `errorStrategy` and `cache`: (1) the env stays **in-script**, not in a `beforeScript`, which
+  is a single non-additive directive that would clobber (or be clobbered by) iris's; (2) the
+  per-`withName` resource ladders stay as they are — they are defensive armour against iris's
+  `withLabel` override, and Nextflow 24+ forbids the `def`-closure hoisting that would dedup
+  them. Rationale recorded in `.agents/memory/reference-iris-config-interaction.md`.
+
+### Fixed
+- **Published output nested a working-directory prefix** (#84). Because a process' `output:`
+  path carries the working subdir (`selected/`, `fused/`, `output/`, `prep_out/`, …) and
+  `publishDir` already named the destination folder, results landed at
+  `matrices/selected/selected/…`, `matrices/fused/fused/…`, `models/multimodal/prep_out/…`.
+  Added `saveAs: { fn -> file(fn).name }` to the seven affected modules so files publish by
+  basename — the tree now matches the documented structure (`matrices/selected/X`,
+  `models/multimodal/X`). Publish-path only; nothing consumes `params.outdir` (all
+  inter-process data flows through channels), so the DAG is unaffected. Guarded by a new
+  flatness assertion in `scripts/nextflow_stub_test.sh`.
+- **DuckDB reads masked failures as empty results** (#61). Both chunked-read paths
+  (`_read_parquet_chunk`, `run_feature_sql`) retried on *any* exception and then returned an
+  empty DataFrame — indistinguishable from a legitimate 0-row read, so a persistently failing
+  feature silently dropped those samples (`iter_feature_chunks` skips an "empty" chunk). They
+  now classify the error: `OperationalError` (I/O, resource, OOM) backs off and retries, and
+  **raises** if it never succeeds; `ProgrammingError` / `DataError` (bad column, malformed SQL,
+  type mismatch) **raises immediately** — no wasted retries, no masking. The legitimate
+  "no files found" case still returns empty.
+- **eval_engine masked errors as low scores** (#61). Two broad excepts turned real failures
+  into a `0.0`: `mutual_info_score` scored a feature 0 on any exception, and the ablation
+  inner-CV appended `0.0` for a fold that raised. Both benign degenerate cases (constant
+  feature, <2 classes, too-few-samples, empty folds) are handled explicitly *before* these
+  points, so both now **raise** with context instead. The four legitimate degenerate
+  `return 0.0` cases are preserved. A new shared `_numeric_feature_columns` helper replaces two
+  duplicated `select_dtypes(include=np.number)` filters and **loudly flags** any non-metadata
+  column that is unexpectedly non-numeric (an object-dtype feature that would otherwise be
+  dropped silently), consolidating the two sites into one implementation.
+- **GPU retry ladder never engaged** (#59). The GPU eval/ablation/multimodal wrappers always
+  exited 0 (emitting an error-JSON on failure) to avoid a `collect()` deadlock — but that also
+  meant `errorStrategy='retry'` never fired, so the 64→256 GB / `gpushort`→`gpu` escalation was
+  dead code for transient CUDA OOM. The wrappers now **fail loud on non-terminal attempts**
+  (exit non-zero → the ladder climbs) and only degrade gracefully (error-JSON + exit 0) once
+  retries are exhausted, preserving the channel-closing invariant that prevents the deadlock
+  (see commits `698c72e` / `dcfe356`).
+- **Silent evaluator drop on ablation failure** (#60). `kreview_eval.nf` paired each matrix
+  with its `best_subset` via `combine(by:0)` — an inner join — so an evaluator whose ablation
+  failed and was ignored upstream was **silently dropped from both CPU and GPU eval** (missing
+  from results entirely, with no error). Now uses `join(by:0, remainder:true)` with a
+  `NO_BEST_SUBSET` fallback (identical to the ablation-off path) and a loud per-evaluator
+  warning, so the evaluator is degraded-but-present, never dropped. This is also strictly
+  safer than the old `combine` + `.ifEmpty` guards when the whole ablation channel is empty.
+- **Failed evaluators masked as blank rows** (#59/#60). A GPU wrapper that exhausts its retry
+  ladder emits `{"error": ...}`; the scoreboard rendered that as an innocent all-NaN row. The
+  scoreboard now carries a `status` column (`OK` / `PARTIAL` / `FAILED` / `NO_RESULTS`) with an
+  `error_detail`, logs degraded evaluators loudly, and **no longer drops an evaluator that
+  throws during metric extraction** (emits a `FAILED` row instead). Both report templates show
+  the `status` column and a "Degraded evaluators" callout, and their stale `kreview run`
+  fallback text (removed in #55) was corrected to the Nextflow invocation.
+
+### Added
+- **`scripts/test_nextflow_join_dropguard.nf`** — a standalone channel-logic regression test
+  for #60 (3 matrices, 2 best_subsets → all 3 survive with a fallback). Run by
+  `scripts/nextflow_stub_test.sh`, which also structurally asserts the #59 retry guard is
+  present in all three GPU wrappers.
+
+### Removed
+- **`kreview run` (monolithic pipeline command)** and everything that existed only to serve
+  it: the Nextflow `KREVIEW_RUN` process (`run.nf`), the `params.pipeline_mode` switch, and
+  its `withName` resource block. The Nextflow multistage DAG is now the only way to run the
+  pipeline. `kreview run` was a second, drifting implementation of the whole pipeline — the
+  largest single source of the fix-one-path-miss-the-other bugs (see #55) — and was neither
+  used nor exercised by CI. Individual stages remain available as subcommands
+  (`kreview label|extract|select|eval|fuse|report`) for debugging.
+- **`--export-duckdb`**. It existed only on `kreview run` and was unreachable from the
+  Nextflow DAG, so it was never usable on HPC. Feature matrices are written as parquet under
+  the output directory and can be queried directly with DuckDB or pandas.
+- **Four orphaned Nextflow modules** (`eval_cpu.nf`, `eval_gpu.nf`, `select.nf`,
+  `eval_multimodal.nf`). They were included by zero workflows and encoded an older DAG that
+  ran straight off `EXTRACT`, bypassing `SELECT`/`ABLATE` — re-enabling one would have
+  produced different, incorrect results.
+
+### Fixed
+- **`nextflow.config` would not parse on Nextflow 24 or newer** (#80), so the pipeline could
+  not start at all on a current Nextflow — an outright adoption blocker, and invisible because
+  nothing in CI ran Nextflow. Three constructs were rejected by the modern config parser:
+  - `try`/`catch` around the nf-core institutional `includeConfig`. Replaced with the nf-core
+    ternary idiom, which also honours `NXF_OFFLINE` (an `if` statement is rejected too).
+  - Five `${manifest.version}` references in container tags — `manifest` is not resolvable
+    from `process`/`profiles` scope. The version now lives in `params.kreview_version`, which
+    the manifest reads back, so there is still exactly one version literal in the file.
+  - `${HOME}` interpolation in the Singularity `cacheDir`, now `env('HOME')`.
+- **Stale `withName:` selectors** for `KREVIEW_EVAL_CPU`/`KREVIEW_EVAL_GPU`, left behind when
+  the Gen-1 bulk modules were deleted. They matched no process and made Nextflow warn on every
+  run; the resource settings they carried applied to nothing.
+
+### Added
+- **Nextflow stub smoke test** (`scripts/nextflow_stub_test.sh`, and a `stub` profile). Every
+  process now declares a `stub:` block, so `-stub-run -profile stub` exercises the entire DAG
+  — config parsing, all four profiles, module includes and channel wiring — in seconds without
+  data or containers. CI runs it against both ends of the supported range. It asserts from
+  `execution_trace.txt` that all 17 processes ran and every task reached `COMPLETED`, and
+  fails on any `withName:` selector naming a process that does not exist.
+
+### Changed
+- Documentation now presents a single run path. `--pipeline_mode multistage` is no longer
+  needed (or accepted); use `-profile docker` locally and `-profile iris`/`slurm` on HPC.
+- **Supported Nextflow range is now declared and enforced: v25–v26.** `manifest.nextflowVersion`
+  was `!>=22.10.1`, an unbounded floor that let a modern Nextflow get far enough to fail with a
+  cryptic parse error. It is now `!>=25.04.0` (the floor `env()` requires), verified against
+  25.04.6, 25.10.6 and 26.04.6.
 
 ## [0.0.28] - 2026-07-09
 

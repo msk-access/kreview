@@ -194,8 +194,9 @@ jobs:
           platforms: linux/amd64
 
       # Smoke-test the CPU image: importing the CLI exercises the full dependency
-      # chain (papermill, BorutaShap, xgboost, shap, quarto) — exactly the class of
+      # chain (BorutaShap, xgboost, shap, plotly, kreview) — exactly the class of
       # breakage that shipped in v0.0.24-0.0.28 and slipped past a build-only CI.
+      # (#79 removed Quarto/papermill from the report path, so those checks are gone.)
       # The GPU image needs a GPU runtime to execute, so it is build-verified only.
       # The image ENTRYPOINT is ["kreview"], so pass args directly for the CLI, and
       # override --entrypoint for the tool/import checks.
@@ -203,8 +204,7 @@ jobs:
         if: matrix.target == 'cpu'
         run: |
           docker run --rm kreview:test-cpu --help
-          docker run --rm --entrypoint quarto kreview:test-cpu --version
-          docker run --rm --entrypoint python kreview:test-cpu -c "import papermill, BorutaShap, xgboost, shap, kreview; print('kreview imports OK')"
+          docker run --rm --entrypoint python kreview:test-cpu -c "import BorutaShap, xgboost, shap, plotly, kreview.report_data; print('kreview imports OK')"
 
       # run_hpc.sh runs `--multimodal_selection boruta_shap`, so the RELEASE container must not
       # just IMPORT BorutaShap but actually RUN the strategy end to end — the shap/xgboost/scipy

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kreview evaluation report</title>
+<script>__PLOTLY_JS__</script>
+<style>
+  :root {
+    --bg:#f7f8fa; --panel:#ffffff; --ink:#1a2233; --muted:#66708a; --line:#e3e7ef;
+    --accent:#4650dc; --accent2:#0ea472; --warn:#c8560f; --bad:#c02942;
+    --chip:#eef0fb; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  header { background:var(--panel); border-bottom:1px solid var(--line); padding:18px 28px; }
+  header h1 { margin:0; font-size:20px; font-weight:650; }
+  header .sub { color:var(--muted); font-size:12.5px; margin-top:3px; }
+  nav { display:flex; gap:4px; padding:0 20px; background:var(--panel); border-bottom:1px solid var(--line); }
+  nav button { border:0; background:none; padding:12px 14px; font:inherit; font-weight:550;
+               color:var(--muted); cursor:pointer; border-bottom:2.5px solid transparent; }
+  nav button.on { color:var(--accent); border-bottom-color:var(--accent); }
+  main { max-width:1280px; margin:0 auto; padding:22px 28px 60px; }
+  .tab { display:none; } .tab.on { display:block; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:14px 0 20px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card .k { color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; }
+  .card .v { font-size:22px; font-weight:650; margin-top:2px; }
+  .card .s { color:var(--muted); font-size:12px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:18px; }
+  .panel h3 { margin:0 0 10px; font-size:14.5px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:900px){ .grid2 { grid-template-columns:1fr; } }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em;
+       cursor:pointer; user-select:none; position:sticky; top:0; background:var(--panel); }
+  th .arr { opacity:.55; font-size:10px; }
+  tbody tr:hover { background:#f2f4fb; cursor:pointer; }
+  .num { font-variant-numeric:tabular-nums; font-family:var(--mono); font-size:12.5px; }
+  .badge { display:inline-block; padding:1.5px 8px; border-radius:99px; font-size:11px; font-weight:600; }
+  .b-ok { background:#e2f5ec; color:#0a7a50; } .b-warn { background:#fdeadd; color:var(--warn); }
+  .b-bad { background:#fbe3e8; color:var(--bad); } .b-mut { background:var(--chip); color:var(--accent); }
+  .bar { height:8px; border-radius:5px; background:var(--chip); position:relative; min-width:80px; }
+  .bar i { position:absolute; inset:0 auto 0 0; border-radius:5px; background:var(--accent); }
+  .toolbar { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .toolbar input, .toolbar select { font:inherit; padding:7px 10px; border:1px solid var(--line);
+      border-radius:8px; background:var(--panel); }
+  dialog { border:0; border-radius:14px; padding:0; max-width:960px; width:92vw; max-height:88vh;
+           box-shadow:0 24px 70px rgba(20,25,60,.25); }
+  dialog::backdrop { background:rgba(15,18,35,.45); }
+  .dlg-head { display:flex; justify-content:space-between; align-items:center;
+              padding:16px 22px; border-bottom:1px solid var(--line); }
+  .dlg-head h2 { margin:0; font-size:17px; }
+  .dlg-body { padding:18px 22px; overflow:auto; max-height:calc(88vh - 60px); }
+  .x { border:0; background:var(--chip); border-radius:8px; padding:6px 12px; cursor:pointer; font:inherit; }
+  svg text { font:11px var(--mono); fill:var(--muted); }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:6px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:99px; margin-right:5px; }
+  .note { background:#fff8ec; border:1px solid #f2dfb6; color:#7a5a13; border-radius:8px;
+          padding:10px 14px; font-size:13px; margin-bottom:14px; }
+  .chips span { display:inline-block; background:var(--chip); color:var(--accent);
+                border-radius:7px; padding:2px 9px; margin:2px 4px 2px 0; font-size:12px; font-family:var(--mono); }
+  .hbars .row { display:grid; grid-template-columns:210px 1fr 64px; gap:10px; align-items:center; margin:4px 0; }
+  .hbars .lbl { font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="ttl">kreview evaluation report</h1>
+  <div class="sub" id="sub"></div>
+</header>
+<nav id="nav"></nav>
+<main>
+  <section class="tab" id="tab-overview">
+    <div class="cards" id="ov-cards"></div>
+    <div id="ov-leak"></div>
+    <div class="grid2">
+      <div class="panel"><div id="ov-labels" style="height:300px"></div></div>
+      <div class="panel"><div id="ov-split" style="height:300px"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><div id="ov-cancers" style="height:340px"></div></div>
+      <div class="panel"><div id="ov-aucbars" style="height:340px"></div></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-scoreboard">
+    <div class="toolbar">
+      <input id="q" placeholder="filter evaluators…" oninput="renderTable()">
+      <select id="fmodel" onchange="renderTable()"><option value="">all best-models</option></select>
+      <span class="legend" id="tbl-count"></span>
+    </div>
+    <div class="panel" style="overflow:auto; max-height:70vh; padding:0">
+      <table id="tbl"><thead></thead><tbody></tbody></table>
+    </div>
+    <div class="legend">Click a row for the per-evaluator deep-dive (models, CI, ROC, folds, subgroups).</div>
+  </section>
+
+  <section class="tab" id="tab-multimodal">
+    <div id="mm-note"></div>
+    <div class="cards" id="mm-cards"></div>
+    <div class="grid2">
+      <div class="panel"><div id="mm-auc" style="height:280px"></div></div>
+      <div class="panel"><div id="mm-pr" style="height:280px"></div></div>
+    </div>
+    <div class="panel"><h3>Per-model detail</h3><div style="overflow:auto"><table id="mm-tbl"></table></div></div>
+  </section>
+
+  <section class="tab" id="tab-diagnostics">
+    <div class="cards" id="dg-cards"></div>
+    <div class="grid2">
+      <div class="panel"><h3>Process outcomes</h3><div style="overflow:auto"><table id="dg-proc"></table></div></div>
+      <div class="panel"><h3>Longest tasks</h3><div style="overflow:auto"><table id="dg-long"></table></div></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <div class="dlg-head"><h2 id="dlg-t"></h2><button class="x" onclick="dlg.close()">close</button></div>
+  <div class="dlg-body" id="dlg-b"></div>
+</dialog>
+
+<script>
+const R = __REPORT_DATA__;
+
+/* ── helpers ─────────────────────────────────────────────── */
+const $ = s => document.querySelector(s);
+const fmt = (v, d=3) => v == null ? "–" : (+v).toFixed(d);
+const pct = v => v == null ? "–" : (100*v).toFixed(1) + "%";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function hbars(el, obj, denom, color) {
+  const max = Math.max(...Object.values(obj));
+  el.innerHTML = Object.entries(obj).map(([k,v]) => `
+    <div class="row"><div class="lbl" title="${esc(k)}">${esc(k)}</div>
+      <div class="bar"><i style="width:${100*v/max}%;${color?`background:${color}`:''}"></i></div>
+      <div class="num">${denom ? (100*v/denom).toFixed(1)+"%" : fmt(v,3)}</div></div>`).join("");
+}
+
+const PALETTE = ["#4650dc","#0ea472","#c8560f","#8636c9","#b8236e","#1272b8","#67707e"];
+const PL_CFG = {displayModeBar: "hover", displaylogo: false, responsive: true,
+  modeBarButtonsToRemove: ["lasso2d","select2d","autoScale2d"]};
+const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
+  title: {text: title, font: {size: 13.5}, x: 0.02, xanchor: "left"},
+  margin: {l: 52, r: 14, t: title ? 34 : 10, b: 40},
+  xaxis: {title: {text: xlab, font: {size: 11.5}}, gridcolor: "#eceff5", zeroline: false},
+  yaxis: {title: {text: ylab, font: {size: 11.5}}, gridcolor: "#eceff5", zeroline: false},
+  font: {family: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif", size: 11.5, color: "#66708a"},
+  paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+  legend: {orientation: "h", y: -0.25, font: {size: 11}},
+  hovermode: "closest",
+}, extra);
+
+/* ── header + nav ────────────────────────────────────────── */
+$("#ttl").textContent = R.meta.title + " — v" + R.meta.version;
+$("#sub").textContent = `${R.meta.run} · ${R.cohort.n_samples.toLocaleString()} samples · ` +
+  `${R.evaluators.length} evaluators · ${R.meta.generated_note}`;
+const TABS = [["overview","Cohort & labels"],["scoreboard","Scoreboard"],
+              ["multimodal","Multimodal"],["diagnostics","Run diagnostics"]];
+$("#nav").innerHTML = TABS.map(([id,l],i) =>
+  `<button class="${i?'':'on'}" onclick="showTab('${id}',this)">${l}</button>`).join("");
+function showTab(id, btn) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("on"));
+  document.querySelectorAll("nav button").forEach(b => b.classList.remove("on"));
+  $("#tab-"+id).classList.add("on"); btn.classList.add("on");
+}
+$("#tab-overview").classList.add("on");
+
+/* ── overview ────────────────────────────────────────────── */
+const C = R.cohort;
+const bestEv = [...R.evaluators].sort((a,b) => (b.best_auc||0)-(a.best_auc||0))[0];
+$("#ov-cards").innerHTML = [
+  ["Samples", C.n_samples.toLocaleString(), `${C.n_patients.toLocaleString()} patients`],
+  ["True ctDNA+", (C.label_counts["True ctDNA+"]||0).toLocaleString(), "tier-1 positives"],
+  ["Healthy normals", (C.label_counts["Healthy Normal"]||0).toLocaleString(), "spec@100 anchor"],
+  ["Best evaluator", bestEv ? bestEv.evaluator : "–", bestEv ? `AUC ${fmt(bestEv.best_auc)} (${bestEv.best_model})` : ""],
+  ["Best stacking AUC", fmt(Math.max(...Object.values(R.multimodal.models).map(m => m.stacking?.auc||0))),
+     `vs best single ${fmt(R.multimodal.best_single_auc)}`],
+].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+(function overviewCharts() {
+  const lc = Object.entries(C.label_counts).sort((a,b) => b[1]-a[1]);
+  Plotly.newPlot("ov-labels", [{
+    type: "bar", orientation: "h",
+    y: lc.map(x=>x[0]).reverse(), x: lc.map(x=>x[1]).reverse(),
+    text: lc.map(([k,v]) => `${v.toLocaleString()} (${(100*v/C.n_samples).toFixed(1)}%)`).reverse(),
+    textposition: "auto", marker: {color: "#4650dc"},
+    hovertemplate: "<b>%{y}</b><br>n = %{x:,}<br>%{customdata:.1f}% of cohort<extra></extra>",
+    customdata: lc.map(([k,v]) => 100*v/C.n_samples).reverse(),
+  }], PL_LAYOUT(`ctDNA label taxonomy — ${C.n_samples.toLocaleString()} samples`, "samples", "",
+       {margin:{l:150,r:14,t:34,b:40}}), PL_CFG);
+
+  const splits = Object.keys(C.split_composition).filter(s => s !== "exclude");
+  const allLabels = [...new Set(splits.flatMap(s => Object.keys(C.split_composition[s])))];
+  Plotly.newPlot("ov-split", allLabels.map((lab,i) => ({
+    type: "bar", name: lab,
+    x: splits, y: splits.map(s => C.split_composition[s][lab] || 0),
+    marker: {color: PALETTE[i % 7]},
+    hovertemplate: `<b>${lab}</b><br>%{x}: %{y:,} samples<extra></extra>`,
+  })), PL_LAYOUT("Train/test split composition (80/20, by label)", "", "samples",
+       {barmode: "stack"}), PL_CFG);
+
+  const ct = Object.entries(C.cancer_types);
+  Plotly.newPlot("ov-cancers", [{
+    type: "bar", orientation: "h",
+    y: ct.map(x=>x[0]).reverse(), x: ct.map(x=>x[1]).reverse(),
+    text: ct.map(([k,v]) => `${v.toLocaleString()} (${(100*v/C.n_samples).toFixed(1)}%)`).reverse(),
+    textposition: "auto", marker: {color: "#0ea472"},
+    hovertemplate: "<b>%{y}</b><br>n = %{x:,}<extra></extra>",
+  }], PL_LAYOUT(`Cancer types (top ${ct.length}; +${C.cancer_types_other.toLocaleString()} other)`,
+       "samples", "", {margin:{l:190,r:14,t:34,b:40}}), PL_CFG);
+
+  const evs = [...R.evaluators].sort((a,b) => (a.best_auc||0)-(b.best_auc||0));
+  Plotly.newPlot("ov-aucbars", [{
+    type: "bar", orientation: "h",
+    y: evs.map(e=>e.evaluator), x: evs.map(e=>e.best_auc||0),
+    marker: {color: "#4650dc"},
+    hovertemplate: "<b>%{y}</b><br>CV AUC %{x:.3f} (%{customdata[0]})" +
+      "<br>holdout %{customdata[1]:.3f} · sens@95 %{customdata[2]:.1%}<extra></extra>",
+    customdata: evs.map(e => [e.best_model, e.holdout_auc, e.sens_at_95spec]),
+  }], PL_LAYOUT("Evaluator AUC (best model, CV) — hover for holdout & sens@95", "AUC", "",
+       {margin:{l:190,r:14,t:34,b:40}, xaxis:{range:[0.5,0.9], gridcolor:"#eceff5"}}), PL_CFG);
+
+  if (C.patients_in_both_splits > 0) $("#ov-leak").innerHTML =
+    `<div class="note"><b>⚠ Patient overlap between splits:</b> ${C.patients_in_both_splits.toLocaleString()} ` +
+    `patients have samples in BOTH train and test. Holdout metrics are optimistically biased — ` +
+    `the split should be patient-level, not sample-level.</div>`;
+})();
+
+/* ── scoreboard ──────────────────────────────────────────── */
+const COLS = [
+  ["evaluator","Evaluator", v=>esc(v)],
+  ["status","Status", v=>`<span class="badge ${v==='OK'?'b-ok':v==='PARTIAL'?'b-warn':'b-bad'}">${v||'–'}</span>`],
+  ["best_model","Best", v=>`<span class="badge b-mut">${v||'–'}</span>`],
+  ["best_auc","AUC (CV)", v=>`<span class="num">${fmt(v)}</span>`],
+  ["holdout_auc","AUC (holdout)", v=>`<span class="num">${fmt(v)}</span>`],
+  ["auc_drop","Δ overfit", v=>`<span class="num">${fmt(v)}</span>`],
+  ["sens_at_95spec","Sens@95", v=>`<span class="num">${pct(v)}</span>`],
+  ["best_sens_100spec_healthy","Sens@100h", v=>`<span class="num">${pct(v)}</span>`],
+  ["n_selected_features","#feat", v=>`<span class="num">${v??'–'}</span>`],
+  ["selection_method","Selection", v=>esc(v||'–')],
+];
+let sortKey = "best_auc", sortDir = -1;
+$("#tbl thead").innerHTML = "<tr>" + COLS.map(([k,l]) =>
+  `<th onclick="sortBy('${k}')">${l} <span class="arr" id="arr-${k}"></span></th>`).join("") + "</tr>";
+$("#fmodel").innerHTML += [...new Set(R.evaluators.map(e=>e.best_model).filter(Boolean))]
+  .map(m => `<option>${m}</option>`).join("");
+function sortBy(k) { sortDir = (k===sortKey) ? -sortDir : -1; sortKey = k; renderTable(); }
+function renderTable() {
+  const q = $("#q").value.toLowerCase(), fm = $("#fmodel").value;
+  let rows = R.evaluators.filter(e =>
+    (!q || e.evaluator.toLowerCase().includes(q)) && (!fm || e.best_model === fm));
+  rows.sort((a,b) => { const x=a[sortKey], y=b[sortKey];
+    if (x==null) return 1; if (y==null) return -1;
+    return (typeof x === "number" ? x-y : String(x).localeCompare(String(y))) * -sortDir * -1; });
+  document.querySelectorAll(".arr").forEach(a => a.textContent = "");
+  $("#arr-"+sortKey).textContent = sortDir < 0 ? "▼" : "▲";
+  $("#tbl tbody").innerHTML = rows.map(e => `<tr onclick='openEval("${e.evaluator}")'>` +
+    COLS.map(([k,,f]) => `<td>${f(e[k])}</td>`).join("") + "</tr>").join("");
+  $("#tbl-count").textContent = `${rows.length}/${R.evaluators.length} evaluators`;
+}
+renderTable();
+
+/* ── evaluator modal ─────────────────────────────────────── */
+const dlg = $("#dlg");
+function openEval(name) {
+  const e = R.evaluators.find(x => x.evaluator === name);
+  $("#dlg-t").textContent = name;
+  const mm = e.model_metrics || {};
+  const models = Object.keys(mm);
+  let html = `<div class="cards">` + [
+      ["Best AUC (CV)", fmt(e.best_auc), e.best_model],
+      ["Holdout AUC", fmt(e.holdout_auc), `Δ ${fmt(e.auc_drop)}`],
+      ["Sens@100spec healthy", pct(e.best_sens_100spec_healthy), "all models, best"],
+      ["Samples (CV)", (e.n_samples??"–"), `${e.n_positive??"–"} positive`],
+    ].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("") + `</div>`;
+
+  html += `<div class="panel"><h3>Models</h3><div style="overflow:auto"><table><tr>
+    <th>model</th><th>AUC</th><th>95% CI</th><th>fold AUCs</th><th>sens@95</th><th>sens@100h</th><th>holdout AUC</th></tr>` +
+    models.map((m,i) => { const d = mm[m];
+      const folds = (d.fold_aucs||[]).map(f =>
+        `<span title="${fmt(f)}" style="display:inline-block;width:7px;height:${8+22*(f-0.5)*2}px;background:${PALETTE[i%7]};margin:0 1px;border-radius:2px;vertical-align:bottom"></span>`).join("");
+      return `<tr><td><span class="dot" style="background:${PALETTE[i%7]}"></span>${m}</td>
+        <td class="num">${fmt(d.auc)}</td><td class="num">${fmt(d.ci?.[0])}–${fmt(d.ci?.[1])}</td>
+        <td>${folds}</td><td class="num">${pct(d.sens95)}</td><td class="num">${pct(d.sens100h)}</td>
+        <td class="num">${fmt(d.holdout_auc)}</td></tr>`; }).join("") + `</table></div></div>`;
+
+  if (e.n_healthy_oof != null && e.n_healthy_oof < 100) html += `<div class="note">
+    sens@100spec<sub>healthy</sub> is thresholded on the maximum score among only
+    <b>${e.n_healthy_oof} healthy normals</b> in the CV set — treat this operating point as
+    high-variance (a single healthy outlier moves it).</div>`;
+  html += `<div class="grid2">`;
+  if (e.roc) html += `<div class="panel"><div id="dlg-roc" style="height:260px"></div></div>`;
+  if (e.pr) html += `<div class="panel"><div id="dlg-pr" style="height:260px"></div></div>`;
+  if (e.calibration?.length) html += `<div class="panel"><div id="dlg-cal" style="height:260px"></div></div>`;
+  if (e.dca) html += `<div class="panel"><div id="dlg-dca" style="height:260px"></div></div>`;
+  html += `</div>`;
+
+  if (e.top_features?.length) html += `<div class="panel"><h3>Refit features (${e.best_model})</h3>
+      <div class="chips">${e.top_features.map(f=>`<span>${esc(f)}</span>`).join("")}</div></div>`;
+
+  if (e.breakdowns?.cancer_type) {
+    html += `<div class="panel"><h3>Subgroup AUC by cancer type (n ≥ 30, CV out-of-fold)</h3>
+      <div style="overflow:auto"><table><tr><th>cancer type</th><th>n</th><th>positives</th><th>AUC</th></tr>` +
+      Object.entries(e.breakdowns.cancer_type).map(([g,d]) =>
+        `<tr><td>${esc(g)}</td><td class="num">${d.n}</td><td class="num">${d.n_pos}</td>
+         <td class="num">${fmt(d.auc)}</td></tr>`).join("") + `</table></div></div>`;
+  }
+  if (e.fold_ablation) {
+    const fa = e.fold_ablation;
+    const gsizes = Object.entries(fa.groups || {}).map(([g,n]) => `${esc(g)} (${n} feat)`).join(" · ");
+    html += `<div class="panel"><h3>Nested-CV feature-group ablation — winning group per outer fold</h3>
+      <div class="legend" style="margin-bottom:8px">groups: ${gsizes}</div>
+      <div style="overflow:auto"><table><tr><th>model</th><th>winning groups (folds won)</th><th>mean winner score</th></tr>` +
+      Object.entries(fa.models).map(([m,d]) => {
+        const wins = Object.entries(d.winners).map(([g,c]) =>
+          `<span class="badge b-mut" title="${g}">${esc(g)} ${c}/${d.n_folds}</span>`).join(" ");
+        return `<tr><td>${m}</td><td>${wins}</td><td class="num">${fmt(d.mean_winner_score)}</td></tr>`;
+      }).join("") + `</table></div>
+      <div class="legend">A group winning most folds = stable selection; a split vote = fold-sensitive signal.</div></div>`;
+  }
+  if (e.selection) html += `<div class="legend">selection: ${esc(e.selection.method)} · ` +
+    `${e.selection.n_selected}/${e.selection.n_input} features kept · ` +
+    `${e.selection.n_variance_dropped} variance-dropped</div>`;
+
+  $("#dlg-b").innerHTML = html;
+  dlg.showModal();
+  if (e.roc) Plotly.newPlot("dlg-roc", [
+    {x:[0,1], y:[0,1], mode:"lines", line:{dash:"dot", color:"#cdd3e1"}, hoverinfo:"skip", showlegend:false},
+    {x:e.roc.fpr, y:e.roc.tpr, mode:"lines", line:{color:PALETTE[0], width:2}, name:e.best_model,
+     hovertemplate:"FPR %{x:.3f} · TPR %{y:.3f}<extra></extra>"},
+  ], PL_LAYOUT(`ROC — ${e.best_model} (CV out-of-fold, AUC ${fmt(e.best_auc)})`, "false-positive rate", "true-positive rate"), PL_CFG);
+  if (e.pr) Plotly.newPlot("dlg-pr", [
+    {x:[0,1], y:[e.prevalence, e.prevalence], mode:"lines", line:{dash:"dot", color:"#cdd3e1"},
+     name:`prevalence ${fmt(e.prevalence,2)}`, hoverinfo:"skip"},
+    {x:e.pr.recall, y:e.pr.precision, mode:"lines", line:{color:PALETTE[1], width:2}, name:e.best_model,
+     hovertemplate:"recall %{x:.3f} · precision %{y:.3f}<extra></extra>"},
+  ], PL_LAYOUT(`Precision–recall — baseline at prevalence`, "recall", "precision"), PL_CFG);
+  if (e.calibration?.length) Plotly.newPlot("dlg-cal", [
+    {x:[0,1], y:[0,1], mode:"lines", line:{dash:"dot", color:"#cdd3e1"}, hoverinfo:"skip", showlegend:false},
+    {x:e.calibration.map(c=>c.p_mean), y:e.calibration.map(c=>c.obs), mode:"lines+markers",
+     line:{color:PALETTE[3], width:2}, marker:{size:7}, name:"observed",
+     customdata:e.calibration.map(c=>c.n),
+     hovertemplate:"predicted %{x:.2f} → observed %{y:.2f}<br>n = %{customdata:,}<extra></extra>"},
+  ], PL_LAYOUT("Calibration (reliability, 10 bins)", "mean predicted probability", "observed positive rate"), PL_CFG);
+  if (e.dca) Plotly.newPlot("dlg-dca", [
+    {x:e.dca.thresholds, y:e.dca.treat_all, mode:"lines", line:{dash:"dash", color:"#c8560f"}, name:"treat all",
+     hovertemplate:"t=%{x:.2f} · NB %{y:.3f}<extra>treat all</extra>"},
+    {x:e.dca.thresholds, y:e.dca.thresholds.map(()=>0), mode:"lines", line:{dash:"dot", color:"#cdd3e1"},
+     name:"treat none", hoverinfo:"skip"},
+    {x:e.dca.thresholds, y:e.dca.net_benefit, mode:"lines", line:{color:PALETTE[0], width:2}, name:e.best_model,
+     hovertemplate:"t=%{x:.2f} · net benefit %{y:.3f}<extra></extra>"},
+  ], PL_LAYOUT("Decision curve — net benefit vs threshold", "threshold probability", "net benefit",
+       {yaxis:{rangemode:"tozero", gridcolor:"#eceff5"}}), PL_CFG);
+}
+
+/* ── multimodal ──────────────────────────────────────────── */
+const MM = R.multimodal;
+if (!MM.ablation) $("#mm-note").innerHTML =
+  `<div class="note">LOO ablation results are absent from this run (the ablation stage failed — fixed in #97); the section will populate on the next run.</div>`;
+const mmNames = Object.keys(MM.models);
+const bestStack = mmNames.reduce((a,b) => (MM.models[b].stacking?.auc||0) > (MM.models[a]?.stacking?.auc||0) ? b : a, mmNames[0]);
+$("#mm-cards").innerHTML = [
+  ["Best stacking model", bestStack, `AUC ${fmt(MM.models[bestStack]?.stacking?.auc)}`],
+  ["Best single evaluator", MM.best_single_evaluator, `AUC ${fmt(MM.best_single_auc)}`],
+  ["Stacking lift", fmt((MM.models[bestStack]?.stacking?.auc||0) - (MM.best_single_auc||0)), "vs best single"],
+  ["Feature selection", MM.selection, `${MM.n_evaluators} evaluators, ${MM.stacking_shape?.[1]} cols`],
+].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
+
+(function mmCharts() {
+  const rows = mmNames.flatMap(m => ["stacking","raw"].filter(sc => MM.models[m][sc])
+    .map(sc => ({label:`${m} (${sc})`, sc, ...MM.models[m][sc]}))).reverse();
+  Plotly.newPlot("mm-auc", [
+    {x: rows.map(r=>r.auc), y: rows.map(r=>r.label), mode: "markers",
+     error_x: {type:"data", symmetric:false,
+       array: rows.map(r => (r.ci?.[1] ?? r.auc) - r.auc),
+       arrayminus: rows.map(r => r.auc - (r.ci?.[0] ?? r.auc)), color:"#aab3d0"},
+     marker: {size: 9, color: rows.map(r => r.sc === "stacking" ? "#4650dc" : "#0ea472")},
+     customdata: rows.map(r => [r.sens95, r.sens100h, r.vs_best_single]),
+     hovertemplate: "<b>%{y}</b><br>AUC %{x:.3f}<br>sens@95 %{customdata[0]:.1%} · " +
+       "sens@100h %{customdata[1]:.1%}<br>vs best single %{customdata[2]:+.3f}<extra></extra>",
+     showlegend: false},
+  ], PL_LAYOUT(`Stacking vs raw (dot = AUC, bar = 95% CI; dashed = best single ${fmt(MM.best_single_auc)})`,
+       "AUC", "", {margin:{l:150,r:14,t:34,b:40},
+       shapes:[{type:"line", x0:MM.best_single_auc, x1:MM.best_single_auc, y0:-0.5, y1:rows.length-0.5,
+                line:{dash:"dash", color:"#c8560f"}}]}), PL_CFG);
+
+  const prTraces = mmNames.filter(m => MM.models[m].stacking?.pr).map((m,i) => ({
+    x: MM.models[m].stacking.pr.recall, y: MM.models[m].stacking.pr.precision,
+    mode: "lines", name: m, line: {color: PALETTE[i%7], width: 2},
+    hovertemplate: `<b>${m}</b> recall %{x:.3f} · precision %{y:.3f}<extra></extra>`,
+  }));
+  Plotly.newPlot("mm-pr", prTraces,
+    PL_LAYOUT("Precision–recall (stacking, CV out-of-fold)", "recall", "precision"), PL_CFG);
+})();
+
+$("#mm-tbl").innerHTML = `<tr><th>model</th><th>scope</th><th>AUC</th><th>95% CI</th>
+  <th>sens@95</th><th>sens@100h</th><th>vs best single</th></tr>` +
+  mmNames.flatMap(m => ["stacking","raw"].filter(sc => MM.models[m][sc]).map(sc => { const d = MM.models[m][sc];
+    return `<tr><td>${m}</td><td>${sc}</td><td class="num">${fmt(d.auc)}</td>
+      <td class="num">${fmt(d.ci?.[0])}–${fmt(d.ci?.[1])}</td><td class="num">${pct(d.sens95)}</td>
+      <td class="num">${pct(d.sens100h)}</td><td class="num">${fmt(d.vs_best_single)}</td></tr>`; })).join("");
+
+/* ── diagnostics ─────────────────────────────────────────── */
+const D = R.diagnostics;
+$("#dg-cards").innerHTML = [
+  ["Tasks", D.workflow.total_tasks ?? "–", "executed"],
+  ["Failed", D.workflow.failed_tasks ?? "–", "terminal + retried"],
+  ["Retries", D.workflow.retries ?? "–", "resource ladder engaged"],
+].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+$("#dg-proc").innerHTML = `<tr><th>process</th><th>tasks</th><th>completed</th><th>failed</th><th>max attempt</th></tr>` +
+  Object.entries(D.processes).map(([p,d]) =>
+    `<tr><td>${p}</td><td class="num">${d.n}</td><td class="num">${d.completed}</td>
+     <td class="num">${d.failed ? `<span class="badge b-bad">${d.failed}</span>` : 0}</td>
+     <td class="num">${d.max_attempt}</td></tr>`).join("");
+$("#dg-long").innerHTML = `<tr><th>task</th><th>duration</th><th>peak RSS</th></tr>` +
+  D.longest.map(t => `<tr><td>${esc(t.name)}</td><td class="num">${esc(t.duration)}</td>
+     <td class="num">${esc(t.peak_rss ?? "–")}</td></tr>`).join("");
+</script>
+</body>
+</html>

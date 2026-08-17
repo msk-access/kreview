@@ -26,6 +26,12 @@ of scope** by maintainer decision (2026-07-21). Run the script after any `.nf` o
   25.04 floor).
 - A named `withName:` selector outranks the generic `process` scope, so the `stub` profile
   clamps resources via `withName: '.*'`.
+- v26's config analyzer rejects `task` inside a closure nested in a ternary
+  (`p ? {task…} : {task…}` → "`task` is not defined"). Put the ternary INSIDE one closure:
+  `{ p ? task.x : task.y }` (hit in #97's ablation GPU routing; v25 accepted both forms).
+- To inspect param-dependent config resolution, use the real run path (`nextflow run
+  --the_param …` + the trace's container/queue columns) — `nextflow config` with a `-c`
+  params overlay resolves params AFTER the pipeline's process block and shows stale values.
 
 **Gotchas learned by actually running it:**
 - A `withName:` selector naming a deleted process is only a *warning* — silent config rot. The
@@ -39,5 +45,11 @@ of scope** by maintainer decision (2026-07-21). Run the script after any `.nf` o
   ships its own JDK is the easiest way to get that, and lets a single env cover the whole
   range via `NXF_VER`. Where that env lives on this machine is machine-local, so it is
   recorded in `private/reference-local-nextflow-env.md` rather than here.
+
+**Detection tooling:** `nextflow lint` (26.04+) is the strict-syntax checker — run
+`NXF_VER=26.04.6 nextflow lint nextflow/` after config/DSL edits. Tree status 2026-08-17:
+0 errors, 36 style warnings. The vendored `migrate-nextflow-code` skill
+(`.agents/skills/migrate-nextflow-code/`, from nextflow-io/agent-skills) documents the
+detect → fix → verify procedures per migration class.
 
 See [[reference-hpc-singularity-gotchas]] and [[feedback-parallel-paths-one-impl]].

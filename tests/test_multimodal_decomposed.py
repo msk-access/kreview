@@ -728,3 +728,98 @@ class TestMultimodalEntryPointParity:
         multimodal_eval(results_dir=sample_evaluator_jsons, models=("rf",), n_folds=3)
         after = set(Path(sample_evaluator_jsons).iterdir())
         assert after == before, f"stray artifacts written: {sorted(after - before)}"
+
+
+# ── Tests: multimodal_ablation model fallback (#97) ───────────────────────────
+
+try:
+    import tabicl  # noqa: F401
+
+    HAS_TABICL = True
+except ImportError:
+    HAS_TABICL = False
+
+
+class TestMultimodalAblationModelFallback:
+    """#97: LOO ablation must survive a best model that this environment cannot build.
+
+    On the iris v0.0.29 run the best stacking model was tabicl (GPU-only) but the
+    ablation stage runs in the CPU container: _build_model returned None, every
+    evaluator ablation failed with a baffling sklearn error, and the whole multimodal
+    tail (merge + dashboard) was lost. The fix probes candidates best-AUC-first and
+    degrades LOUDLY to the best buildable model, re-baselining deltas against the used
+    model's own full-matrix AUC.
+    """
+
+    @pytest.mark.skipif(HAS_TABICL, reason="tabicl installed — fallback not reachable")
+    def test_gpu_best_model_falls_back_loudly(self, stacking_parquet, tmp_path):
+        """Best model unbuildable → falls back to runner-up, records the substitution."""
+        results_dir = tmp_path / "singles"
+        results_dir.mkdir()
+        # tabicl "won" (as on iris) but is not installed in a CPU environment.
+        _write_json(
+            results_dir / "stacking_tabicl_results.json", {"auc_stacking_tabicl": 0.9}
+        )
+        _write_json(results_dir / "stacking_rf_results.json", {"auc_stacking_rf": 0.8})
+
+        results = multimodal_ablation(
+            stacking_matrix_path=stacking_parquet,
+            stacking_results_dir=results_dir,
+            n_folds=3,
+            random_state=42,
+            output_dir=tmp_path / "abl_out",
+        )
+
+        # The USED model and baseline are the fallback's — deltas re-baselined against
+        # rf's own full-matrix AUC, never against the unbuildable tabicl's 0.9.
+        assert results["ablation_model"] == "rf"
+        assert results["ablation_baseline_auc"] == 0.8
+
+        fb = results["ablation_model_fallback"]
+        assert fb["requested"] == "tabicl"
+        assert fb["requested_auc"] == 0.9
+        assert fb["used"] == "rf"
+        assert fb["used_auc"] == 0.8
+        assert "unavailable" in fb["reason"]
+
+        # And the ablation itself actually ran: per-evaluator deltas, no error entries.
+        assert results["ablation"], "ablation dict is empty"
+        assert all("delta" in v for v in results["ablation"].values()), results[
+            "ablation"
+        ]
+
+    @pytest.mark.skipif(HAS_TABICL, reason="tabicl installed — fallback not reachable")
+    def test_no_buildable_model_raises(self, stacking_parquet, tmp_path):
+        """No candidate buildable → RuntimeError naming the models, not 39 sklearn errors."""
+        results_dir = tmp_path / "singles"
+        results_dir.mkdir()
+        _write_json(
+            results_dir / "stacking_tabicl_results.json", {"auc_stacking_tabicl": 0.9}
+        )
+
+        with pytest.raises(RuntimeError, match="none of the stacking models"):
+            multimodal_ablation(
+                stacking_matrix_path=stacking_parquet,
+                stacking_results_dir=results_dir,
+                n_folds=3,
+                random_state=42,
+                output_dir=tmp_path / "abl_out",
+            )
+
+    def test_no_fallback_key_when_best_model_available(
+        self, stacking_parquet, tmp_path
+    ):
+        """Happy path unchanged: buildable best model → no fallback block in results."""
+        results_dir = tmp_path / "singles"
+        results_dir.mkdir()
+        _write_json(results_dir / "stacking_rf_results.json", {"auc_stacking_rf": 0.8})
+
+        results = multimodal_ablation(
+            stacking_matrix_path=stacking_parquet,
+            stacking_results_dir=results_dir,
+            n_folds=3,
+            random_state=42,
+            output_dir=tmp_path / "abl_out",
+        )
+        assert results["ablation_model"] == "rf"
+        assert "ablation_model_fallback" not in results

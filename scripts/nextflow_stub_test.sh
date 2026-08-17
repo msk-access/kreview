@@ -121,9 +121,10 @@ assert_trace () {  # $1=label  $2=outdir  $3=minimum distinct processes
     fi
 }
 
-# 17 = every process in nextflow/modules/local/kreview. If a process is added without being
-# reachable from the DAG, this count stays put and the test fails — which is the point.
-assert_trace "eval workflow"  "$WORK/out_eval"  17
+# 16 = every process in nextflow/modules/local/kreview (#79 folded REPORT_MULTIMODAL into
+# the single REPORT). If a process is added without being reachable from the DAG, this
+# count stays put and the test fails — which is the point.
+assert_trace "eval workflow"  "$WORK/out_eval"  16
 assert_trace "label workflow" "$WORK/out_label" 1
 
 # A stale `withName:` selector (one naming a deleted process) is silent config rot — it was
@@ -151,15 +152,31 @@ fi
 # Behaviour can't be exercised by a stub (stubs always succeed), so assert the guard is
 # present: each GPU wrapper must fail (exit non-zero) before its retries are exhausted, so
 # errorStrategy='retry' actually climbs the memory ladder instead of the old always-exit-0.
-echo "== #59 structural (GPU wrappers engage the retry ladder)"
-for m in eval_gpu_single ablate_gpu_single multimodal_single; do
+echo "== #59/#98 structural (wrappers engage the retry ladder, then degrade)"
+# report.nf joined the list in #98: without its guard, one failed dashboard strands every
+# successfully rendered one in the work dir (nothing publishes).
+for m in eval_gpu_single ablate_gpu_single multimodal_single report; do
     f="$REPO/nextflow/modules/local/kreview/$m.nf"
     if ! grep -q 'task.attempt.*-le.*task.maxRetries' "$f"; then
-        echo "FAILED: $m.nf lost the '[ \${task.attempt} -le \${task.maxRetries} ]' retry guard (#59)" >&2
+        echo "FAILED: $m.nf lost the '[ \${task.attempt} -le \${task.maxRetries} ]' retry guard (#59/#98)" >&2
         fail=1
     fi
 done
-[ "$fail" -eq 0 ] && echo "   all GPU wrappers retain the retry-then-degrade guard"
+[ "$fail" -eq 0 ] && echo "   all wrappers retain the retry-then-degrade guard"
+
+# --- 7b. #97 structural: merge must not starve on a failed ablation ---------------------
+# When MULTIMODAL_ABLATION fails terminally (errorStrategy 'ignore'), its output channel is
+# empty; without the ifEmpty sentinel MULTIMODAL_MERGE + REPORT_MULTIMODAL never run and the
+# whole multimodal tail is silently lost (iris v0.0.29 run). Behaviour was verified with a
+# forced-fail ablation stub; a stub run can't exercise it (stubs succeed), so assert the
+# sentinel wire is present. The merge module already handles NO_ABLATION by name.
+echo "== #97 structural (merge survives ablation failure via NO_ABLATION sentinel)"
+if ! grep -q "ablation_results.ifEmpty(file('NO_ABLATION'))" "$REPO/nextflow/workflows/kreview_eval.nf"; then
+    echo "FAILED: kreview_eval.nf lost the .ifEmpty(file('NO_ABLATION')) on the merge input (#97)" >&2
+    fail=1
+else
+    echo "   NO_ABLATION sentinel wire present on the merge input"
+fi
 
 # --- 8. #84 regression: published tree must not nest a working-dir prefix ---------------
 # A publishDir whose leaf matches the output-path subdir (or a leaked working dir like

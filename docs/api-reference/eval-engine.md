@@ -8,7 +8,6 @@ For conceptual explanations, see:
 - [Models & Metrics](../machine-learning/models-and-metrics.md)
 - [Decision Curve Analysis](../machine-learning/decision-curve-analysis.md)
 - [Dashboard Interpretation Guide](../machine-learning/dashboard-guide.md)
-- [Feature Cards](feature-cards.md)
 
 ---
 

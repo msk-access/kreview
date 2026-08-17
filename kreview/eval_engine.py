@@ -4729,9 +4729,11 @@ def multimodal_ablation(
         dropped_metadata=dropped_meta,
     )
 
-    # Find best stacking model from partial results
-    best_stack_model = None
-    best_stack_auc = 0.0
+    # Find the best stacking model from partial results. Collect EVERY model's AUC (not
+    # just the running max): if the best model turns out to be unavailable in this
+    # environment, the fallback below needs the runner-up AUCs to pick — and to
+    # re-baseline against — the best model it can actually build (#97).
+    model_aucs: dict[str, float] = {}
 
     for json_path in sorted(stacking_results_dir.glob("stacking_*_results.json")):
         try:
@@ -4742,10 +4744,10 @@ def multimodal_ablation(
                     k.startswith("auc_stacking_")
                     and not k.endswith(("_ci_lower", "_ci_upper"))
                     and isinstance(v, (int, float))
-                    and v > best_stack_auc
                 ):
-                    best_stack_auc = v
-                    best_stack_model = k.replace("auc_stacking_", "")
+                    name = k.replace("auc_stacking_", "")
+                    if v > model_aucs.get(name, float("-inf")):
+                        model_aucs[name] = v
         except (_json_mod.JSONDecodeError, OSError) as exc:
             log.warning(
                 "ablation_json_read_failed",
@@ -4753,11 +4755,55 @@ def multimodal_ablation(
                 error=str(exc),
             )
 
-    if best_stack_model is None:
+    if not model_aucs:
         raise ValueError(
             f"No valid stacking results found in {stacking_results_dir}. "
             f"Run `kreview eval multimodal single` first."
         )
+
+    # Pick the best model this environment can actually BUILD (#97). On the iris v0.0.29
+    # run the best model was tabicl (GPU-only) but this stage runs in the CPU container:
+    # _build_model returned None, all 39 evaluator ablations failed with a baffling
+    # sklearn "estimator ... Got None instead", and the whole multimodal tail (merge +
+    # dashboard) was lost. Probe candidates best-AUC-first and degrade LOUDLY to the best
+    # available model, re-baselining the deltas against ITS full-matrix AUC — deltas
+    # against an unbuildable model's baseline would be scientifically wrong.
+    ranked = sorted(model_aucs.items(), key=lambda kv: kv[1], reverse=True)
+    requested_model, requested_auc = ranked[0]
+    best_stack_model = None
+    best_stack_auc = 0.0
+    for cand_name, cand_auc in ranked:
+        if _build_model(cand_name, random_state) is not None:
+            best_stack_model, best_stack_auc = cand_name, cand_auc
+            break
+        log.error(
+            "ablation_model_unavailable",
+            model=cand_name,
+            auc=cand_auc,
+            hint="model import failed in this environment — trying next-best model",
+        )
+    if best_stack_model is None:
+        raise RuntimeError(
+            "multimodal_ablation: none of the stacking models "
+            f"{[m for m, _ in ranked]} can be built in this environment "
+            "(GPU-only models need the GPU container / pip install kreview[gpu]). "
+            "Ablation cannot run."
+        )
+
+    ablation_fallback = None
+    if best_stack_model != requested_model:
+        ablation_fallback = {
+            "requested": requested_model,
+            "requested_auc": requested_auc,
+            "used": best_stack_model,
+            "used_auc": best_stack_auc,
+            "reason": (
+                "best stacking model unavailable in this environment (GPU-only model "
+                "in a CPU container); deltas are baselined against the used model's "
+                "full-matrix AUC"
+            ),
+        }
+        log.warning("ablation_model_fallback", **ablation_fallback)
 
     log.info(
         "ablation_best_model",
@@ -4876,6 +4922,11 @@ def multimodal_ablation(
         "ablation_model": best_stack_model,
         "ablation_baseline_auc": best_stack_auc,
     }
+    if ablation_fallback is not None:
+        # Surface the substitution in the artifact itself (#97): a reader of
+        # ablation_results.json must be able to see the deltas came from the fallback
+        # model, not the (unavailable) best stacking model.
+        results["ablation_model_fallback"] = ablation_fallback
 
     out_path = output_dir / "ablation_results.json"
     with open(out_path, "w") as f:

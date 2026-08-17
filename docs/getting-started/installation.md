@@ -12,10 +12,10 @@
 ## Environment Setup
 
 > [!IMPORTANT]
-> **Quarto is strictly required** for programmatic dashboard generation. Because `quarto-cli` wrapper packages are unreliable across Python environments, `kreview` assumes the Quarto executable is installed dynamically on your OS or container.
+> The report is a single self-contained HTML rendered directly by `kreview report` — no external tooling (Quarto was removed in the #79 report redesign).
 
 ### Option 1: Docker (Recommended "Batteries-Included" Method)
-The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker container (hosted on GHCR). It natively ships with `Python 3.12`, all ML libraries, and the underlying `quarto` linux binaries configured flawlessly:
+The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker container (hosted on GHCR). It ships with `Python 3.12` and all ML libraries:
 ```bash
 docker pull ghcr.io/msk-access/kreview:latest
 docker run -v /your/data:/data ghcr.io/msk-access/kreview:latest \
@@ -25,8 +25,6 @@ For more complex execution commands (e.g., binding multiple access paths), see t
 
 ### Option 2: Local Install (Pip)
 
-First, you **must separately install Quarto** via your OS manager:
-Follow the [official Quarto Installation Guide](https://quarto.org/docs/get-started/) (e.g. `brew install quarto` on macOS).
 
 Then clone the repository. `kreview` is developed entirely using `nbdev`, so the source notebooks (`nbs/`) act as the active execution environment.
 
