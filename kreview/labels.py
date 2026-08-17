@@ -651,7 +651,11 @@ class CtDNALabeler:
                 rows.append(
                     {
                         "SAMPLE_ID": sid,
-                        "PATIENT_ID": np.nan,
+                        # Healthy donors have no cBioPortal record; each donor contributes
+                        # exactly one sample (maintainer decision, #101), so the sample id
+                        # doubles as the patient id. This keeps PATIENT_ID complete, which
+                        # the patient-grouped train/test split below depends on.
+                        "PATIENT_ID": sid,
                         "label": self.LABEL_HEALTHY,
                         "has_impact_match": False,
                         "has_snv": False,
@@ -686,11 +690,13 @@ class CtDNALabeler:
         test_size: float = 0.2,
         random_state: int = 42,
     ) -> pd.DataFrame:
-        """Assign train/test split to labels, stratified by label tier.
+        """Assign a PATIENT-GROUPED train/test split, stratified by label tier.
 
-        Adds a ``split`` column ('train' or 'test') to the DataFrame.
-        The split is deterministic (seeded by ``random_state``) and
-        stratified per label to preserve class proportions in both sets.
+        Adds a ``split`` column ('train' or 'test') to the DataFrame. All samples of
+        a patient land in the same split (#101 — a sample-level split leaked 1,266
+        patients across train/test and biased every holdout metric); label-tier
+        proportions are approximately preserved. Deterministic for a given
+        ``random_state``.
 
         Samples with labels NOT in ``_MODEL_LABELS`` (e.g. 'Undetermined',
         'Insufficient Data') are excluded from the split (split='exclude').
@@ -704,7 +710,7 @@ class CtDNALabeler:
             DataFrame with added 'split' column.
         """
         from kreview.selection import _MODEL_LABELS
-        from sklearn.model_selection import StratifiedShuffleSplit
+        from sklearn.model_selection import StratifiedGroupKFold
 
         labels["split"] = "exclude"
 
@@ -734,14 +740,55 @@ class CtDNALabeler:
             labels.loc[modelable_mask, "split"] = "train"
             return labels
 
-        sss = StratifiedShuffleSplit(
-            n_splits=1, test_size=test_size, random_state=random_state
+        # #101: the split is GROUPED BY PATIENT. A sample-level StratifiedShuffleSplit
+        # scattered a patient's timepoints across train AND test (1,266 patients on the
+        # v0.0.29 run), leaking patient biology into the holdout and optimistically
+        # biasing every holdout metric. StratifiedGroupKFold keeps each patient's
+        # samples together while approximately preserving label-tier proportions; all
+        # timepoints remain usable. Healthy donors carry PATIENT_ID == SAMPLE_ID (one
+        # sample per donor), so they are singleton groups.
+        if "PATIENT_ID" in labels.columns:
+            groups = labels.loc[modelable_mask, "PATIENT_ID"].fillna(
+                labels.loc[modelable_mask, "SAMPLE_ID"]
+            )
+        else:
+            # Degrade AND surface: without a patient column the grouping is per-sample,
+            # which is exactly the leakage this fix removes — never fall back silently.
+            log.warning(
+                "split_patient_column_missing",
+                impact="grouping per-sample — patient leakage NOT prevented",
+            )
+            groups = labels.loc[modelable_mask, "SAMPLE_ID"]
+
+        # First fold of a k-fold grouped split = a 1/k grouped, stratified holdout.
+        n_splits = max(2, round(1 / test_size))
+        sgkf = StratifiedGroupKFold(
+            n_splits=n_splits, shuffle=True, random_state=random_state
         )
         modelable_idx = labels.index[modelable_mask]
+        train_idx, test_idx = next(
+            iter(sgkf.split(modelable_idx, modelable_labels, groups=groups))
+        )
+        labels.loc[modelable_idx[train_idx], "split"] = "train"
+        labels.loc[modelable_idx[test_idx], "split"] = "test"
 
-        for train_idx, test_idx in sss.split(modelable_idx, modelable_labels):
-            labels.loc[modelable_idx[train_idx], "split"] = "train"
-            labels.loc[modelable_idx[test_idx], "split"] = "test"
+        # Fail loud: with a grouped split a leaked patient is a programming error,
+        # not a data quirk. (The #79 report independently re-counts this.)
+        if "PATIENT_ID" in labels.columns:
+            in_both = int(
+                (
+                    labels[labels["split"].isin(["train", "test"])]
+                    .groupby(labels["PATIENT_ID"].fillna(labels["SAMPLE_ID"]))["split"]
+                    .nunique()
+                    > 1
+                ).sum()
+            )
+            if in_both:
+                raise RuntimeError(
+                    f"patient-grouped split leaked {in_both} patients across "
+                    "train/test — this should be impossible; investigate before using "
+                    "these labels"
+                )
 
         n_train = int((labels["split"] == "train").sum())
         n_test = int((labels["split"] == "test").sum())

@@ -518,3 +518,91 @@ class TestAssignTrainTestSplit:
         assert "split" in result.columns
         # Only valid values
         assert set(result["split"].unique()).issubset({"train", "test", "exclude"})
+
+
+class TestPatientGroupedSplit:
+    """#101: the train/test split must never scatter a patient across splits.
+
+    The sample-level StratifiedShuffleSplit put 1,266 patients in BOTH train and
+    test on the v0.0.29 run, optimistically biasing every holdout metric.
+    """
+
+    @pytest.fixture()
+    def labeler(self):
+        from kreview.core import LabelConfig
+
+        instance = object.__new__(CtDNALabeler)
+        instance.config = LabelConfig()
+        return instance
+
+    @pytest.fixture()
+    def multi_timepoint_df(self):
+        """40 patients x 3 timepoints + 20 healthy donors (null PATIENT_ID)."""
+        rows = []
+        labels_cycle = [
+            "True ctDNA+",
+            "Possible ctDNA+",
+            "Possible ctDNA−",
+            "True ctDNA+",
+        ]
+        for p in range(40):
+            for t in range(3):
+                rows.append(
+                    {
+                        "SAMPLE_ID": f"S{p:03d}-T{t}",
+                        "PATIENT_ID": f"PT{p:03d}",
+                        "label": labels_cycle[p % 4],
+                    }
+                )
+        for h in range(20):
+            # healthy-donor shape: no patient record -> null PATIENT_ID; the split
+            # must treat each as a singleton group via fillna(SAMPLE_ID)
+            rows.append(
+                {
+                    "SAMPLE_ID": f"H{h:03d}",
+                    "PATIENT_ID": None,
+                    "label": "Healthy Normal",
+                }
+            )
+        return pd.DataFrame(rows)
+
+    def test_no_patient_spans_splits(self, labeler, multi_timepoint_df):
+        result = labeler._assign_train_test_split(multi_timepoint_df.copy())
+        modelable = result[result["split"].isin(["train", "test"])]
+        key = modelable["PATIENT_ID"].fillna(modelable["SAMPLE_ID"])
+        spans = (modelable.groupby(key)["split"].nunique() > 1).sum()
+        assert spans == 0, f"{spans} patients span train/test"
+
+    def test_timepoints_travel_together(self, labeler, multi_timepoint_df):
+        """All three timepoints of a patient land in the same split."""
+        result = labeler._assign_train_test_split(multi_timepoint_df.copy())
+        pt = result[result["PATIENT_ID"] == "PT000"]
+        assert len(pt) == 3
+        assert pt["split"].nunique() == 1
+
+    def test_split_proportion_and_stratification_hold(
+        self, labeler, multi_timepoint_df
+    ):
+        result = labeler._assign_train_test_split(multi_timepoint_df.copy())
+        modelable = result[result["split"] != "exclude"]
+        frac = (modelable["split"] == "test").mean()
+        assert (
+            0.1 < frac < 0.35
+        ), f"test fraction {frac} far from 0.2 (grouped split is approximate)"
+
+    def test_null_patient_ids_do_not_crash(self, labeler, multi_timepoint_df):
+        """Healthy-donor rows (null PATIENT_ID) split as singletons."""
+        result = labeler._assign_train_test_split(multi_timepoint_df.copy())
+        healthy = result[result["label"] == "Healthy Normal"]
+        assert set(healthy["split"]) <= {"train", "test"}
+
+    def test_missing_patient_column_degrades_loudly_not_crashes(self, labeler):
+        """Without PATIENT_ID the split still works (per-sample) — and is logged."""
+        df = pd.DataFrame(
+            {
+                "SAMPLE_ID": [f"S{i}" for i in range(60)],
+                "label": ["True ctDNA+"] * 30 + ["Possible ctDNA−"] * 30,
+            }
+        )
+        result = labeler._assign_train_test_split(df)
+        assert set(result["split"].unique()) == {"train", "test"}

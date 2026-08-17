@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The train/test split is now grouped by patient** (#101, found by the #79 report's own
+  integrity check on the v0.0.29 run: 1,266 patients had samples in BOTH train and test,
+  optimistically biasing every holdout metric). `_assign_train_test_split` uses
+  `StratifiedGroupKFold` on `PATIENT_ID` — all timepoints of a patient travel together,
+  every timepoint stays usable, label-tier stratification is approximately preserved
+  (verified on the real 16,272-sample labels: 0 leaked patients, test fraction 0.203,
+  per-tier drift ≤ 0.4 pp, deterministic). A post-split assertion makes a leaked patient a
+  hard error. Healthy donors (no cBioPortal record, one sample per donor) now carry
+  `PATIENT_ID = SAMPLE_ID`, keeping the column complete for all grouped consumers.
+  Remaining from #101: grouping the eval-stage CV folds by patient (separate change — it
+  shifts every CV metric).
+
+
 ### Changed
 - **The reporting layer is one data-driven page** (#79). `kreview report` now takes the
   pipeline `--outdir` and renders a single self-contained HTML (plotly inlined from the
