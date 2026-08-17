@@ -151,7 +151,7 @@ LABEL (1 job) → EXTRACT ×N → SELECT ×N ──┬── [ABLATE_CPU ×N] �
                                           │                                               ↓
                                           │                                     MULTIMODAL_MERGE
                                           │                                               ↓
-                                          │                                     REPORT_MULTIMODAL
+                                          │                                     (feeds REPORT, #79)
                                           └── SCOREBOARD ───────── REPORT (parallel)
 ```
 
@@ -181,7 +181,6 @@ Each stage is a separate Nextflow process in `nextflow/modules/local/kreview/`:
 | `KREVIEW_MULTIMODAL_ABLATION` | `multimodal_ablation.nf` | Stacking matrix + stacking results | `ablation_results.json` | `outdir/models/multimodal/` |
 | `KREVIEW_MULTIMODAL_MERGE` | `multimodal_merge.nf` | All stacking + ablation results | `multimodal_model_results.json` | `outdir/models/multimodal/` |
 | `KREVIEW_REPORT` | `report.nf` | Matrices + JSONs + stats + QC + joblib + scoreboard | HTML dashboards | `outdir/reports/` |
-| `KREVIEW_REPORT_MULTIMODAL` | `report_multimodal.nf` | Multimodal JSON + super_matrix | Multimodal dashboard | `outdir/reports/` |
 | `KREVIEW_EVAL_MULTIMODAL` | `eval_multimodal.nf` | Fuse + eval results | Multimodal results | `outdir/models/multimodal/` | *(Legacy — standalone testing)* |
 
 ---

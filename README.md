@@ -2,7 +2,6 @@
   <img src="https://img.shields.io/github/v/tag/msk-access/kreview?label=Release&color=FF9B42" alt="Release Badge">
   <img src="https://img.shields.io/badge/nbdev-Enabled-blue.svg" alt="nbdev Badge">
   <img src="https://img.shields.io/badge/Powered_by-DuckDB-yellow.svg" alt="DuckDB Badge">
-  <img src="https://img.shields.io/badge/Reports-Quarto-blueviolet.svg" alt="Quarto Badge">
   <a href="https://deepwiki.com/msk-access/kreview"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
   
   <h1>kreview</h1>
@@ -25,7 +24,7 @@
 - **Nested CV Feature Ablation**: Automated feature group subset selection via inner-loop cross-validation, eliminating non-informative feature groups before final evaluation. Uses `sensitivity_at_100spec_healthy` as the optimization metric.
 - **Feature Selection**: [mRMR](https://github.com/smazzanti/mrmr) (Minimum Redundancy Maximum Relevance) as default strategy — iteratively selects features maximizing target relevance while minimizing inter-feature redundancy. Legacy `hybrid_union` (AUC ∪ MI) also available.
 - **Multimodal Stacking**: Cross-evaluator fusion via super-matrix with Mutual Information or [Boruta-SHAP](https://github.com/Ekeany/Boruta-Shap) selection, followed by stacking ensemble + ablation analysis.
-- **Interactive Dashboards**: Plotly-native HTML reports with ROC curves, violin plots, SHAP beeswarm/waterfall, mRMR scatter plots, per-cancer-type sensitivity tables, and Decision Curve Analysis.
+- **Single-Page Report**: one self-contained, plotly-interactive HTML built from the run's aggregates — sortable evaluator scoreboard with deep-dive modals (ROC/PR, calibration, decision curves, subgroup AUCs, feature-group ablation stability), multimodal stacking, cohort composition, and run diagnostics. No Quarto, no render-time SHAP, PHI-free by construction.
 - **Nextflow HPC Integration**: Decomposed multistage DAG for SLURM-based HPC execution with per-evaluator parallelism, GPU scheduling, and automatic retry logic.
 - **26 Built-In Evaluators**: Modular extractors covering fragment sizes (FSC, FSD, FSR), nucleosome protection (WPS, TFBS), cleavage motifs (EndMotif, BreakPointMotif), chromatin accessibility (ATAC), motif divergence (MDS), and orientation (OCF).
 
@@ -58,14 +57,9 @@ Supported Nextflow: **v25–v26**.
 
 ### Installation
 
-> [!IMPORTANT]
-> **Quarto is required** for programmatic dashboard generation. `kreview` declares `quarto-cli` as a
-> core dependency, so `pip install kreview` provides the Quarto executable automatically (and the
-> Docker images ship it). If the pip-provided binary misbehaves in your environment, install Quarto
-> from your OS package manager as a fallback (see the [Quarto guide](https://quarto.org/docs/get-started/)).
 
 #### Option 1: Docker (Recommended "Batteries-Included" Method)
-The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker containers (hosted on GHCR). They ship with `Python 3.12`, all ML libraries, and `quarto`:
+The easiest way to run `kreview` without managing external dependencies is to use our pre-built Docker containers (hosted on GHCR). They ship with `Python 3.12` and all ML libraries:
 ```bash
 # CPU image (~1.5 GB) — for all standard pipeline processes
 docker pull ghcr.io/msk-access/kreview:latest
@@ -82,9 +76,6 @@ docker run -v /your/data:/data ghcr.io/msk-access/kreview:latest \
 ```
 
 #### Option 2: Local Install (Pip)
-`quarto-cli` is a declared dependency, so a plain pip install provides Quarto. Only if the
-pip-provided binary misbehaves, install Quarto from your OS manager (e.g. `brew install quarto`)
-as a fallback.
 ```bash
 git clone https://github.com/msk-access/kreview.git
 cd kreview
@@ -133,9 +124,9 @@ nextflow run /path/to/kreview/nextflow/main.nf \
 
 ### Dashboard Access
 
-Once finished, open the generated HTML reports:
+Once finished, open the single-page report:
 ```bash
-open output/reports/ATAC_dashboard.html
+open output/reports/kreview_report.html
 ```
 
 ## 🧪 Feature Selection

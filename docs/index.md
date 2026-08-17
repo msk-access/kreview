@@ -37,7 +37,7 @@ flowchart TD
     
     subgraph Outputs
         DB[("kreview_lake.duckdb\nData Lake")]:::persist
-        Dash["HTML Plotly\nDashboards"]:::persist
+        Dash["Single-page\nHTML report"]:::persist
         Stats["stats.json"]:::persist
     end
 
@@ -58,7 +58,7 @@ flowchart TD
 2. **Gold Standard Labeling:** It accesses clinical MSK-IMPACT files to generate 5-tier truth labels (e.g., verifying if a somatic variant in cfDNA was also detected in the patient's matched solid tissue).
 3. **Feature Selection & Ablation:** Features are scored and selected via mRMR (Minimum Redundancy Maximum Relevance). When feature group ablation is enabled (v0.0.20+), nested inner cross-validation identifies the optimal feature group subset per model, eliminating non-informative groups before final evaluation.
 4. **Statistical Modeling:** It loads fragmentomics features dynamically, evaluating them against the ground truth using non-parametric group testing and ensemble ML evaluation (Random Forest, XGBoost, Logistic Regression) plus optional GPU foundation models (TabPFN, TabICL and their fine-tuned variants).
-5. **Interactive Insight:** It generates comprehensive 6-page HTML dashboards with progressive disclosure — from executive summary to SHAP explainability — so researchers can inspect diagnostic performance, clinical utility (DCA), and feature importance. See the [Dashboard Guide](machine-learning/dashboard-guide.md) for details.
+5. **Interactive Insight:** It renders one self-contained, plotly-interactive HTML report — sortable evaluator scoreboard with deep-dive modals (ROC/PR, calibration, decision curves, subgroup AUCs, ablation stability), multimodal stacking, cohort composition and run diagnostics — PHI-free by construction. See the [Report Guide](machine-learning/dashboard-guide.md) for details.
 
 ---
 

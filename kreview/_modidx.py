@@ -18,11 +18,6 @@ d = {
                 "cli.html#_extract_evaluator",
                 "kreview/cli.py",
             ),
-            "kreview.cli._find_quarto": ("cli.html#_find_quarto", "kreview/cli.py"),
-            "kreview.cli._render_quarto_report": (
-                "cli.html#_render_quarto_report",
-                "kreview/cli.py",
-            ),
             "kreview.cli.extract": ("cli.html#extract", "kreview/cli.py"),
             "kreview.cli.features_list": ("cli.html#features_list", "kreview/cli.py"),
             "kreview.cli.fuse": ("cli.html#fuse", "kreview/cli.py"),
@@ -447,7 +442,6 @@ d = {
                 "kreview/eval_engine.py",
             ),
         },
-        "kreview.feature_cards": {},
         "kreview.features.atac": {
             "kreview.features.atac.ATACOnTargetEvaluator": (
                 "features/atac.html#atacontargetevaluator",
@@ -789,6 +783,53 @@ d = {
                 "report.html#generate_report",
                 "kreview/report.py",
             )
+        },
+        "kreview.report_data": {
+            "kreview.report_data._build_cohort": (
+                "report_data.html#_build_cohort",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data._build_diagnostics": (
+                "report_data.html#_build_diagnostics",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data._build_evaluator": (
+                "report_data.html#_build_evaluator",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data._build_multimodal": (
+                "report_data.html#_build_multimodal",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data._downsample": (
+                "report_data.html#_downsample",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data._oof_extras": (
+                "report_data.html#_oof_extras",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data._r": ("report_data.html#_r", "kreview/report_data.py"),
+            "kreview.report_data.assert_no_phi": (
+                "report_data.html#assert_no_phi",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data.build_report_data": (
+                "report_data.html#build_report_data",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data.render_page": (
+                "report_data.html#render_page",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data.render_report": (
+                "report_data.html#render_report",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data.write_report_data": (
+                "report_data.html#write_report_data",
+                "kreview/report_data.py",
+            ),
         },
         "kreview.scoreboard": {},
         "kreview.selection": {

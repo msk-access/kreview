@@ -13,45 +13,37 @@ __all__ = ["log", "generate_report"]
 
 # %% ../nbs/05_report.ipynb #0e657248
 def generate_report(
-    matrix_parquet: str | Path,
+    outdir: str | Path,
     output_dir: str | Path,
-    cvd_safe: bool = False,
-    shap_samples: int = 500,
-    shap_features: int = 10,
+    *,
+    run_label: str = "",
+    trace_path: str | Path | None = None,
 ) -> Path | None:
-    """Generate HTML dashboard from an extracted feature matrix.
+    """Render the single-page evaluation report from a pipeline output directory.
 
-    Renders the Quarto dashboard template with interactive Plotly
-    visualizations, SHAP explainability, and model validation plots.
-
-    Requires quarto-cli (pip install quarto-cli).
+    Thin library wrapper over :func:`kreview.report_data.render_report` for API users;
+    the CLI equivalent is ``kreview report``. Returns the path of the written HTML, or
+    ``None`` (with an error log) when the output directory does not look like a
+    pipeline outdir — the guard mirrors the CLI's fail-loud behaviour without raising
+    through library callers.
     """
-    matrix_parquet = Path(matrix_parquet)
+    outdir = Path(outdir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if not matrix_parquet.exists():
-        log.error("report_matrix_not_found", path=str(matrix_parquet))
+    if not (outdir / "scoreboard_combined__all.parquet").exists():
+        log.error("report_outdir_invalid", path=str(outdir))
         return None
 
-    feat_name = matrix_parquet.stem.replace("_matrix", "")
+    from kreview.report_data import render_report
 
-    # Import the CLI's Quarto renderer (single source of truth)
-    from kreview.cli import _render_quarto_report
-    import sys
-
-    ok, msg = _render_quarto_report(
-        str(matrix_parquet),
-        feat_name,
-        output_dir,
-        sys.executable,
-        cvd_safe=cvd_safe,
-        shap_samples=shap_samples,
-        shap_features=shap_features,
-    )
-    if ok:
-        log.info("report_generated", output=msg)
-        return Path(msg)
-    else:
-        log.error("report_generation_failed", error=msg)
+    try:
+        return render_report(
+            outdir,
+            output_dir / "kreview_report.html",
+            trace_path=trace_path,
+            run_label=run_label,
+        )
+    except Exception as exc:
+        log.error("report_generation_failed", error=str(exc))
         return None

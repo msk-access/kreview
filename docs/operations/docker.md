@@ -56,10 +56,6 @@ WORKDIR /app
 COPY --from=builder /src/dist/*.whl /app/
 RUN pip install --no-cache-dir /app/*.whl && rm /app/*.whl
 
-# Install Quarto for dashboard rendering
-RUN apt-get update && \            # (3)!
-    wget https://github.com/quarto-dev/quarto-cli/releases/download/v1.4.551/quarto-1.4.551-linux-amd64.deb && \
-    dpkg -i quarto-*.deb && rm quarto-*.deb
 
 RUN mkdir -p /app/data /app/results
 CMD ["kreview", "--help"]
@@ -67,7 +63,6 @@ CMD ["kreview", "--help"]
 
 1. Builder stage compiles the wheel but is discarded from the final image
 2. Runtime stage is a clean `python:3.12-slim` with only the installed package
-3. Quarto is required for generating the interactive HTML Plotly dashboards
 
 ---
 

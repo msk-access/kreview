@@ -8,6 +8,8 @@ These are cheap sanity checks — they do NOT exercise actual pipeline logic
 - Broken subcommand wiring (add_typer vs app.command)
 """
 
+from pathlib import Path
+
 import pytest
 from typer.testing import CliRunner
 
@@ -147,68 +149,60 @@ class TestParameterValidation:
         assert result.exit_code != 0
 
 
-# ── #98: report writes a machine-readable manifest (always) ──────────────────
+# ── #98/#79: report always writes a machine-readable manifest ────────────────
 
 
 class TestReportManifest:
-    """#98: `kreview report` must write reports/report_manifest.json on success AND failure.
+    """`kreview report` must write report_manifest.json on success AND failure (#98).
 
-    On the iris v0.0.29 run, 17/26 dashboards rendered but the failing task published
-    nothing — and nothing machine-readable recorded which dashboards were missing. The
-    manifest is the loud, durable record the Nextflow terminal-attempt publish relies on.
+    The #79 single-page report renders atomically, so the manifest records what the
+    page covers (or the failure) — a missing report is never silent. render is
+    monkeypatched: page generation itself is covered by tests/test_report_data.py.
     """
 
-    def _fake_matrix(self, tmp_path, name):
-        import pandas as pd
-
-        p = tmp_path / f"{name}_matrix.parquet"
-        pd.DataFrame({"f1": [1.0, 2.0]}).to_parquet(p, index=False)
-        return p
-
-    def test_manifest_on_partial_failure_and_exit_1(self, tmp_path, monkeypatch):
-        """One failed render → exit 1 (fail loud) AND a manifest naming the failure."""
+    def test_manifest_on_success_and_exit_0(self, tmp_path, monkeypatch):
         import json
         import kreview.cli as cli_mod
+        import kreview.report_data as rd
 
-        self._fake_matrix(tmp_path, "GoodEval")
-        self._fake_matrix(tmp_path, "BadEval")
-
-        def fake_render(matrix_path, feat_name, out_path, _python, **kwargs):
-            if feat_name == "BadEval":
-                return False, "Exit code 1. Full log: BadEval_render.log"
-            return True, str(out_path / f"{feat_name}_dashboard.html")
-
-        monkeypatch.setattr(cli_mod, "_render_quarto_report", fake_render)
-        out_dir = tmp_path / "reports"
-        result = runner.invoke(
-            app, ["report", "--input-dir", str(tmp_path), "--out-dir", str(out_dir)]
-        )
-        assert result.exit_code == 1, "failures must still exit 1 (fail loud)"
-
-        manifest = json.loads((out_dir / "report_manifest.json").read_text())
-        assert manifest["total"] == 2
-        assert manifest["succeeded_evaluators"] == ["GoodEval"]
-        assert manifest["failed_evaluators"] == ["BadEval"]
-        assert manifest["render_logs"] == {"BadEval": "BadEval_render.log"}
-
-    def test_manifest_on_full_success_and_exit_0(self, tmp_path, monkeypatch):
-        """All renders succeed → exit 0 and a manifest with no failures."""
-        import json
-        import kreview.cli as cli_mod
-
-        self._fake_matrix(tmp_path, "OnlyEval")
+        fake_data = {
+            "meta": {},
+            "evaluators": [
+                {"evaluator": "EvalA", "model_metrics": {}},
+                {"evaluator": "EvalB"},  # scoreboard row without detail
+            ],
+        }
+        monkeypatch.setattr(rd, "build_report_data", lambda *a, **k: fake_data)
         monkeypatch.setattr(
-            cli_mod,
-            "_render_quarto_report",
-            lambda *a, **k: (True, "OnlyEval_dashboard.html"),
+            rd,
+            "render_page",
+            lambda data, out: (Path(out).write_text("x"), Path(out))[1],
         )
         out_dir = tmp_path / "reports"
         result = runner.invoke(
-            app, ["report", "--input-dir", str(tmp_path), "--out-dir", str(out_dir)]
+            app, ["report", "--outdir", str(tmp_path), "--out-dir", str(out_dir)]
         )
         assert result.exit_code == 0, result.output
 
         manifest = json.loads((out_dir / "report_manifest.json").read_text())
+        assert manifest["total"] == 2
         assert manifest["failed"] == 0
-        assert manifest["succeeded_evaluators"] == ["OnlyEval"]
-        assert manifest["failed_evaluators"] == []
+        assert manifest["missing_detail"] == ["EvalB"]
+        assert (out_dir / "kreview_report.html").exists()
+
+    def test_manifest_on_failure_and_exit_1(self, tmp_path, monkeypatch):
+        import json
+        import kreview.report_data as rd
+
+        def boom(*a, **k):
+            raise RuntimeError("scoreboard not found")
+
+        monkeypatch.setattr(rd, "build_report_data", boom)
+        out_dir = tmp_path / "reports"
+        result = runner.invoke(
+            app, ["report", "--outdir", str(tmp_path), "--out-dir", str(out_dir)]
+        )
+        assert result.exit_code == 1, "failures must exit 1 (fail loud)"
+        manifest = json.loads((out_dir / "report_manifest.json").read_text())
+        assert manifest["failed"] == 1
+        assert "scoreboard not found" in manifest["error"]

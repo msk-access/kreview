@@ -121,9 +121,10 @@ assert_trace () {  # $1=label  $2=outdir  $3=minimum distinct processes
     fi
 }
 
-# 17 = every process in nextflow/modules/local/kreview. If a process is added without being
-# reachable from the DAG, this count stays put and the test fails — which is the point.
-assert_trace "eval workflow"  "$WORK/out_eval"  17
+# 16 = every process in nextflow/modules/local/kreview (#79 folded REPORT_MULTIMODAL into
+# the single REPORT). If a process is added without being reachable from the DAG, this
+# count stays put and the test fails — which is the point.
+assert_trace "eval workflow"  "$WORK/out_eval"  16
 assert_trace "label workflow" "$WORK/out_label" 1
 
 # A stale `withName:` selector (one naming a deleted process) is silent config rot — it was
