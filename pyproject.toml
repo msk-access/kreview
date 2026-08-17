@@ -60,7 +60,9 @@ dev = [
     # deliberately, then re-run `nbdev-export && black kreview/` and commit the result.
     "nbdev==3.3.0",
     "black[jupyter]==26.5.1",
-    "ruff>=0.1.0",
+    "ruff==0.15.4",  # PINNED like nbdev/black: lint gates CI, and an unpinned ruff broke
+                     # lint on untouched code when 0.16 shipped new default rules (PR #99).
+                     # To upgrade: bump the pin, fix new findings, commit together.
     "mypy>=1.0.0"
 ]
 docs = [
@@ -92,7 +94,9 @@ all = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "black[jupyter]>=23.0.0",
-    "ruff>=0.1.0",
+    "ruff==0.15.4",  # PINNED like nbdev/black: lint gates CI, and an unpinned ruff broke
+                     # lint on untouched code when 0.16 shipped new default rules (PR #99).
+                     # To upgrade: bump the pin, fix new findings, commit together.
     "mypy>=1.0.0",
     "mkdocs-material>=9.5.0",
     "mkdocstrings[python]>=0.24.0",
