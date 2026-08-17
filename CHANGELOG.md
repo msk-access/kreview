@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A failed dashboard no longer strands the successful ones** (#98, found on the iris
+  v0.0.29 run where 17/26 rendered dashboards published nothing). `kreview report` still
+  exits 1 when any dashboard fails (fail loud), but the `KREVIEW_REPORT` wrapper now applies
+  the retry-then-degrade pattern from #59: non-terminal attempts fail (the retry ladder gets
+  a chance), and the terminal attempt exits 0 so everything that rendered publishes. The CLI
+  also always writes `reports/report_manifest.json` (succeeded/failed evaluators + pointers
+  to per-failure `*_render.log` Quarto debug logs, which now publish too) — a partial
+  `reports/` directory is loud, never silently incomplete.
+
+### Added
+- **Vendored the official `migrate-nextflow-code` skill** from nextflow-io/agent-skills
+  (Apache-2.0, attribution in `VENDORED.md`) into `.agents/skills/` — detect → fix → verify
+  procedures for the strict-syntax migration class that produced #80 and the #97 config
+  gotcha. Its detection tool, `nextflow lint` (26.04+), reports the tree at 0 errors / 36
+  style warnings.
+
+
+### Fixed
 - **Multimodal ablation no longer collapses when the best stacking model is GPU-only**
   (#97, found on the first production v0.0.29 iris run). The LOO ablation stage runs in the
   CPU container, but picked the best stacking model unconditionally — when that was `tabicl`

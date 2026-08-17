@@ -151,15 +151,17 @@ fi
 # Behaviour can't be exercised by a stub (stubs always succeed), so assert the guard is
 # present: each GPU wrapper must fail (exit non-zero) before its retries are exhausted, so
 # errorStrategy='retry' actually climbs the memory ladder instead of the old always-exit-0.
-echo "== #59 structural (GPU wrappers engage the retry ladder)"
-for m in eval_gpu_single ablate_gpu_single multimodal_single; do
+echo "== #59/#98 structural (wrappers engage the retry ladder, then degrade)"
+# report.nf joined the list in #98: without its guard, one failed dashboard strands every
+# successfully rendered one in the work dir (nothing publishes).
+for m in eval_gpu_single ablate_gpu_single multimodal_single report; do
     f="$REPO/nextflow/modules/local/kreview/$m.nf"
     if ! grep -q 'task.attempt.*-le.*task.maxRetries' "$f"; then
-        echo "FAILED: $m.nf lost the '[ \${task.attempt} -le \${task.maxRetries} ]' retry guard (#59)" >&2
+        echo "FAILED: $m.nf lost the '[ \${task.attempt} -le \${task.maxRetries} ]' retry guard (#59/#98)" >&2
         fail=1
     fi
 done
-[ "$fail" -eq 0 ] && echo "   all GPU wrappers retain the retry-then-degrade guard"
+[ "$fail" -eq 0 ] && echo "   all wrappers retain the retry-then-degrade guard"
 
 # --- 7b. #97 structural: merge must not starve on a failed ablation ---------------------
 # When MULTIMODAL_ABLATION fails terminally (errorStrategy 'ignore'), its output channel is
