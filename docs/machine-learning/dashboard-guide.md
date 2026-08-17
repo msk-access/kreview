@@ -81,3 +81,10 @@ kreview report --outdir /path/to/outdir --out-dir reports \
   never refit-on-everything scores.
 - **Aggregates only**: subgroup cells have an n ≥ 30 floor for statistical stability, and
   the page carries zero per-sample data by construction.
+- **Patient grouping**: the train/test split is patient-grouped (no patient spans splits),
+  so the holdout column is the honest headline. Eval-stage CV is deliberately *not*
+  patient-grouped: the inflation was measured on real data at ≤ ~0.001 AUC — an order of
+  magnitude below fold-to-fold noise — and documented in
+  [#101](https://github.com/msk-access/kreview/issues/101). Holdout numbers from runs
+  before the grouped split (≤ v0.0.29) are not comparable to later runs (shifts of
+  ~0.005–0.02 from test-set re-composition).
