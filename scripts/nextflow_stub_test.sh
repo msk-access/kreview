@@ -161,6 +161,20 @@ for m in eval_gpu_single ablate_gpu_single multimodal_single; do
 done
 [ "$fail" -eq 0 ] && echo "   all GPU wrappers retain the retry-then-degrade guard"
 
+# --- 7b. #97 structural: merge must not starve on a failed ablation ---------------------
+# When MULTIMODAL_ABLATION fails terminally (errorStrategy 'ignore'), its output channel is
+# empty; without the ifEmpty sentinel MULTIMODAL_MERGE + REPORT_MULTIMODAL never run and the
+# whole multimodal tail is silently lost (iris v0.0.29 run). Behaviour was verified with a
+# forced-fail ablation stub; a stub run can't exercise it (stubs succeed), so assert the
+# sentinel wire is present. The merge module already handles NO_ABLATION by name.
+echo "== #97 structural (merge survives ablation failure via NO_ABLATION sentinel)"
+if ! grep -q "ablation_results.ifEmpty(file('NO_ABLATION'))" "$REPO/nextflow/workflows/kreview_eval.nf"; then
+    echo "FAILED: kreview_eval.nf lost the .ifEmpty(file('NO_ABLATION')) on the merge input (#97)" >&2
+    fail=1
+else
+    echo "   NO_ABLATION sentinel wire present on the merge input"
+fi
+
 # --- 8. #84 regression: published tree must not nest a working-dir prefix ---------------
 # A publishDir whose leaf matches the output-path subdir (or a leaked working dir like
 # prep_out/) double-nests: matrices/selected/selected/…, models/multimodal/prep_out/…. The
