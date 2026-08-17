@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter, defaultdict
+from typing import Any
 from pathlib import Path
 
 import numpy as np
@@ -371,7 +372,7 @@ def _build_diagnostics(trace_path: Path | None) -> dict:
     cannot see it — the section is optional by design and fills in when ``kreview
     report`` is re-run on a completed output directory.
     """
-    diag = {"processes": {}, "longest": [], "workflow": {}}
+    diag: dict[str, Any] = {"processes": {}, "longest": [], "workflow": {}}
     if trace_path is None or not Path(trace_path).exists():
         return diag
     tr = pd.read_csv(trace_path, sep="\t")
@@ -434,7 +435,7 @@ def build_report_data(
     from kreview import __version__
 
     evaluators = [_build_evaluator(row, outdir, lab_by_id) for _, row in sb.iterrows()]
-    data = {
+    data: dict[str, Any] = {
         "meta": {
             "title": "kreview evaluation report",
             "version": __version__,
