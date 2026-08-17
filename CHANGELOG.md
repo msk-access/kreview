@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.30] - 2026-08-17
+
+Report + rigor release: the reporting layer is rebuilt as one data-driven, PHI-guarded,
+self-contained page (#79, Quarto path deleted); the train/test split is patient-grouped
+(#101 — found by the new report's own integrity check); and the two terminal failures from
+the first production v0.0.29 iris run are fixed (#97 multimodal-ablation collapse, #98
+stranded dashboards). Holdout metrics from this release onward are not directly comparable
+to earlier runs (see the split entry below).
 
 ### Fixed
 - **The train/test split is now grouped by patient** (#101, found by the #79 report's own
@@ -17,8 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-tier drift ≤ 0.4 pp, deterministic). A post-split assertion makes a leaked patient a
   hard error. Healthy donors (no cBioPortal record, one sample per donor) now carry
   `PATIENT_ID = SAMPLE_ID`, keeping the column complete for all grouped consumers.
-  Remaining from #101: grouping the eval-stage CV folds by patient (separate change — it
-  shifts every CV metric).
+  The eval-stage CV folds deliberately stay **ungrouped** — measured on the real v0.0.29
+  matrices, patient-mixing inflates CV AUC by ≤ ~0.001 (an order of magnitude below fold
+  noise); the grouped holdout is the honest headline. Full measurement tables and the
+  documented decision are on #101. Note: holdout numbers from runs ≤ v0.0.29 are **not
+  comparable** to grouped-split runs — expect shifts of ~0.005–0.02 from test-set
+  re-composition (the leaked repeat-timepoint patients were the *harder* cases, so the
+  old numbers were dragged down, not inflated).
 
 
 ### Changed
@@ -57,6 +69,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also always writes `reports/report_manifest.json` (succeeded/failed evaluators + pointers
   to per-failure `*_render.log` Quarto debug logs, which now publish too) — a partial
   `reports/` directory is loud, never silently incomplete.
+
+### Changed
+- **Multimodal ablation runs in the GPU container when GPU models are in play** (#97
+  follow-up). `KREVIEW_MULTIMODAL_ABLATION` now routes its container, queue, memory, time
+  and cluster options on `params.multimodal_gpu_models` — when GPU stacking models are
+  requested, the ablation gets the GPU image and a GPU slot instead of silently falling
+  back to a CPU model. The #97 loud CPU fallback remains for environments with no GPU.
+- Lint toolchain fully pinned: `mypy==2.3.1` and `ruff==0.15.4` join the exact
+  `nbdev`/`black` pins in the `[dev]`/`[all]` extras — unpinned linter releases twice
+  broke CI on untouched code.
 
 ### Added
 - **Vendored the official `migrate-nextflow-code` skill** from nextflow-io/agent-skills
