@@ -702,6 +702,7 @@ def report(
     succeeded = 0
     failed = 0
     failed_names = []
+    succeeded_names = []
 
     for p in matrices:
         feat_name = Path(p).name.replace("_matrix.parquet", "")
@@ -730,6 +731,7 @@ def report(
                     output=msg,
                 )
                 succeeded += 1
+                succeeded_names.append(feat_name)
             else:
                 print(f"  FAILED: {msg} ({elapsed:.1f}s)", flush=True)
                 _log.error(
@@ -770,6 +772,27 @@ def report(
         total=total,
         failed_evaluators=failed_names,
     )
+
+    # #98: machine-readable manifest, written ALWAYS (success or failure). When the
+    # Nextflow wrapper publishes a partial result (terminal attempt after failures), this
+    # is the loud, durable record of what rendered and what did not — a published reports/
+    # directory can no longer silently look complete while dashboards are missing.
+    import json as _json_mod
+
+    manifest = {
+        "total": total,
+        "succeeded": succeeded,
+        "failed": failed,
+        "succeeded_evaluators": succeeded_names,
+        "failed_evaluators": failed_names,
+        # Quarto writes a per-evaluator debug log next to the dashboards on failure only.
+        "render_logs": {n: f"{n}_render.log" for n in failed_names},
+    }
+    manifest_path = out_path / "report_manifest.json"
+    with open(manifest_path, "w") as f:
+        _json_mod.dump(manifest, f, indent=2)
+    print(f"  Manifest: {manifest_path}", flush=True)
+
     if failed > 0:
         raise typer.Exit(code=1)
 

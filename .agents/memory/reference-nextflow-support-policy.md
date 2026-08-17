@@ -46,4 +46,10 @@ of scope** by maintainer decision (2026-07-21). Run the script after any `.nf` o
   range via `NXF_VER`. Where that env lives on this machine is machine-local, so it is
   recorded in `private/reference-local-nextflow-env.md` rather than here.
 
+**Detection tooling:** `nextflow lint` (26.04+) is the strict-syntax checker — run
+`NXF_VER=26.04.6 nextflow lint nextflow/` after config/DSL edits. Tree status 2026-08-17:
+0 errors, 36 style warnings. The vendored `migrate-nextflow-code` skill
+(`.agents/skills/migrate-nextflow-code/`, from nextflow-io/agent-skills) documents the
+detect → fix → verify procedures per migration class.
+
 See [[reference-hpc-singularity-gotchas]] and [[feedback-parallel-paths-one-impl]].
