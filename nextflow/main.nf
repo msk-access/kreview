@@ -50,14 +50,10 @@ def helpMessage() {
      --min_variants             Min variants passing VAF (default: 1)
      --ch_hotspot_maf           TSV of CH hotspot variants for CH-only demotion (default: null)
 
-     SHAP Explainability:
-     --shap_samples             Max samples for SHAP computation (default: 500, slurm: 5000)
-     --shap_features            Max features displayed in SHAP plots (default: 10, slurm: 20)
 
      Execution Control:
      --resume_eval              Skip evaluators with existing results (default: false)
      --skip_report              Skip Quarto dashboard generation (default: false)
-     --cvd_safe                 Use colorblind-safe palette (default: false)
      --compute_univariate_auc   Compute per-feature univariate AUC (default: false)
 
      Multistage Options:

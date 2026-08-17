@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The reporting layer is one data-driven page** (#79). `kreview report` now takes the
+  pipeline `--outdir` and renders a single self-contained HTML (plotly inlined from the
+  installed package — zero CDN, air-gapped-safe) via the new `kreview/report_data.py` data
+  layer: sortable scoreboard with per-evaluator deep-dive modals (per-model AUC+CI, fold
+  AUCs, OOF-computed ROC/PR, calibration, decision curves, subgroup AUCs with an n≥30
+  floor, feature-group ablation stability), multimodal stacking, cohort composition with
+  the train/test split (and a loud patient-leakage warning — see the split issue), and run
+  diagnostics from the execution trace. **Aggregates only**: `assert_no_phi` refuses to
+  emit anything sample-identifying. The #98 manifest semantics carry over (always written,
+  failure recorded). Validated end-to-end on the real iris v0.0.29 outputs: 26 evaluators,
+  5 MB page, rendered in ~3 s.
+- `KREVIEW_REPORT` (Nextflow) stages channel inputs into the canonical outdir layout and
+  runs the new renderer — `process_low`, 8 GB, no more 64→192 GB ladder. The separate
+  `KREVIEW_REPORT_MULTIMODAL` process is **gone** (its content is the report's multimodal
+  tab); multimodal/ablation inputs are optional sentinels (#97 pattern), so a failed
+  optional stage degrades the tab instead of starving the report.
+
+### Removed
+- **The Quarto render path** (#79): both `.qmd` templates (~4,000 lines, 1,009 of them
+  duplicated), `_render_quarto_report`/`_find_quarto`, render-time SHAP, and the
+  `quarto-cli`, `papermill` and `itables` dependencies. `kreview/feature_cards.py` (used
+  only by the deleted templates) is gone too. Report-only params `--shap-samples`,
+  `--shap-features` and `--cvd-safe` removed from the CLI and Nextflow (eval-stage SHAP is
+  untouched).
+
+
 ### Fixed
 - **A failed dashboard no longer strands the successful ones** (#98, found on the iris
   v0.0.29 run where 17/26 rendered dashboards published nothing). `kreview report` still

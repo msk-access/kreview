@@ -473,328 +473,91 @@ def _extract_evaluator(
     return merged
 
 
-def _find_quarto() -> str:
-    """Discover the quarto binary. With quarto-cli pip package, it's on PATH."""
-    import shutil
-
-    found = shutil.which("quarto")
-    if found:
-        return found
-    # Fallback: check quarto-cli's known install location
-    import importlib.util
-    from pathlib import Path
-
-    spec = importlib.util.find_spec("quarto")
-    if spec and spec.origin:
-        candidate = Path(spec.origin).parent / "bin" / "quarto"
-        if candidate.is_file():
-            return str(candidate)
-    raise FileNotFoundError("Quarto not found. Install with: pip install quarto-cli")
-
-
-def _render_quarto_report(
-    matrix_path: str,
-    feat_name: str,
-    report_dir: Path,
-    python_exe: str,
-    cvd_safe: bool = False,
-    shap_samples: int = 500,
-    shap_features: int = 10,
-    multimodal: bool = False,
-) -> tuple[bool, str]:
-    """Render a Quarto HTML dashboard for a single feature matrix.
-
-    Quarto 1.9+ creates a ``.quarto/`` project directory next to the QMD
-    source file.  When running inside a read-only Singularity container the
-    installed package ``templates/`` directory is not writable, causing every
-    render to fail with ``EROFS (error 30)``.  To work around this we copy
-    all template assets into a writable *staging* directory under
-    ``report_dir`` before invoking ``quarto render``.
-    """
-    import shutil
-    import subprocess
-
-    import structlog
-
-    _log = structlog.get_logger()
-
-    pkg_dir = Path(__file__).resolve().parent
-    template_dir = pkg_dir / "templates"
-    template_name = (
-        "report_multimodal_template.qmd" if multimodal else "report_template.qmd"
-    )
-    template_file = template_dir / template_name
-
-    if not template_file.exists():
-        _log.error(
-            "quarto_template_missing",
-            template=str(template_file),
-            multimodal=multimodal,
-        )
-        return False, f"Template not found at {template_file}"
-
-    env = os.environ.copy()
-    env["QUARTO_PYTHON"] = str(python_exe)
-
-    quarto_bin = _find_quarto()
-    out_html = Path(report_dir) / f"{feat_name}_dashboard.html"
-    log_file = Path(report_dir) / f"{feat_name}_render.log"
-
-    # ── Stage templates to a writable directory ──
-    # Quarto 1.9+ creates a .quarto/ project directory next to the QMD file.
-    # Inside read-only Singularity containers the package templates/ dir is
-    # not writable.  Copy all template assets to a writable staging directory
-    # so Quarto can create its project metadata without EROFS errors.
-    staging_dir = Path(report_dir) / f".render_{feat_name}"
-    staging_dir.mkdir(parents=True, exist_ok=True)
-    for item in template_dir.iterdir():
-        dest = staging_dir / item.name
-        if item.is_file():
-            shutil.copy2(item, dest)
-        elif item.is_dir() and item.name != ".quarto":
-            if dest.exists():
-                shutil.rmtree(dest)
-            shutil.copytree(item, dest)
-
-    cmd = [
-        quarto_bin,
-        "render",
-        template_name,
-        "--log-level",
-        "DEBUG",
-        "-P",
-        f"matrix_path:{Path(matrix_path).absolute()}",
-        "-P",
-        f"feature_name:{feat_name}",
-        "-P",
-        f"cvd_safe:{str(cvd_safe).lower()}",
-        "-P",
-        f"shap_samples:{shap_samples}",
-        "-P",
-        f"shap_features:{shap_features}",
-        "--output",
-        out_html.name,
-        "--output-dir",
-        str(out_html.parent.absolute()),
-    ]
-
-    try:
-        subprocess.run(
-            cmd,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=600,
-            cwd=str(staging_dir),  # writable staging dir, not read-only template_dir
-        )
-        shutil.rmtree(staging_dir, ignore_errors=True)
-        return True, str(out_html)
-    except subprocess.CalledProcessError as exc:
-        # Write full output to disk for debugging
-        with open(log_file, "w") as f:
-            f.write(f"=== QUARTO RENDER DEBUG LOG: {feat_name} ===\n")
-            f.write(f"CMD: {' '.join(cmd)}\n")
-            f.write(f"CWD: {staging_dir}\n")
-            f.write(f"EXIT CODE: {exc.returncode}\n\n")
-            f.write("=== STDOUT ===\n")
-            f.write(exc.stdout or "(empty)")
-            f.write("\n\n=== STDERR ===\n")
-            f.write(exc.stderr or "(empty)")
-        # Return concise error + pointer to full log
-        err_summary = f"Exit code {exc.returncode}. Full log: {log_file}\n"
-        # Extract actual error lines (skip cell progress noise)
-        for stream in [exc.stdout, exc.stderr]:
-            if not stream:
-                continue
-            for line in stream.splitlines():
-                line_s = line.strip()
-                if any(
-                    kw in line_s.lower()
-                    for kw in [
-                        "error",
-                        "exception",
-                        "traceback",
-                        "failed",
-                        "fatal",
-                        "not found",
-                    ]
-                ):
-                    err_summary += f"  >> {line_s}\n"
-        _log.error(
-            "quarto_render_failed",
-            evaluator=feat_name,
-            exit_code=exc.returncode,
-            log_file=str(log_file),
-        )
-        shutil.rmtree(staging_dir, ignore_errors=True)
-        return False, err_summary
-    except subprocess.TimeoutExpired:
-        _log.error("quarto_render_timeout", evaluator=feat_name, timeout_s=600)
-        shutil.rmtree(staging_dir, ignore_errors=True)
-        return False, "Timeout (>600s)"
-
-
 # %% ../nbs/90_cli.ipynb #c6ee3a55
 @app.command()
 def report(
-    input_dir: Path = typer.Option(..., help="Directory with *_matrix.parquet files"),
+    outdir: Path = typer.Option(
+        ...,
+        "--outdir",
+        help="Pipeline output directory (labels/, models/, matrices/, scoreboard parquet)",
+    ),
     out_dir: Path = typer.Option(
-        "reports/", help="Directory to deposit Quarto reports"
+        "reports/", help="Directory for the rendered report + manifest"
     ),
-    cvd_safe: bool = typer.Option(
-        False,
-        "--cvd-safe",
-        help="Render dashboards and plots using an Okabe-Ito Colorblind-Safe palette instead of default neon.",
+    run_label: str = typer.Option(
+        "", "--run-label", help="Free-text label shown in the report header"
     ),
-    shap_samples: int = typer.Option(
-        500,
-        "--shap-samples",
-        help="Max samples for SHAP explainability computation in dashboards.",
-    ),
-    shap_features: int = typer.Option(
-        10,
-        "--shap-features",
-        help="Max features to visualize in SHAP plots.",
-    ),
-    multimodal: bool = typer.Option(
-        False,
-        "--multimodal",
-        help="Render the multimodal dashboard for stacking model results.",
+    trace: Path = typer.Option(
+        None,
+        "--trace",
+        help="Optional Nextflow execution_trace.txt for the run-diagnostics tab",
     ),
 ):
-    """Re-generate HTML Dashboards from existing matrix parquet files.
+    """Render the single-page evaluation report from a pipeline output directory.
 
-    Scans ``input_dir`` for ``*_matrix.parquet`` files, renders each as a
-    standalone Quarto HTML dashboard, and writes them to ``out_dir``.
-    Each evaluator is rendered independently so a single failure does not
-    block the remaining dashboards.
+    One self-contained HTML (plotly inlined, no CDN) built from the run's artifacts:
+    scoreboard, per-model metrics with CIs, OOF-computed ROC/PR/calibration/decision
+    curves, subgroup AUCs, feature-group ablation stability, multimodal stacking, and
+    cohort composition. Aggregates only — the PHI guard refuses to emit sample ids.
+
+    Always writes ``report_manifest.json`` next to the page (#98): the loud record of
+    what the report covers, and of the failure if rendering crashed.
     """
-    import glob
-    import time as _time
-
+    import json as _json_mod
     import structlog
+
+    from kreview.report_data import build_report_data, render_page
 
     _log = structlog.get_logger()
 
     print("=== kreview report ===", flush=True)
     print("Configuration:", flush=True)
-    print(f"  --input-dir     : {input_dir}", flush=True)
-    print(f"  --out-dir       : {out_dir}", flush=True)
-    print(f"  --cvd-safe      : {cvd_safe}", flush=True)
-    print(f"  --shap-samples  : {shap_samples}", flush=True)
-    print(f"  --shap-features : {shap_features}", flush=True)
-    print(f"  --multimodal    : {multimodal}", flush=True)
+    print(f"  --outdir    : {outdir}", flush=True)
+    print(f"  --out-dir   : {out_dir}", flush=True)
+    print(f"  --run-label : {run_label or '(outdir name)'}", flush=True)
+    print(f"  --trace     : {trace or '(none)'}", flush=True)
     print("", flush=True)
-
-    in_path = Path(input_dir).absolute()
-    matrices = sorted(glob.glob(str(in_path / "*_matrix.parquet")))
-    if not matrices:
-        _log.warning("report_no_matrices", input_dir=str(in_path))
-        print(f"No *_matrix.parquet files found in {in_path}", flush=True)
-        return
-
-    _log.info("report_started", input_dir=str(in_path), n_matrices=len(matrices))
 
     out_path = Path(out_dir).absolute()
     out_path.mkdir(parents=True, exist_ok=True)
+    manifest_path = out_path / "report_manifest.json"
 
-    succeeded = 0
-    failed = 0
-    failed_names = []
-    succeeded_names = []
+    try:
+        data = build_report_data(outdir, trace_path=trace, run_label=run_label)
+        html = render_page(data, out_path / "kreview_report.html")
+    except Exception as exc:
+        # Fail loud (exit 1) AND leave a machine-readable record: the Nextflow wrapper
+        # publishes the manifest on the terminal attempt so a missing report is never
+        # silent (#98).
+        _log.error("report_failed", error=str(exc))
+        manifest_path.write_text(
+            _json_mod.dumps({"error": str(exc), "failed": 1, "succeeded": 0}, indent=2)
+        )
+        print(f"ERROR: report failed: {exc}", flush=True)
+        raise typer.Exit(code=1)
 
-    for p in matrices:
-        feat_name = Path(p).name.replace("_matrix.parquet", "")
-        print(f"Rendering dashboard for {feat_name}...", flush=True)
-        t_start = _time.perf_counter()
-
-        # S-01: Per-evaluator try/except — one failure does not block others
-        try:
-            ok, msg = _render_quarto_report(
-                str(p),
-                feat_name,
-                out_path,
-                sys.executable,
-                cvd_safe=cvd_safe,
-                shap_samples=shap_samples,
-                shap_features=shap_features,
-                multimodal=multimodal,
-            )
-            elapsed = _time.perf_counter() - t_start
-            if ok:
-                print(f"  Saved: {msg} ({elapsed:.1f}s)", flush=True)
-                _log.info(
-                    "report_rendered",
-                    evaluator=feat_name,
-                    seconds=f"{elapsed:.1f}",
-                    output=msg,
-                )
-                succeeded += 1
-                succeeded_names.append(feat_name)
-            else:
-                print(f"  FAILED: {msg} ({elapsed:.1f}s)", flush=True)
-                _log.error(
-                    "report_render_failed",
-                    evaluator=feat_name,
-                    seconds=f"{elapsed:.1f}",
-                    error=msg[:500],
-                )
-                failed += 1
-                failed_names.append(feat_name)
-        except Exception as exc:
-            elapsed = _time.perf_counter() - t_start
-            print(
-                f"  EXCEPTION rendering {feat_name}: {exc} ({elapsed:.1f}s)",
-                flush=True,
-            )
-            _log.error(
-                "report_render_exception",
-                evaluator=feat_name,
-                seconds=f"{elapsed:.1f}",
-                error=str(exc),
-            )
-            failed += 1
-            failed_names.append(feat_name)
-
-    # L-03: Summary with pass/fail counts
-    total = len(matrices)
-    print(
-        f"\nReport summary: {succeeded}/{total} succeeded, {failed}/{total} failed",
-        flush=True,
-    )
-    if failed_names:
-        print(f"  Failed evaluators: {', '.join(failed_names)}", flush=True)
+    evaluators = data["evaluators"]
+    missing_detail = [e["evaluator"] for e in evaluators if "model_metrics" not in e]
+    manifest = {
+        "report": html.name,
+        "total": len(evaluators),
+        "succeeded": len(evaluators),
+        "failed": 0,
+        "succeeded_evaluators": [e["evaluator"] for e in evaluators],
+        "failed_evaluators": [],
+        # evaluators present in the scoreboard whose model-result JSONs were absent:
+        # they render as rows without a deep-dive. Degraded AND surfaced, not hidden.
+        "missing_detail": missing_detail,
+    }
+    manifest_path.write_text(_json_mod.dumps(manifest, indent=2))
+    print(f"  Report  : {html}", flush=True)
+    print(f"  Manifest: {manifest_path}", flush=True)
     _log.info(
         "report_completed",
-        succeeded=succeeded,
-        failed=failed,
-        total=total,
-        failed_evaluators=failed_names,
+        report=str(html),
+        n_evaluators=len(evaluators),
+        missing_detail=missing_detail,
     )
-
-    # #98: machine-readable manifest, written ALWAYS (success or failure). When the
-    # Nextflow wrapper publishes a partial result (terminal attempt after failures), this
-    # is the loud, durable record of what rendered and what did not — a published reports/
-    # directory can no longer silently look complete while dashboards are missing.
-    import json as _json_mod
-
-    manifest = {
-        "total": total,
-        "succeeded": succeeded,
-        "failed": failed,
-        "succeeded_evaluators": succeeded_names,
-        "failed_evaluators": failed_names,
-        # Quarto writes a per-evaluator debug log next to the dashboards on failure only.
-        "render_logs": {n: f"{n}_render.log" for n in failed_names},
-    }
-    manifest_path = out_path / "report_manifest.json"
-    with open(manifest_path, "w") as f:
-        _json_mod.dump(manifest, f, indent=2)
-    print(f"  Manifest: {manifest_path}", flush=True)
-
-    if failed > 0:
-        raise typer.Exit(code=1)
 
 
 # %% ../nbs/90_cli.ipynb #extract_cmd

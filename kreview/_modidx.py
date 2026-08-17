@@ -18,11 +18,6 @@ d = {
                 "cli.html#_extract_evaluator",
                 "kreview/cli.py",
             ),
-            "kreview.cli._find_quarto": ("cli.html#_find_quarto", "kreview/cli.py"),
-            "kreview.cli._render_quarto_report": (
-                "cli.html#_render_quarto_report",
-                "kreview/cli.py",
-            ),
             "kreview.cli.extract": ("cli.html#extract", "kreview/cli.py"),
             "kreview.cli.features_list": ("cli.html#features_list", "kreview/cli.py"),
             "kreview.cli.fuse": ("cli.html#fuse", "kreview/cli.py"),
@@ -447,7 +442,6 @@ d = {
                 "kreview/eval_engine.py",
             ),
         },
-        "kreview.feature_cards": {},
         "kreview.features.atac": {
             "kreview.features.atac.ATACOnTargetEvaluator": (
                 "features/atac.html#atacontargetevaluator",
@@ -822,6 +816,10 @@ d = {
             ),
             "kreview.report_data.build_report_data": (
                 "report_data.html#build_report_data",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data.render_page": (
+                "report_data.html#render_page",
                 "kreview/report_data.py",
             ),
             "kreview.report_data.render_report": (

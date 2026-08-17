@@ -29,7 +29,7 @@
 //     |       |       |
 //     |       |  MULTIMODAL_MERGE       → unify JSON
 //     |       |       |
-//     +---+---+  REPORT_MULTIMODAL
+//     +---+---+  (multimodal results feed the single REPORT, #79)
 //         |
 //       REPORT                 (needs matrices + JSONs + scoreboard + joblib)
 //
@@ -54,7 +54,6 @@ include { KREVIEW_ABLATE_GPU_SINGLE } from '../modules/local/kreview/ablate_gpu_
 include { KREVIEW_MERGE_ABLATION     } from '../modules/local/kreview/merge_ablation'
 
 // Multistage — collect-only modules (need all evaluator results)
-include { KREVIEW_REPORT_MULTIMODAL } from '../modules/local/kreview/report_multimodal'
 include { KREVIEW_SCOREBOARD        } from '../modules/local/kreview/scoreboard'
 
 // Multistage — decomposed multimodal pipeline (prep → single × N → ablation → merge)
@@ -75,7 +74,6 @@ workflow KREVIEW_EVAL {
     main:
     // Initialize output channels — populated by whichever branch runs
     ch_html_reports = Channel.empty()
-    ch_static_plots = Channel.empty()
     ch_json_stats   = Channel.empty()
     ch_duckdb_db    = Channel.empty()
 
@@ -218,7 +216,6 @@ workflow KREVIEW_EVAL {
         )
     }
     ch_json_stats = KREVIEW_EVAL_CPU_SINGLE.out.json_stats
-    ch_cpu_joblib = KREVIEW_EVAL_CPU_SINGLE.out.joblib_models
 
     // Step 4c: Per-evaluator GPU evaluation (×N, parallel, gpushort) [optional]
     // Runs in parallel with CPU eval — they are independent.
@@ -277,16 +274,16 @@ workflow KREVIEW_EVAL {
             .collect()
         : ch_cpu_jsons
 
-    ch_cpu_joblib_collected = ch_cpu_joblib.collect().ifEmpty([])
-    ch_all_joblib = params.run_gpu_eval
-        ? ch_cpu_joblib_collected
-            .mix(KREVIEW_EVAL_GPU_SINGLE.out.joblib_models.collect().ifEmpty([]))
-            .flatten()
-            .collect()
-        : ch_cpu_joblib_collected
-
     // Step 4d: Build scoreboard (needs all JSONs)
     KREVIEW_SCOREBOARD(ch_all_jsons)
+
+    // #79: report-facing channels default to sentinels; the optional stages below
+    // reassign them when they actually run (NO_* pattern, #97).
+    ch_mm_report_jsons = Channel.value(file('NO_MULTIMODAL'))
+    ch_report_ablation = Channel.value(file('NO_MERGED_ABLATION'))
+    if (params.run_ablation) {
+        ch_report_ablation = ch_best_subset.collect().ifEmpty(file('NO_MERGED_ABLATION'))
+    }
 
     // Step 5: Multimodal cross-evaluator evaluation [optional]
     // Uses decomposed pipeline: prep → single × N → ablation → merge
@@ -353,38 +350,41 @@ workflow KREVIEW_EVAL {
             KREVIEW_MULTIMODAL_ABLATION.out.ablation_results.ifEmpty(file('NO_ABLATION'))
         )
 
-        // Step 5e: Multimodal report — renders stacking dashboard
-        if (!params.skip_report) {
-            KREVIEW_REPORT_MULTIMODAL(
-                KREVIEW_MULTIMODAL_MERGE.out.multimodal_json,
-                KREVIEW_FUSE.out.super_matrix,
+        // #79: the multimodal tab of the single-page report consumes the raw partial
+        // JSONs (prep metadata + per-model stacking + LOO ablation). Collected with
+        // ifEmpty so a failed optional stage degrades the tab instead of starving
+        // KREVIEW_REPORT (#97 pattern). The dedicated REPORT_MULTIMODAL process is gone —
+        // one report, one implementation.
+        ch_mm_report_jsons = KREVIEW_MULTIMODAL_PREP.out.prep_metadata
+            .mix(
+                KREVIEW_MULTIMODAL_SINGLE_CPU.out.single_result,
+                ch_gpu_single_results,
+                KREVIEW_MULTIMODAL_ABLATION.out.ablation_results,
             )
-        }
+            .collect()
+            .ifEmpty(file('NO_MULTIMODAL'))
     }
 
-    // Step 6: Report generation [optional]
-    // Depends on selected matrices, model results, eval_stats,
-    // selection_qc, joblib, and scoreboard.
-    // Scoreboard is optional — if it fails, reports still render
-    // (the report template checks for file existence).
+    // Step 6: Report generation [optional] — #79 single-page report.
+    // Consumes aggregates only (labels, model JSONs, selection QC, scoreboard,
+    // multimodal + ablation JSONs); matrices, eval_stats and joblib models are no
+    // longer needed since SHAP left the render path.
     if (!params.skip_report) {
         ch_scoreboard = KREVIEW_SCOREBOARD.out.scoreboard.ifEmpty(file('NO_SCOREBOARD'))
         KREVIEW_REPORT(
-            KREVIEW_SELECT_SINGLE.out.matrix.collect(),
+            KREVIEW_LABEL.out.labels,
             ch_all_jsons,
-            KREVIEW_SELECT_SINGLE.out.eval_stats.collect(),
             KREVIEW_SELECT_SINGLE.out.selection_qc.collect(),
-            ch_all_joblib,
             ch_scoreboard,
+            ch_mm_report_jsons,
+            ch_report_ablation,
         )
-        ch_html_reports = KREVIEW_REPORT.out.html_reports
-        ch_static_plots = KREVIEW_REPORT.out.static_plots
+        ch_html_reports = KREVIEW_REPORT.out.html_report
     }
 
 
     emit:
     html_reports = ch_html_reports
-    static_plots = ch_static_plots
     json_stats   = ch_json_stats
     duckdb_db    = ch_duckdb_db
 }
