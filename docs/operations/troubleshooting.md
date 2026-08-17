@@ -128,17 +128,6 @@ Common issues and their solutions.
 
 ## Dashboard & Reports
 
-??? info "Quarto not found — dashboard generation skipped"
-
-    **Cause:** Quarto CLI is not installed in your environment.
-
-    **Fix:** Install Quarto from [quarto.org](https://quarto.org/docs/get-started/) or use the Docker image which includes Quarto pre-installed.
-
-    Alternatively, skip reports entirely:
-    ```bash
-    nextflow run ... --skip_report
-    ```
-
 ??? info "SHAP plots show blank — only RF appears, no XGBoost"
 
     **Cause:** XGBoost failed to import silently. The engine degraded to RF-only mode.

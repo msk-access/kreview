@@ -36,6 +36,16 @@
   `0813447d`) and in the message of the commit that redacted it. Scrubbing = history rewrite.
 
 ## Now
+- **#79 report redesign implemented** on `feat/report-redesign` (3 commits): data layer
+  (`report_data.py` + `nbs/06`, aggregates-only with a hard PHI assert), single-page
+  plotly template (package data, plotly inlined — no CDN), `kreview report --outdir`
+  rewired, Quarto path DELETED (~4k template lines, quarto-cli/papermill/itables deps,
+  feature_cards, REPORT_MULTIMODAL process), KREVIEW_REPORT now process_low/8GB.
+  Validated end-to-end on the real iris v0.0.29 outputs (26 evaluators, 5 MB, ~3 s).
+  Docs swept. Found + filed #101 (patient-level split leakage, 1,266 patients) from the
+  report's own integrity check.
+
+## Previously (#79 supersedes)
 - **PR-B (#61) implemented** on `fix/python-fail-loud` — the Python half of the fail-loud sweep.
   - DuckDB (`_read_parquet_chunk`, `run_feature_sql`, `nbs/00_core.ipynb`): classify
     `OperationalError` (retry→raise) vs `ProgrammingError`/`DataError` (raise now); no more

@@ -26,7 +26,7 @@ pipeline; the individual commands are for debugging or re-running a single step.
 | `kreview eval multimodal single` | Train single stacking model (parallelizable) | 5b |
 | `kreview eval multimodal ablation` | Feature ablation analysis | 5c |
 | `kreview eval multimodal merge` | Aggregate stacking + ablation results | 5d |
-| `kreview report` | Re-generate HTML dashboards | 6 |
+| `kreview report` | Render the single-page evaluation report | 6 |
 | `kreview features-list` | List registered evaluators | — |
 
 !!! note "Steps 4a, 4b, and 4c are independent"
@@ -68,7 +68,7 @@ Common options (see `nextflow/nextflow.config` for the full list):
 | Multimodal stacking | `--run_multimodal_eval true --multimodal_selection boruta_shap` |
 | SHAP / dashboards | `--shap_samples 500`, `--shap_features 10`, `--cvd_safe true` |
 | I/O-constrained hosts | `--chunk_size 100` |
-| Skip dashboards | `--skip_report true` |
+| Skip the report | `--skip_report true` |
 
 Nextflow's own `-resume` re-uses cached stage outputs, so a failed run continues from the
 last successful stage rather than restarting.
@@ -160,8 +160,8 @@ kreview eval multimodal merge \
     --prep-metadata results/multimodal/prep_metadata.json \
     --output results/multimodal/
 
-# Step 6: Report
-kreview report --results-dir results/
+# Step 6: Report — one self-contained HTML from the output dir
+kreview report --outdir results/ --out-dir results/reports
 ```
 
 !!! tip "Inspecting Parquet Outputs"
