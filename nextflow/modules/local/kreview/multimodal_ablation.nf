@@ -27,6 +27,10 @@ process KREVIEW_MULTIMODAL_ABLATION {
     def cv_folds = params.cv_folds ?: 5
     """
     set -euo pipefail
+    # #97: when multimodal GPU models are requested this stage runs on the GPU container
+    # (see the withName routing in nextflow.config), so it needs the same Singularity
+    # read-only-/home + cache + CUDA-fragmentation env as the other GPU stages.
+    ${params.multimodal_gpu_models ? params.gpu_env_setup : '# CPU-routed run — shared GPU env not needed'}
     mkdir -p ablation_out stacking_results_dir
 
     # Stage stacking result JSONs into a directory

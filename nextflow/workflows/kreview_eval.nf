@@ -341,10 +341,16 @@ workflow KREVIEW_EVAL {
         )
 
         // 5d: Merge — combine all partial JSONs
+        // #97: ablation is OPTIONAL input to merge. If MULTIMODAL_ABLATION fails
+        // terminally (errorStrategy 'ignore'), its output channel is empty — without the
+        // ifEmpty sentinel that starved this process, so MERGE and REPORT_MULTIMODAL
+        // never ran and the whole multimodal tail was silently lost (iris v0.0.29 run).
+        // The module already handles the NO_ABLATION sentinel; the workflow just never
+        // sent it. Same pattern as NO_SCOREBOARD below.
         KREVIEW_MULTIMODAL_MERGE(
             ch_all_single_results,
             KREVIEW_MULTIMODAL_PREP.out.prep_metadata,
-            KREVIEW_MULTIMODAL_ABLATION.out.ablation_results
+            KREVIEW_MULTIMODAL_ABLATION.out.ablation_results.ifEmpty(file('NO_ABLATION'))
         )
 
         // Step 5e: Multimodal report — renders stacking dashboard

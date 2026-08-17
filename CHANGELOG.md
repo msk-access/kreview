@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Multimodal ablation no longer collapses when the best stacking model is GPU-only**
+  (#97, found on the first production v0.0.29 iris run). The LOO ablation stage runs in the
+  CPU container, but picked the best stacking model unconditionally — when that was `tabicl`
+  (GPU-only), `_build_model` returned `None`, all 39 evaluator ablations failed with a
+  baffling sklearn error, and the terminally-failed stage **starved `MULTIMODAL_MERGE` and
+  `REPORT_MULTIMODAL`**, silently losing the merged multimodal results and dashboard.
+  Three fixes, per the terminal-failure policy (degrade AND surface loudly):
+  - `multimodal_ablation` now collects every model's stacking AUC, probes candidates
+    best-first, and **falls back loudly** to the best model the environment can build —
+    re-baselining deltas against the used model's own full-matrix AUC (deltas against an
+    unbuildable model's baseline would be scientifically wrong). The substitution is recorded
+    in `ablation_results.json` (`ablation_model_fallback`: requested/used/AUCs/reason).
+  - If **no** candidate is buildable, it raises one clear `RuntimeError` naming the models —
+    not 39 repeats of `estimator ... Got None instead`.
+  - The workflow now passes `ifEmpty(file('NO_ABLATION'))` on the merge input — the
+    `multimodal_merge` module already handled that sentinel; the workflow just never sent it.
+    Verified behaviourally with a forced-fail ablation stub: merge + multimodal dashboard now
+    survive a terminal ablation failure (and the pre-fix tree provably loses them). Guarded
+    by a structural assertion in `scripts/nextflow_stub_test.sh`.
+
+
 ## [0.0.29] - 2026-07-22
 
 Hardening release: closes the recurring release-breakage classes from the 2026-07 review
