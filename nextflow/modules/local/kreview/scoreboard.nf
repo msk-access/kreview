@@ -16,6 +16,7 @@ process KREVIEW_SCOREBOARD {
 
     input:
     path(model_results)  // Collected CPU + GPU JSONs
+    path(selection_qc)   // *_selection_qc.json sidecars (#108) or NO_SELECTION_QC sentinel
 
     output:
     path "scoreboard_combined__all.parquet", emit: scoreboard

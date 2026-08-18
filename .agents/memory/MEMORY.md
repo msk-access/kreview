@@ -27,6 +27,9 @@ Keep this file to index lines only; the content lives in the linked files.
 - [reference-iris-config-interaction.md](reference-iris-config-interaction.md) — the nf-core
   iris config sets its own beforeScript/withLabel/errorStrategy; keep kreview env in-script and
   resources in withName (never beforeScript/withLabel) or iris clobbers them.
+- [reference-ci-env-repro.md](reference-ci-env-repro.md) — CI-only lint/mypy failures:
+  dep-graph edits shift transitively resolved versions (numpy stubs moved the mypy surface);
+  reproduce in a python:3.12-slim amd64 container installed exactly as CI.
 - [reference-nextflow-support-policy.md](reference-nextflow-support-policy.md) — supports
   Nextflow v25–v26 (floor 25.04.0, enforced); config-syntax rules modern Nextflow enforces;
   smoke-test with `scripts/nextflow_stub_test.sh`, stub run only, no nf-test harness.
