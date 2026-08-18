@@ -29,6 +29,8 @@ process KREVIEW_MULTIMODAL_PREP {
     script:
     def mm_sel      = params.multimodal_selection ?: "mi"
     def top_pct_arg = params.multimodal_top_percentile ?: 10.0
+    def sel_cutoff  = params.multimodal_selection_cutoff ?: 3.0
+    def sel_n_iter  = params.multimodal_selection_n_iter ?: 10
     def super_flag  = super_matrix.name != 'NO_SUPER_MATRIX' ? "--super-matrix ${super_matrix}" : ""
     """
     set -euo pipefail
@@ -39,11 +41,16 @@ process KREVIEW_MULTIMODAL_PREP {
         cp "\$f" results_dir/ 2>/dev/null || true
     done
 
+    # --selection-n-jobs pins LightGBM (GrootCV) threads to the cgroup allocation:
+    # the container sees every node core, and unpinned OpenMP oversubscribes (#96).
     PYTHONUNBUFFERED=1 kreview eval multimodal prep \\
         --results-dir results_dir \\
         ${super_flag} \\
         --multimodal-selection ${mm_sel} \\
         --top-percentile ${top_pct_arg} \\
+        --selection-cutoff ${sel_cutoff} \\
+        --selection-n-iter ${sel_n_iter} \\
+        --selection-n-jobs ${task.cpus} \\
         --seed ${params.seed ?: 42} \\
         --output prep_out
     """

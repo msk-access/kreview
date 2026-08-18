@@ -1129,8 +1129,27 @@ def eval_multimodal(
     multimodal_selection: str = typer.Option(
         "mi",
         "--multimodal-selection",
-        help="Multimodal feature selection: mi (default), boruta_shap, leshy, "
-        "or grootcv. leshy/grootcv require: pip install kreview[arfs]",
+        help="Multimodal feature selection: mi (default), grootcv (recommended "
+        "all-relevant, #96), leshy, or boruta_shap (DEPRECATED — needs "
+        "kreview[legacy-boruta], conflicts with the arfs extra). "
+        "grootcv/leshy require: pip install kreview[arfs]",
+    ),
+    selection_cutoff: float = typer.Option(
+        3.0,
+        "--selection-cutoff",
+        help="GrootCV shadow-importance divisor; higher admits more features "
+        "(#96 measured default)",
+    ),
+    selection_n_iter: int = typer.Option(
+        10,
+        "--selection-n-iter",
+        help="GrootCV shadow-test iterations (#96: 0.96 agreement with 50 at 6x speed)",
+    ),
+    selection_n_jobs: int = typer.Option(
+        0,
+        "--selection-n-jobs",
+        help="LightGBM threads for GrootCV (0 = library default; set to the "
+        "scheduler allocation on HPC)",
     ),
     cv_folds: int = typer.Option(5, "--cv-folds", help="Cross-validation folds"),
     device: str = typer.Option("cuda", "--device", help="PyTorch device: cuda, cpu"),
@@ -1232,6 +1251,9 @@ def eval_multimodal(
             top_percentile=top_percentile,
             random_state=seed,
             multimodal_selection=multimodal_selection,
+            selection_cutoff=selection_cutoff,
+            selection_n_iter=selection_n_iter,
+            selection_n_jobs=selection_n_jobs,
         )
     except (FileNotFoundError, ValueError) as e:
         print(f"ERROR: {e}", flush=True)
@@ -1322,13 +1344,32 @@ def eval_multimodal_prep(
     multimodal_selection: str = typer.Option(
         "mi",
         "--multimodal-selection",
-        help="Feature selection for raw features: mi (default), boruta_shap, "
-        "leshy, or grootcv. leshy/grootcv require: pip install kreview[arfs]",
+        help="Feature selection for raw features: mi (default), grootcv "
+        "(recommended all-relevant, #96), leshy, or boruta_shap (DEPRECATED — "
+        "needs kreview[legacy-boruta], conflicts with the arfs extra). "
+        "grootcv/leshy require: pip install kreview[arfs]",
     ),
     top_percentile: float = typer.Option(
         10.0,
         "--top-percentile",
         help="Top N%% features for MI selection",
+    ),
+    selection_cutoff: float = typer.Option(
+        3.0,
+        "--selection-cutoff",
+        help="GrootCV shadow-importance divisor; higher admits more features "
+        "(#96 measured default)",
+    ),
+    selection_n_iter: int = typer.Option(
+        10,
+        "--selection-n-iter",
+        help="GrootCV shadow-test iterations (#96: 0.96 agreement with 50 at 6x speed)",
+    ),
+    selection_n_jobs: int = typer.Option(
+        0,
+        "--selection-n-jobs",
+        help="LightGBM threads for GrootCV (0 = library default; set to the "
+        "scheduler allocation on HPC)",
     ),
     seed: int = typer.Option(42, "--seed", help="Random seed"),
     output: Path = typer.Option("output/", help="Output directory"),
@@ -1365,6 +1406,9 @@ def eval_multimodal_prep(
             super_matrix_path=super_matrix,
             multimodal_selection=multimodal_selection,
             top_percentile=top_percentile,
+            selection_cutoff=selection_cutoff,
+            selection_n_iter=selection_n_iter,
+            selection_n_jobs=selection_n_jobs,
             random_state=seed,
             output_dir=output,
         )

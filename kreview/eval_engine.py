@@ -3,6 +3,7 @@
 # %% ../nbs/02_eval_engine.ipynb #792e3b1f
 from __future__ import annotations
 import json
+import re
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -188,7 +189,7 @@ def univariate_auc(
         return 0.5
 
     try:
-        min_class = np.bincount(y).min()
+        min_class = int(np.bincount(y).min())
         folds = min(n_folds, min_class)
         if folds < 2:
             return 0.5
@@ -2161,7 +2162,7 @@ def cpu_models(
             return {"error": "Only one class present in target array"}, None, None, None
 
         # Guard for small groups where n_splits doesn't work
-        min_class_counts = np.bincount(y).min()
+        min_class_counts = int(np.bincount(y).min())
         folds = min(n_folds, min_class_counts)
         if folds < 2:
             return (
@@ -3035,7 +3036,7 @@ def gpu_models(
             log.warning("single_class_y", y_unique=np.unique(y).tolist())
             return {"error": "Only one class present in target array"}, {}
 
-        min_class_counts = np.bincount(y).min()
+        min_class_counts = int(np.bincount(y).min())
         folds = min(n_folds, min_class_counts)
         if folds < 2:
             return (
@@ -3781,6 +3782,27 @@ def _mi_reduce_confirmed(
     return reduced
 
 
+def _lgbm_safe_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, str]]:
+    """Rename columns so LightGBM accepts them, returning (renamed_df, safe→original map).
+
+    LightGBM rejects feature names containing JSON-special characters — kreview's
+    fused super matrix carries genomic-coordinate names like
+    ``FsdGenomewide__fsd_gw_chr8:46838888-146354021_143_166_ratio`` whose ``:``
+    crashes ``lgb.train`` ("Do not support special JSON characters in feature
+    name"), so the arfs strategies (Leshy/GrootCV) must fit under sanitized names
+    and map the selection back. Found on the real v0.0.29 super matrix (#96).
+    """
+    mapping: dict[str, str] = {}
+    for col in df.columns:
+        safe = re.sub(r"[^0-9a-zA-Z_]", "_", str(col))
+        while safe in mapping:  # collision guard: two names sanitizing identically
+            safe += "_"
+        mapping[safe] = col
+    renamed = df.copy()
+    renamed.columns = list(mapping.keys())
+    return renamed, mapping
+
+
 def _select_multimodal_features(
     df: pd.DataFrame,
     y: np.ndarray,
@@ -3789,6 +3811,9 @@ def _select_multimodal_features(
     top_percentile: float = 10.0,
     strategy: str = "mi",
     random_state: int = 42,
+    cutoff: float = 3.0,
+    n_iter: int = 10,
+    n_jobs: int = 0,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Feature selection pipeline for multimodal evaluation.
 
@@ -3807,12 +3832,24 @@ def _select_multimodal_features(
         top_percentile: Percentage of features to retain after MI ranking.
         strategy: Feature selection method:
             - ``"mi"`` (default): Mutual information ranking, fastest.
-            - ``"boruta_shap"``: BorutaShapPlus statistical test with SHAP
-              importance and shadow features.
+            - ``"grootcv"``: ARFS GrootCV, cross-validated SHAP importance —
+              the recommended all-relevant selector (#96: highest selection
+              stability on real data, Nogueira 0.85 vs 0.65 for boruta_shap).
+              Requires ``pip install kreview[arfs]``.
             - ``"leshy"``: ARFS Leshy, a Boruta evolution with LightGBM/SHAP.
               Requires ``pip install kreview[arfs]``.
-            - ``"grootcv"``: ARFS GrootCV, cross-validated SHAP importance.
-              Requires ``pip install kreview[arfs]``.
+            - ``"boruta_shap"``: DEPRECATED (#96). BorutaShapPlus statistical
+              test with SHAP importance. Requires
+              ``pip install kreview[legacy-boruta]``, which is mutually
+              exclusive with the ``arfs`` extra (numpy pin conflict).
+        random_state: Seed for MI ranking and the boruta_shap/leshy models.
+        cutoff: GrootCV shadow-importance divisor — higher admits more
+            features. Default 3.0 (#96 sweep: dominates boruta_shap on
+            stability, AUC and sensitivity simultaneously).
+        n_iter: GrootCV shadow-test iterations. Default 10 (#96: 0.96
+            per-draw agreement with n_iter=50 at 6x less runtime).
+        n_jobs: LightGBM thread count for GrootCV (0 = LightGBM default).
+            Pass the scheduler allocation on HPC to avoid oversubscription.
 
     Returns:
         (selected_df, selected_feature_names)
@@ -3864,6 +3901,16 @@ def _select_multimodal_features(
 
     # Step 4: Feature ranking
     if strategy == "boruta_shap" and len(df.columns) > 1:
+        # DEPRECATED (#96): superseded by grootcv (measured: lower selection
+        # stability, and BorutaShapPlus's numpy<=2.0.0 pin is mutually
+        # exclusive with arfs 3.0's numpy>=2.0.2 — the two cannot coexist).
+        # Kept for reproducibility of pre-migration runs via the
+        # [legacy-boruta] extra.
+        log.warning(
+            "boruta_shap_deprecated",
+            replacement="grootcv",
+            reason="lower selection stability (#96); numpy pin conflicts with arfs 3.0",
+        )
         # BorutaShapPlus pip package (v0.1.3+) is a drop-in fork of BorutaShap.
         # It installs as pip package "BorutaShapPlus" but the importable module
         # is "BorutaShap" (preserving backward-compatible import paths).
@@ -3884,7 +3931,20 @@ def _select_multimodal_features(
             np.NaN = np.nan
             log.info("numpy_nan_shimmed", numpy_version=np.__version__)
 
-        from BorutaShap import BorutaShap  # pip: BorutaShapPlus>=0.1.3
+        try:
+            from BorutaShap import BorutaShap  # pip: BorutaShapPlus>=0.1.3
+        except ImportError:
+            log.error(
+                "boruta_shap_import_failed",
+                hint="pip install kreview[legacy-boruta]",
+                strategy=strategy,
+            )
+            raise ImportError(
+                "boruta_shap is deprecated (#96) and BorutaShapPlus is no longer a "
+                "core dependency. Install with: pip install kreview[legacy-boruta] "
+                "(mutually exclusive with the arfs extra), or use "
+                "--multimodal-selection grootcv."
+            )
         from xgboost import XGBClassifier
 
         log.info("boruta_shap_start", n_features=len(df.columns))
@@ -3956,6 +4016,9 @@ def _select_multimodal_features(
             )
 
         log.info("leshy_start", n_features=len(df.columns))
+        # LightGBM rejects JSON-special chars in feature names (real case: the
+        # FSD chr:coord features) — fit under sanitized names, map back after.
+        df_safe, name_map = _lgbm_safe_columns(df)
         model = LGBMClassifier(
             n_estimators=100,
             max_depth=5,
@@ -3970,8 +4033,8 @@ def _select_multimodal_features(
             importance="shap",
             verbose=0,
         )
-        selector.fit(df, y)
-        confirmed = list(selector.get_feature_names_out())
+        selector.fit(df_safe, y)
+        confirmed = [name_map[c] for c in selector.get_feature_names_out()]
 
         if confirmed:
             log.info(
@@ -4014,17 +4077,29 @@ def _select_multimodal_features(
                 "Install with: pip install kreview[arfs]"
             )
 
-        log.info("grootcv_start", n_features=len(df.columns))
-        # GrootCV uses its own internal LightGBM — no external estimator needed
+        log.info(
+            "grootcv_start",
+            n_features=len(df.columns),
+            cutoff=cutoff,
+            n_iter=n_iter,
+            n_jobs=n_jobs,
+        )
+        # LightGBM rejects JSON-special chars in feature names (real case: the
+        # FSD chr:coord features) — fit under sanitized names, map back after.
+        df_safe, name_map = _lgbm_safe_columns(df)
+        # GrootCV uses its own internal LightGBM — no external estimator needed.
+        # Defaults cutoff=3.0 / n_iter=10 are measured (#96): the cutoff sweep and
+        # the n_iter agreement check on the real v0.0.29 matrices.
         selector = GrootCV(
             objective="binary",
-            cutoff=1,
+            cutoff=cutoff,
             n_folds=5,
-            n_iter=50,
+            n_iter=n_iter,
+            n_jobs=n_jobs,
             silent=True,
         )
-        selector.fit(df, y)
-        confirmed = list(selector.get_feature_names_out())
+        selector.fit(df_safe, y)
+        confirmed = [name_map[c] for c in selector.get_feature_names_out()]
 
         if confirmed:
             log.info(
@@ -4092,6 +4167,9 @@ def multimodal_eval(
     top_percentile: float = 10.0,
     random_state: int = 42,
     multimodal_selection: str = "mi",
+    selection_cutoff: float = 3.0,
+    selection_n_iter: int = 10,
+    selection_n_jobs: int = 0,
 ) -> dict:
     """Cross-evaluator multimodal evaluation, run in a single process.
 
@@ -4170,6 +4248,9 @@ def multimodal_eval(
             super_matrix_path=super_matrix_path,
             multimodal_selection=multimodal_selection,
             top_percentile=top_percentile,
+            selection_cutoff=selection_cutoff,
+            selection_n_iter=selection_n_iter,
+            selection_n_jobs=selection_n_jobs,
             random_state=random_state,
             output_dir=work_dir,
         )
@@ -4294,6 +4375,9 @@ def multimodal_prep(
     *,
     multimodal_selection: str = "mi",
     top_percentile: float = 10.0,
+    selection_cutoff: float = 3.0,
+    selection_n_iter: int = 10,
+    selection_n_jobs: int = 0,
     random_state: int = 42,
     output_dir: str | Path = ".",
 ) -> dict:
@@ -4307,8 +4391,12 @@ def multimodal_prep(
         results_dir: Directory with ``*_model_results.json`` files.
         super_matrix_path: Optional path to ``super_matrix.parquet``.
         multimodal_selection: Feature selection strategy for raw features
-            ('mi', 'boruta_shap', 'leshy', or 'grootcv').
+            ('mi', 'grootcv', 'leshy', or the deprecated 'boruta_shap').
         top_percentile: Top N% features to retain after MI ranking.
+        selection_cutoff: GrootCV shadow-importance divisor (#96 default 3.0).
+        selection_n_iter: GrootCV shadow-test iterations (#96 default 10).
+        selection_n_jobs: LightGBM threads for GrootCV (0 = library default;
+            pass the scheduler allocation on HPC).
         random_state: Random seed.
         output_dir: Directory to write output files.
 
@@ -4419,6 +4507,9 @@ def multimodal_prep(
             top_percentile=top_percentile,
             strategy=multimodal_selection,
             random_state=random_state,
+            cutoff=selection_cutoff,
+            n_iter=selection_n_iter,
+            n_jobs=selection_n_jobs,
         )
 
         if X_selected.empty:
@@ -4463,6 +4554,8 @@ def multimodal_prep(
         "best_single_auc": best_single_auc,
         "multimodal_selection": multimodal_selection,
         "top_percentile": top_percentile,
+        "selection_cutoff": selection_cutoff,
+        "selection_n_iter": selection_n_iter,
         "has_raw_features": raw_shape is not None,
         "raw_shape": list(raw_shape) if raw_shape is not None else None,
     }

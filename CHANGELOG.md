@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Multimodal all-relevant selection migrated to arfs 3.0 GrootCV** (#96, literature-backed
+  and validated on the real v0.0.29 cohort). `grootcv` is the recommended
+  `--multimodal-selection` for production (`run_hpc.sh` now uses it): measured selection
+  stability Nogueira **0.85 vs 0.65** for boruta_shap (pairwise Jaccard 0.77 vs 0.53) with
+  equivalent-or-better downstream AUC and sensitivity, and boruta's full-train selection a
+  strict subset of grootcv's. New evidence-based knobs, exposed CLI→Nextflow:
+  `--selection-cutoff`/`multimodal_selection_cutoff` (default 3.0 — the #96 sweep winner:
+  dominates boruta_shap on stability, AUC and sens@100spec-healthy simultaneously) and
+  `--selection-n-iter`/`multimodal_selection_n_iter` (default 10 — 0.96 selection agreement
+  with n_iter=50 at ~6× less runtime; ~40 s on the production 944-feature super-matrix).
+  GrootCV's LightGBM threads are pinned to `task.cpus` in the Nextflow module
+  (oversubscription guard). Both container images now ship the `arfs` extra.
+- **`boruta_shap` is deprecated** and BorutaShapPlus left the core dependencies: it is
+  **mutually uninstallable** with arfs 3.0 (BorutaShapPlus pins `numpy<=2.0.0`, arfs 3.0
+  needs `numpy>=2.0.2`). Reproducing pre-#96 runs requires the new `[legacy-boruta]` extra
+  (conflicts with `[arfs]` by construction); using the strategy logs a deprecation warning.
+  The `mi` default of `--multimodal-selection` is unchanged; flipping the default to
+  grootcv is deferred to the tabicl-inclusive confirmation run (#96 rider).
+
+### Fixed
+- **arfs strategies no longer crash on genomic-coordinate feature names** (#96, found on
+  the real v0.0.29 super matrix): LightGBM rejects feature names with JSON-special
+  characters (`FsdGenomewide__fsd_gw_chr8:46838888-…_ratio`), so Leshy/GrootCV now fit
+  under sanitized names and map selections back to the originals
+  (`_lgbm_safe_columns`, collision-guarded). The docker smoke test exercises exactly this
+  case, and the leshy/grootcv strategy tests are real passing tests again (the #91/#92
+  xfails are gone; the boruta_shap test skips visibly unless `[legacy-boruta]` is
+  installed).
+
 ## [0.0.30] - 2026-08-17
 
 Report + rigor release: the reporting layer is rebuilt as one data-driven, PHI-guarded,

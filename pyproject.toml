@@ -14,7 +14,7 @@ keywords = ['nbdev', 'jupyter', 'notebook', 'python']
 classifiers = ["Natural Language :: English", "Intended Audience :: Developers", "Development Status :: 3 - Alpha", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3 :: Only"]
 dependencies = [
     "pandas>=2.0.0,<3",
-    "numpy>=1.24.0,<3",  # <3: NumPy 2.0 removed np.NaN and broke BorutaShap; cap major bumps
+    "numpy>=1.24.0,<3",  # <3: cap major bumps (NumPy 2.0 removed np.NaN and broke deps before)
     "scipy>=1.10.0",
     "scikit-learn>=1.2.0",
     "duckdb>=0.10.0",
@@ -29,16 +29,23 @@ dependencies = [
     "statsmodels>=0.14.0",
     "xgboost>=2.0.0",
     "mrmr-selection>=0.2.8",
-    "BorutaShapPlus>=0.1.3",
 ]
 
 [project.optional-dependencies]
+# NOTE (#96): the `arfs` and `legacy-boruta` extras are MUTUALLY EXCLUSIVE —
+# BorutaShapPlus pins numpy<=2.0.0 while arfs 3.0 requires numpy>=2.0.2, so pip
+# refuses any environment containing both. `arfs` is the supported selector
+# family (GrootCV/Leshy, shipped in the containers); `legacy-boruta` exists only
+# to reproduce pre-#96 boruta_shap runs.
 arfs = [
-    "arfs>=2.3.0",
+    "arfs>=3.0.0",  # 3.0: works with modern sklearn/lightgbm (2.4 did not — #91)
     "lightgbm>=4.0.0",
     # arfs imports the deprecated `pkg_resources`, which setuptools 81 removed. Pin below that
     # so `import arfs` works on Python 3.12+ (a clean 3.12 venv ships no pkg_resources at all).
     "setuptools<81",
+]
+legacy-boruta = [
+    "BorutaShapPlus>=0.1.3",  # deprecated selector (#96); numpy<=2.0.0 — conflicts with arfs
 ]
 jupyter = [
     "jupyter>=1.0.0",
@@ -83,7 +90,7 @@ gpu = [
 # `gpu` is deliberately NOT included: it pulls torch/tabpfn/tabicl and needs CUDA.
 # Install GPU support explicitly with `pip install kreview[all,gpu]`.
 all = [
-    "arfs>=2.3.0",
+    "arfs>=3.0.0",  # 3.0 (see arfs extra note; legacy-boruta deliberately excluded — conflicts)
     "lightgbm>=4.0.0",
     "setuptools<81",   # arfs needs the deprecated pkg_resources (removed in setuptools 81)
     "jupyter>=1.0.0",
