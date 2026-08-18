@@ -10,15 +10,14 @@
     "version": "0.0.31",
     "title": "0.0.31",
     "aliases": [
+      "latest",
       "stable"
     ]
   },
   {
     "version": "0.0.30",
     "title": "0.0.30",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   },
   {
     "version": "0.0.29",
