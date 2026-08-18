@@ -160,6 +160,14 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   -profile iris
 ```
 
+!!! note "GrootCV selection tunables"
+    `--multimodal_selection grootcv` (recommended, #96) accepts two evidence-based
+    knobs whose defaults were measured on the real v0.0.29 cohort:
+    `--multimodal_selection_cutoff` (default 3.0 — shadow-importance divisor, higher
+    admits more features) and `--multimodal_selection_n_iter` (default 10 — shadow-test
+    CV repetitions; 0.96 selection agreement with 50 at ~6× less runtime). LightGBM
+    threads are pinned to the process `task.cpus` automatically.
+
 !!! tip "Targeted Nextflow Execution"
     Just like the vanilla CLI, you can limit the Nextflow computation to specific features! You are allowed to pass the `--features` or `--tier` parameters dynamically through Nextflow:
     ```bash
