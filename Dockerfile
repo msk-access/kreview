@@ -49,7 +49,7 @@ RUN WHL="$(ls /app/*.whl)" && \
 # Install runtime essentials (procps, bash) for Nextflow compatibility
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && apt-get install -y --no-install-recommends \
-    procps bash tzdata && \
+    procps bash tzdata libgomp1 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ensure output directories exist

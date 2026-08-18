@@ -537,7 +537,7 @@ class TestMultimodalFeatureSelection:
         assert set(mapping.values()) == set(df.columns)
         import re as _re
 
-        assert all(not _re.search(r'[^0-9a-zA-Z_]', c) for c in safe.columns)
+        assert all(not _re.search(r"[^0-9a-zA-Z_]", c) for c in safe.columns)
 
     def test_grootcv_kwargs_reach_selector(self, monkeypatch):
         """cutoff/n_iter/n_jobs must flow from the dispatch into GrootCV.
