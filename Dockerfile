@@ -39,8 +39,11 @@ LABEL org.opencontainers.image.title="kreview" \
 WORKDIR /app
 
 # Copy wheel from builder and install (CPU-only, no GPU extras)
+# The [arfs] extra ships GrootCV/Leshy — the default multimodal all-relevant
+# selectors since #96 (BorutaShapPlus left core; it cannot coexist with arfs 3.0).
 COPY --from=builder /src/dist/*.whl /app/
-RUN pip install --no-cache-dir /app/*.whl && \
+RUN WHL="$(ls /app/*.whl)" && \
+    pip install --no-cache-dir "${WHL}[arfs]" && \
     rm /app/*.whl
 
 # Install runtime essentials (procps, bash) for Nextflow compatibility
@@ -95,7 +98,7 @@ WORKDIR /app
 # workflow, not by image-size tricks.
 COPY --from=builder /src/dist/*.whl /app/
 RUN WHL="$(ls /app/*.whl)" && \
-    pip3 install --no-cache-dir "${WHL}[gpu]" && \
+    pip3 install --no-cache-dir "${WHL}[gpu,arfs]" && \
     rm /app/*.whl
 
 # Ensure output directories exist

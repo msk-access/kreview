@@ -149,7 +149,7 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --run_gpu_eval true \
   --gpu_models "tabpfn,tabpfn_ft,tabicl,tabicl_ft" \
   --run_multimodal_eval true \
-  --multimodal_selection boruta_shap \
+  --multimodal_selection grootcv \
   --multimodal_gpu_models "tabpfn_ft,tabicl_ft" \
   --run_ablation true \
   --ablation_inner_folds 3 \

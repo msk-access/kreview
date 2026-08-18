@@ -293,6 +293,10 @@ d = {
                 "eval_engine.html#_inner_cv_sensitivity",
                 "kreview/eval_engine.py",
             ),
+            "kreview.eval_engine._lgbm_safe_columns": (
+                "eval_engine.html#_lgbm_safe_columns",
+                "kreview/eval_engine.py",
+            ),
             "kreview.eval_engine._load_feature_cap": (
                 "eval_engine.html#_load_feature_cap",
                 "kreview/eval_engine.py",

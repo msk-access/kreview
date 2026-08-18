@@ -437,12 +437,6 @@ class TestMultimodalFeatureSelection:
 
         assert _VALID_MULTIMODAL_STRATEGIES == {"mi", "boruta_shap", "leshy", "grootcv"}
 
-    @pytest.mark.xfail(
-        reason="third-party incompatibility (#91): arfs 2.4 calls sklearn check_X_y("
-        "force_all_finite=...), removed in sklearn 1.9. Not a kreview bug (dispatch is correct); "
-        "passes on older sklearn. xfail keeps it VISIBLE instead of the old skip.",
-        strict=False,
-    )
     def test_leshy_passes_through(self):
         """Leshy strategy should not crash on small data."""
         try:
@@ -468,12 +462,6 @@ class TestMultimodalFeatureSelection:
         assert len(names) > 0
         assert len(names) <= p
 
-    @pytest.mark.xfail(
-        reason="third-party incompatibility (#91): arfs 2.4 passes categorical_feature to "
-        "lightgbm 4.x train(), which removed it. Not a kreview bug; kreview's strategy call is "
-        "correct (leshy, same dep, passes). xfail keeps it VISIBLE instead of the old skip.",
-        strict=False,
-    )
     def test_grootcv_passes_through(self):
         """GrootCV strategy should not crash on small data."""
         try:
@@ -494,7 +482,100 @@ class TestMultimodalFeatureSelection:
         X.iloc[:50, 0] += 3.0
 
         selected_df, names = _select_multimodal_features(
-            X, y, top_percentile=50.0, strategy="grootcv"
+            X, y, top_percentile=50.0, strategy="grootcv", n_iter=3
         )
         assert len(names) > 0
         assert len(names) <= p
+
+    def test_grootcv_survives_lgbm_hostile_names(self):
+        """Feature names with JSON-special chars (real case: FSD chr:coord names)
+        must not crash LightGBM, and the selection must return ORIGINAL names.
+
+        Found on the real v0.0.29 super matrix (#96): four
+        ``Fsd*__..._chr8:46838888-146354021_..._ratio`` columns crashed
+        ``lgb.train`` with "Do not support special JSON characters in feature
+        name" — a production blocker the sanitize-and-map-back fix removes.
+        """
+        try:
+            import arfs  # noqa: F401
+            import lightgbm  # noqa: F401
+        except ImportError:
+            pytest.skip("arfs/lightgbm not installed")
+        from kreview.eval_engine import _select_multimodal_features
+
+        np.random.seed(42)
+        cols = [f"f{i}" for i in range(9)] + [
+            "FsdGenomewide__fsd_gw_chr8:46838888-146354021_143_166_ratio"
+        ]
+        X = pd.DataFrame(np.random.randn(100, 10), columns=cols)
+        y = np.array([0] * 50 + [1] * 50)
+        X.iloc[:50, 9] += 3.0  # the hostile-named column carries the signal
+
+        _sel, names = _select_multimodal_features(
+            X, y, top_percentile=50.0, strategy="grootcv", n_iter=3
+        )
+        assert names, "grootcv selected nothing"
+        assert all(n in cols for n in names), f"non-original names returned: {names}"
+        assert any("chr8:" in n for n in names), "signal column lost in name mapping"
+
+    def test_lgbm_safe_columns_sanitizes_and_maps_back(self):
+        """The sanitizer must neutralize LightGBM-hostile characters, keep the
+        rename bijective (collision guard), and preserve original names in the map."""
+        from kreview.eval_engine import _lgbm_safe_columns
+
+        df = pd.DataFrame(
+            columns=[
+                "plain_name",
+                "chr8:123-456_ratio",
+                "chr8_123_456_ratio",  # collides with the sanitized form above
+                'quote"and,comma',
+            ],
+            dtype=float,
+        )
+        safe, mapping = _lgbm_safe_columns(df)
+        assert len(set(safe.columns)) == len(df.columns), "collision not resolved"
+        assert set(mapping.values()) == set(df.columns)
+        import re as _re
+
+        assert all(not _re.search(r'[^0-9a-zA-Z_]', c) for c in safe.columns)
+
+    def test_grootcv_kwargs_reach_selector(self, monkeypatch):
+        """cutoff/n_iter/n_jobs must flow from the dispatch into GrootCV.
+
+        Uses a fake arfs module so this plumbing check runs in EVERY environment,
+        not only the test-strategies job with arfs installed.
+        """
+        import sys
+        import types
+
+        from kreview.eval_engine import _select_multimodal_features
+
+        captured = {}
+
+        class FakeGrootCV:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def fit(self, X, y):
+                self._cols = list(X.columns[:2])
+                return self
+
+            def get_feature_names_out(self):
+                return self._cols
+
+        fake = types.ModuleType("arfs.feature_selection")
+        fake.GrootCV = FakeGrootCV
+        fake_arfs = types.ModuleType("arfs")
+        monkeypatch.setitem(sys.modules, "arfs", fake_arfs)
+        monkeypatch.setitem(sys.modules, "arfs.feature_selection", fake)
+
+        np.random.seed(0)
+        X = pd.DataFrame(np.random.randn(40, 6), columns=[f"g{i}" for i in range(6)])
+        y = np.array([0] * 20 + [1] * 20)
+        _sel, names = _select_multimodal_features(
+            X, y, strategy="grootcv", cutoff=2.5, n_iter=7, n_jobs=4
+        )
+        assert captured["cutoff"] == 2.5
+        assert captured["n_iter"] == 7
+        assert captured["n_jobs"] == 4
+        assert names == ["g0", "g1"]

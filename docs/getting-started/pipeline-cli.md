@@ -65,7 +65,7 @@ Common options (see `nextflow/nextflow.config` for the full list):
 | Feature selection | `--strategy mrmr`, `--top_percentile 10` |
 | Nested-CV ablation | `--run_ablation true` |
 | GPU models | `--run_gpu_eval true --gpu_models "tabpfn,tabicl"` |
-| Multimodal stacking | `--run_multimodal_eval true --multimodal_selection boruta_shap` |
+| Multimodal stacking | `--run_multimodal_eval true --multimodal_selection grootcv` |
 | SHAP / dashboards | `--shap_samples 500`, `--shap_features 10`, `--cvd_safe true` |
 | I/O-constrained hosts | `--chunk_size 100` |
 | Skip the report | `--skip_report true` |
@@ -128,7 +128,7 @@ kreview fuse --output-dir selected/
 kreview eval multimodal run \
     --results-dir results/ \
     --super-matrix selected/super_matrix.parquet \
-    --multimodal-selection boruta_shap \
+    --multimodal-selection grootcv \
     --output results/
 
 # OR: Decomposed multimodal (HPC-optimized — parallelizable per-model)

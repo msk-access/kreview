@@ -57,13 +57,13 @@ jobs:
         run: python -m build
 
   # ── Multimodal strategy tests (arfs extra installed) ────────────────────────
-  # #63: leshy/grootcv/boruta_shap skipped in EVERY environment because their deps were never
-  # installed, so the strategy code paths were never exercised ("looks protected, isn't" — the
-  # same class that hid the original BorutaShap outage). This job installs the arfs extra so the
-  # tests actually RUN. Un-skipping revealed all three are broken against modern deps (arfs vs
-  # sklearn 1.9 / lightgbm 4.x — #91; BorutaShap->shap — #92), so they are xfail(strict=False):
-  # the breakage is now VISIBLE and tracked here rather than invisibly skipped, and the job still
-  # proves kreview's strategy dispatch reaches each library. xfails xpass (alert) when deps are fixed.
+  # #63: leshy/grootcv skipped in EVERY environment because their deps were never installed,
+  # so the strategy code paths were never exercised ("looks protected, isn't" — the same class
+  # that hid the original BorutaShap outage). This job installs the arfs extra so the tests
+  # actually RUN. Since #96 the extra is arfs>=3.0 (compatible with modern sklearn/lightgbm),
+  # the former xfails are real passing tests, and grootcv is the recommended selector — this
+  # job is the gate that keeps it working. boruta_shap is deprecated behind the mutually
+  # exclusive [legacy-boruta] extra, so its test skips here (visible, not silent).
   test-strategies:
     runs-on: ubuntu-latest
     steps:
@@ -204,23 +204,26 @@ jobs:
         if: matrix.target == 'cpu'
         run: |
           docker run --rm kreview:test-cpu --help
-          docker run --rm --entrypoint python kreview:test-cpu -c "import BorutaShap, xgboost, shap, plotly, kreview.report_data; print('kreview imports OK')"
+          docker run --rm --entrypoint python kreview:test-cpu -c "import arfs, lightgbm, xgboost, shap, plotly, kreview.report_data; print('kreview imports OK')"
 
-      # run_hpc.sh runs `--multimodal_selection boruta_shap`, so the RELEASE container must not
-      # just IMPORT BorutaShap but actually RUN the strategy end to end — the shap/xgboost/scipy
-      # /numpy runtime break only surfaces on execution, not import. Verified on the v0.0.29 image
-      # (numpy 2.0.0 / sklearn 1.9 / xgboost 3.3 / shap 0.52; kreview's binom_test + numpy-NaN
-      # shims bridge the compat). This is the guarantee that the shipped container works.
-      - name: Smoke test cpu image — boruta_shap runs end to end (run_hpc.sh workflow)
+      # run_hpc.sh runs `--multimodal_selection grootcv` (#96), so the RELEASE container must
+      # not just IMPORT arfs but actually RUN the strategy end to end — dep breaks (shap/
+      # lightgbm/numpy) only surface on execution, not import. The special-character feature
+      # name exercises the LightGBM name-sanitization fix (real case: FSD chr:coord names
+      # crashed lgb.train on the v0.0.29 super matrix). This is the guarantee that the
+      # shipped container works for the production workflow.
+      - name: Smoke test cpu image — grootcv runs end to end (run_hpc.sh workflow)
         if: matrix.target == 'cpu'
         run: |
           docker run --rm --entrypoint python kreview:test-cpu - <<'PY'
           import numpy as np, pandas as pd
           from kreview.eval_engine import _select_multimodal_features
           rng = np.random.RandomState(42)
-          X = pd.DataFrame(rng.randn(100, 10), columns=[f"f{i}" for i in range(10)])
+          cols = [f"f{i}" for i in range(9)] + ["Fsd__chr8:46838888-146354021_ratio"]
+          X = pd.DataFrame(rng.randn(100, 10), columns=cols)
           y = np.array([0] * 50 + [1] * 50); X.iloc[:50, 0] += 3.0
-          _sel, names = _select_multimodal_features(X, y, top_percentile=50.0, strategy="boruta_shap")
-          assert len(names) > 0, "boruta_shap selected no features"
-          print(f"boruta_shap OK in container: {len(names)} features -> {names}")
+          _sel, names = _select_multimodal_features(X, y, top_percentile=50.0, strategy="grootcv", n_iter=3)
+          assert len(names) > 0, "grootcv selected no features"
+          assert all(n in cols for n in names), f"selection returned non-original names: {names}"
+          print(f"grootcv OK in container: {len(names)} features -> {names}")
           PY
