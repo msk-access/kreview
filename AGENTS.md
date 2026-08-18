@@ -32,8 +32,9 @@ stage subcommands. Supported Nextflow: **v25–v26**. Full module map:
    Never hand-edit `kreview/*.py` and consider it done. Always end with export+black
    producing **zero git diff**. **Never put code above the first `# %% ../nbs/…` marker** —
    that header is regenerated and `nbdev.sync` cannot rescue it. Exceptions (no notebook,
-   edit directly): `kreview/scoreboard.py`, `kreview/feature_cards.py`,
-   `kreview/reproducibility.py`. nbdev and black are **pinned exactly** in the `[dev]` extra because they generate
+   edit directly): `kreview/reproducibility.py` only (#108 folded scoreboard.py into
+   `nbs/07_scoreboard.ipynb`; feature_cards.py was deleted by #79).
+   nbdev and black are **pinned exactly** in the `[dev]` extra because they generate
    committed source — install with `pip install -e .[dev]`, never bare `pip install nbdev`.
    Enforced by `.claude/hooks/nbdev-noop-guard.py`.
    See `.agents/skills/nbdev-patterns/SKILL.md`.
