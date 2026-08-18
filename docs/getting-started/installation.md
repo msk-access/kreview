@@ -60,6 +60,14 @@ If you only need specific toolchains instead of the full `all` suite:
 - **Jupyter Only**: `pip install -e '.[jupyter]'`
 - **Testing Only**: `pip install -e '.[test]'`
 - **Docs Only**: `pip install -e '.[docs]'`
+- **Multimodal selectors (GrootCV/Leshy)**: `pip install -e '.[arfs]'` — required for
+  `--multimodal-selection grootcv|leshy` (the containers ship it by default).
+
+!!! warning "`[arfs]` and `[legacy-boruta]` are mutually exclusive"
+    The deprecated `boruta_shap` selector needs `pip install -e '.[legacy-boruta]'`, which
+    **cannot coexist** with the `arfs` extra: BorutaShapPlus pins `numpy<=2.0.0` while
+    arfs 3.0 requires `numpy>=2.0.2` — pip refuses any environment containing both.
+    `legacy-boruta` exists only to reproduce pre-#96 runs.
 
 ### 3. Install Git Hooks
 
