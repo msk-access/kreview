@@ -46,7 +46,6 @@ def nogueira(sets: list[set[str]], d: int) -> float:
 
 def main() -> None:
     vdir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent
-    spec = json.loads((vdir / "resample_indices.json").read_text())
     strategies = [
         p.name for p in vdir.iterdir() if p.is_dir() and list(p.glob("draw_*.json"))
     ]
