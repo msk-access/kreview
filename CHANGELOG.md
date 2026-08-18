@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.31] - 2026-08-18
+
+GrootCV migration release (#96): the multimodal all-relevant selector moves from the
+unmaintained BorutaShapPlus to arfs 3.0 GrootCV, validated head-to-head on the real
+v0.0.29 cohort before a line of pipeline code changed. `run_hpc.sh` now runs grootcv —
+the next production run doubles as the tabicl-inclusive confirmation before the library
+default flips.
 
 ### Changed
 - **Multimodal all-relevant selection migrated to arfs 3.0 GrootCV** (#96, literature-backed
