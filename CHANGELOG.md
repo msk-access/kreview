@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.32] - 2026-08-18
+
+Scoreboard-contract release (#108, closing #107): the scoreboard stops fabricating values
+for inputs it never saw. Cut back-to-back with v0.0.31 so the #96 confirmation run on iris
+exercises the GrootCV migration and the honest scoreboard in a single production run.
 
 ### Changed
 - **The scoreboard is rebuilt on an explicit, versioned contract** (#108, found via #107:
