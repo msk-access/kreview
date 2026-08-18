@@ -1474,6 +1474,28 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#kreview.scoreboard.load_selection_qc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_selection_qc
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.scoreboard.extract_evaluator_summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_evaluator_summary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.scoreboard.build_scoreboard" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1599,6 +1621,28 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#kreview.scoreboard.load_selection_qc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_selection_qc
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.scoreboard.extract_evaluator_summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extract_evaluator_summary
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#kreview.scoreboard.build_scoreboard" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1704,10 +1748,9 @@
 
     <div class="doc doc-contents first">
 
-        <p>Cross-evaluator scoreboard aggregation.</p>
-<p>Reads all *_model_results.json files from the output directory
-and produces a unified ranking table comparing <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>, sensitivity,
-and specificity across all evaluators.</p>
+        <p>Cross-evaluator scoreboard on an explicit, versioned contract (#108): every field is
+sourced from a named artifact or explicitly unknown — never a fabricated default.</p>
+<p>Docs: https://msk-access.github.io/kreview/scoreboard.html.md</p>
 
 
 
@@ -1732,6 +1775,94 @@ and specificity across all evaluators.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="kreview.scoreboard.load_selection_qc" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_selection_qc</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load per-evaluator selection-<abbr title="Quality Control">QC</abbr> sidecars (<code>&lt;evaluator&gt;_selection_qc.json</code>).</p>
+<p>The select stage writes these next to the selected matrices
+(<code>matrices/selected/</code> in the published outdir); the Nextflow scoreboard
+process stages them flat into its work dir. Both layouts are searched.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="dict">dict</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dict keyed by evaluator name. Unreadable files are logged and skipped</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="dict">dict</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>(the affected evaluator then carries <code>selection_method="unknown"</code> plus a</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="dict">dict</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>missing_fields</code> entry — visible, never defaulted).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.scoreboard.extract_evaluator_summary" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">extract_evaluator_summary</span><span class="p">(</span><span class="n">evaluator</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">selection_qc</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Extract one scoreboard row from a merged model-results dict + <abbr title="Quality Control">QC</abbr> sidecar.</p>
+<p>THE single place that knows the model-results key shapes for summary fields
+(#108) — report_data consumes the resulting row rather than re-deriving these.</p>
+<p>Contract: every <code>SCOREBOARD_COLUMNS</code> field is either sourced from a named
+key/artifact or explicitly unknown (NaN / None / <code>"unknown"</code>) <strong>and</strong> listed
+in <code>missing_fields</code>. No plausible-looking defaults: absence must be
+distinguishable from a measured value (fail loud, not to 0.0 — invariant #3).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="kreview.scoreboard.build_scoreboard" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">build_scoreboard</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span></code>
 
@@ -1741,8 +1872,10 @@ and specificity across all evaluators.</p>
     <div class="doc doc-contents ">
 
         <p>Aggregate all evaluator model results into a ranked scoreboard.</p>
-<p>Scans for <code>*_model_results.json</code> files, extracts key metrics, and
-returns a DataFrame sorted by best <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> descending.</p>
+<p>Scans <code>output_dir</code> for <code>*_model_results.json</code> (CPU+GPU, merged per
+evaluator) and <code>*_selection_qc.json</code> sidecars, and returns one row per
+evaluator with the fixed <code>SCOREBOARD_COLUMNS</code> schema, sorted by
+<code>best_auc</code> descending.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1765,7 +1898,9 @@ returns a DataFrame sorted by best <abbr title="Area Under the Receiver Operatin
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Path containing model result JSON files.</p>
+                <p>Directory containing the result JSONs (flat, as staged by
+the Nextflow scoreboard process, or a published outdir — <abbr title="Quality Control">QC</abbr> sidecars
+are also found under <code>matrices/selected/</code>).</p>
               </div>
             </td>
             <td>
@@ -1791,7 +1926,7 @@ returns a DataFrame sorted by best <abbr title="Area Under the Receiver Operatin
             </td>
             <td>
               <div class="doc-md-description">
-                <p>DataFrame with one row per evaluator, sorted by <code>best_auc</code>.</p>
+                <p>DataFrame with the full contract schema. Empty DataFrame (with the</p>
               </div>
             </td>
           </tr>
@@ -1801,7 +1936,7 @@ returns a DataFrame sorted by best <abbr title="Area Under the Receiver Operatin
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Empty DataFrame if no results are found.</p>
+                <p>contract columns) if no results are found.</p>
               </div>
             </td>
           </tr>
