@@ -80,7 +80,7 @@ jobs:
           pip install -e ".[arfs,test]"
       - name: Assert strategy deps are importable (fail loud if the extra breaks)
         run: python -c "import arfs, lightgbm; print('arfs', arfs.__version__, 'lightgbm', lightgbm.__version__)"
-      - name: Run multimodal strategy tests (leshy runs; grootcv/boruta_shap xfail)
+      - name: Run multimodal strategy tests (leshy + grootcv real passes; boruta_shap skips)
         run: pytest tests/test_selection.py -v -rxs -k "leshy or grootcv or boruta_shap or strategy"
 
   # ── Secret + PHI scan ───────────────────────────────────────────────────────
