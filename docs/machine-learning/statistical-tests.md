@@ -182,7 +182,7 @@ where $X$ is controlled by `--top-percentile` (default: 10%). The **union** ensu
 
 ## Multimodal Selection (v0.0.11+)
 
-When aggregating multiple feature sets in `kreview eval multimodal`, the pipeline offers two higher-order selection strategies via `--multimodal-selection`. These operate on the **super-matrix** (all evaluators fused), which can contain hundreds of features.
+When aggregating multiple feature sets in `kreview eval multimodal`, the pipeline offers several higher-order selection strategies via `--multimodal-selection` (`mi`, `grootcv`, `leshy`, and the deprecated `boruta_shap`). These operate on the **super-matrix** (all evaluators fused), which can contain hundreds of features.
 
 ### Mutual Information (`mi`) [Default]
 
@@ -193,11 +193,37 @@ $$\text{Selected} = \text{Top}_K\bigl(\text{MI}(f, y)\bigr) \quad \forall f \in 
 - **Strengths**: Fast ($O(N)$), captures non-linear dependencies, no model training required.
 - **Weakness**: Does not consider feature-feature interactions or redundancy.
 
-### Boruta-SHAP (`boruta_shap`)
+### GrootCV (`grootcv`) [Recommended]
 
-An interaction-aware selection method using the [BorutaShap](https://github.com/Ekeany/Boruta-Shap) algorithm, which wraps a tree-based model (XGBoost) with SHAP importance values and a rigorous statistical test.
+An interaction-aware, **cross-validated** all-relevant selector from the maintained
+[arfs](https://github.com/ThomasBury/arfs) library (`pip install kreview[arfs]`). Like the
+Boruta family it tests real features against shuffled "shadow" copies, but the importance
+statistic is aggregated over repeated LightGBM cross-validation with SHAP values, which is
+what makes its selections *reproducible*: on the real v0.0.29 cohort, GrootCV's selection
+stability across patient-grouped resamples was **Nogueira 0.85 vs 0.65 for boruta_shap**
+(pairwise Jaccard 0.77 vs 0.53), with equivalent-or-better downstream AUC and sensitivity —
+the full measurement lives on [#96](https://github.com/msk-access/kreview/issues/96).
 
-#### How Boruta-SHAP Works
+Tunables (defaults are measured, not guessed — see the #96 cutoff sweep and n_iter
+agreement check):
+
+| Flag / NF param | Default | Meaning |
+|---|---|---|
+| `--selection-cutoff` / `multimodal_selection_cutoff` | 3.0 | Shadow-importance divisor; higher admits more features. 3.0 dominated boruta_shap on stability, AUC and sensitivity simultaneously |
+| `--selection-n-iter` / `multimodal_selection_n_iter` | 10 | Shadow-test CV repetitions. 0.96 selection agreement with 50 iterations at ~6× less runtime (~40s on the production super-matrix) |
+| `--selection-n-jobs` | `task.cpus` (Nextflow) | LightGBM threads — pinned to the scheduler allocation on HPC |
+
+`leshy` (same library, single-run Boruta evolution) remains available; it selects larger
+sets but with the lowest stability of the three (Nogueira 0.50).
+
+### Boruta-SHAP (`boruta_shap`) [Deprecated]
+
+The pre-#96 selector, retained only to reproduce old runs. Requires
+`pip install kreview[legacy-boruta]`, which is **mutually exclusive** with the `arfs` extra
+(BorutaShapPlus pins `numpy<=2.0.0`; arfs 3.0 requires `numpy>=2.0.2`). It wraps XGBoost
+with SHAP importance and a shadow-feature statistical test.
+
+#### How the shadow-feature test works (both selectors)
 
 ```mermaid
 flowchart TB
@@ -233,15 +259,18 @@ flowchart TB
 
 #### When to Choose Each Strategy
 
-| Criterion | `mi` (Default) | `boruta_shap` |
-|-----------|----------------|---------------|
-| **Speed** | ~1 second | ~2-5 minutes (50 XGBoost fits) |
-| **Feature interactions** | ❌ Ignores | ✅ Captures via SHAP |
-| **Redundancy handling** | ❌ May select correlated features | ✅ Implicitly handled (shadow comparison) |
-| **Statistical rigor** | Ranking only (no p-values) | Hypothesis test vs null distribution |
-| **Best for** | Quick exploration, small feature sets | Final production models, large super-matrices |
-| **Risk** | May overfit with redundant features | May reject valid features in small cohorts |
+| Criterion | `mi` (Default) | `grootcv` (Recommended) | `boruta_shap` (Deprecated) |
+|-----------|----------------|-------------------------|----------------------------|
+| **Speed** | ~1 second | ~40s on the production super-matrix (n_iter=10) | ~2-5 minutes (50 XGBoost fits) |
+| **Feature interactions** | ❌ Ignores | ✅ Captures via SHAP | ✅ Captures via SHAP |
+| **Selection stability** (measured, #96) | — | ✅ Nogueira 0.85 | ❌ Nogueira 0.65 |
+| **Statistical rigor** | Ranking only | CV-aggregated shadow test | Single-run shadow test |
+| **Maintained deps** | sklearn | ✅ arfs 3.0 (modern sklearn/lightgbm) | ❌ unmaintained; numpy pin conflicts with arfs |
+| **Best for** | Quick exploration | Production runs | Reproducing pre-#96 runs only |
 
 !!! tip "Recommendation"
-    Use `--multimodal-selection mi` for rapid iteration during development. Switch to `--multimodal-selection boruta_shap` for final production runs where model robustness matters more than speed.
+    Use `--multimodal-selection mi` for rapid iteration during development. Use
+    `--multimodal-selection grootcv` for production runs — its selections are the most
+    reproducible of the three (measured on the real cohort, #96), which is the property
+    that matters most for high-dimensional, correlated cfDNA features.
 

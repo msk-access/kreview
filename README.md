@@ -137,7 +137,9 @@ open output/reports/kreview_report.html
 | `hybrid_union` | Single-evaluator | Top-X% AUC ∪ Top-X% MI | Legacy |
 | Nested CV ablation | Single-evaluator | Inner CV on feature group subsets → best subset per model | Optional (`--run-ablation`) |
 | `mi` | Multimodal | Mutual Information top-K ranking | ✅ |
-| `boruta_shap` | Multimodal | SHAP importance vs shadow variables (50 trials) | Optional |
+| `grootcv` | Multimodal | Cross-validated LightGBM/SHAP vs shadow variables (arfs) — most stable selection measured (#96) | Recommended |
+| `leshy` | Multimodal | Boruta evolution with LightGBM/SHAP (arfs) | Optional |
+| `boruta_shap` | Multimodal | SHAP importance vs shadow variables (50 XGBoost trials) | Deprecated (#96, `[legacy-boruta]` extra) |
 
 See [Statistical Evaluation](https://msk-access.github.io/kreview/machine-learning/statistical-tests/) for full documentation.
 

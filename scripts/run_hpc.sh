@@ -120,7 +120,7 @@ nextflow run "${KREVIEW_REPO}" \
   --run_gpu_eval            true \
   --gpu_models              "${GPU_MODELS}" \
   --run_multimodal_eval     true \
-  --multimodal_selection    boruta_shap \
+  --multimodal_selection    grootcv \
   --multimodal_gpu_models   "${GPU_MODELS}" \
   --run_ablation            true \
   --ablation_inner_folds    3 \

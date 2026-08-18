@@ -15,7 +15,6 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
 - `nextflow/workflows/kreview_eval.nf` — Pipeline DAG (monolithic or multistage)
 - `nextflow/workflows/kreview_label.nf` — Standalone label-only workflow
 - `nextflow/modules/local/kreview/` — Individual process modules:
-    - `run.nf` — Monolithic mode (backward compatible)
     - `label.nf` — ctDNA labeling (runs once, shared across extractors)
     - `extract.nf` — Per-evaluator feature extraction (accepts `--labels`)
     - `select_single.nf` — Per-evaluator feature scoring + mRMR/hybrid-union selection
@@ -26,13 +25,12 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
     - `merge_ablation.nf` — Merge CPU + GPU ablation → `best_subset.json` (v0.0.20+)
     - `fuse.nf` — Super-matrix construction (all evaluators merged)
     - `scoreboard.nf` — Cross-evaluator scoreboard aggregation (v0.0.15)
-    - `eval_multimodal.nf` — **[LEGACY]** Monolithic cross-evaluator stacking via `kreview eval multimodal run` (kept for standalone testing)
-    - `multimodal_prep.nf` — Stacking matrix + feature selection (v0.0.18+)
+    - `multimodal_prep.nf` — Stacking matrix + raw-feature selection (v0.0.18+; GrootCV recommended, #96)
     - `multimodal_single.nf` — Per-model stacking CV, CPU + GPU variants (v0.0.18+)
-    - `multimodal_ablation.nf` — Feature ablation analysis (v0.0.18+)
+    - `multimodal_ablation.nf` — Leave-one-evaluator-out ablation (v0.0.18+)
     - `multimodal_merge.nf` — Final results aggregation (v0.0.18+)
-    - `report.nf` — HTML dashboard generation (6 inputs: matrices, JSONs, stats, QC, joblib, scoreboard)
-    - `report_multimodal.nf` — Multimodal stacking dashboard
+    - `report.nf` — the single self-contained report page + manifest (#79; the separate
+      `report_multimodal.nf` was folded into it)
 
 The pipeline is a single decomposed DAG with per-evaluator parallelism. (The former
 `monolithic` mode and its `params.pipeline_mode` switch were removed in v0.0.29 — it was a
@@ -64,11 +62,11 @@ graph LR
     S --> H["Report"]:::step
     D --> H
     E --> H
-    MM_MERGE --> I["Report Multimodal"]:::step
+    MM_MERGE --> H
 ```
 
 !!! note "Decomposed Multimodal Pipeline (v0.0.18+)"
-    The multimodal pipeline is decomposed into 4 sequential stages: `prep` → `single ×M` → `ablation` → `merge`. The `single` stage is parallelized across models (CPU and GPU variants). This replaces the legacy monolithic `KREVIEW_EVAL_MULTIMODAL` process, which is kept for standalone testing via `kreview eval multimodal run`.
+    The multimodal pipeline is decomposed into 4 sequential stages: `prep` → `single ×M` → `ablation` → `merge`. The `single` stage is parallelized across models (CPU and GPU variants). (The legacy monolithic process and module were removed with the one-implementation cleanup; `kreview eval multimodal run` remains available for local, single-process runs.)
 
 !!! tip "Feature Group Ablation (v0.0.20+, optional)"
     When `params.run_ablation = true`, the ABLATE stages (amber nodes) run between SELECT and EVAL. They use inner cross-validation (`sensitivity_at_100spec_healthy`) to identify the best feature group subset per model, producing a `best_subset.json` consumed by EVAL. When disabled (default), EVAL runs directly after SELECT.
@@ -124,8 +122,8 @@ outdir/
 ├── scoreboard_combined__all.parquet            # Cross-evaluator ranking (v0.0.15)
 ├── scoreboard_combined__all.csv
 └── reports/
-    ├── AtacOnTarget_dashboard.html
-    └── ...
+    ├── kreview_report.html                     # single self-contained page (#79)
+    └── report_manifest.json                    # what the report covers, always written
 ```
 
 !!! tip "Inspecting Parquet Files on the CLI"
@@ -149,7 +147,7 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --run_gpu_eval true \
   --gpu_models "tabpfn,tabpfn_ft,tabicl,tabicl_ft" \
   --run_multimodal_eval true \
-  --multimodal_selection boruta_shap \
+  --multimodal_selection grootcv \
   --multimodal_gpu_models "tabpfn_ft,tabicl_ft" \
   --run_ablation true \
   --ablation_inner_folds 3 \
@@ -159,6 +157,14 @@ nextflow run /path/to/kreview/nextflow/main.nf \
   --deterministic true \
   -profile iris
 ```
+
+!!! note "GrootCV selection tunables"
+    `--multimodal_selection grootcv` (recommended, #96) accepts two evidence-based
+    knobs whose defaults were measured on the real v0.0.29 cohort:
+    `--multimodal_selection_cutoff` (default 3.0 — shadow-importance divisor, higher
+    admits more features) and `--multimodal_selection_n_iter` (default 10 — shadow-test
+    CV repetitions; 0.96 selection agreement with 50 at ~6× less runtime). LightGBM
+    threads are pinned to the process `task.cpus` automatically.
 
 !!! tip "Targeted Nextflow Execution"
     Just like the vanilla CLI, you can limit the Nextflow computation to specific features! You are allowed to pass the `--features` or `--tier` parameters dynamically through Nextflow:
