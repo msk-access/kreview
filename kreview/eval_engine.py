@@ -189,7 +189,7 @@ def univariate_auc(
         return 0.5
 
     try:
-        min_class = np.bincount(y).min()
+        min_class = int(np.bincount(y).min())
         folds = min(n_folds, min_class)
         if folds < 2:
             return 0.5
@@ -2162,7 +2162,7 @@ def cpu_models(
             return {"error": "Only one class present in target array"}, None, None, None
 
         # Guard for small groups where n_splits doesn't work
-        min_class_counts = np.bincount(y).min()
+        min_class_counts = int(np.bincount(y).min())
         folds = min(n_folds, min_class_counts)
         if folds < 2:
             return (
@@ -3036,7 +3036,7 @@ def gpu_models(
             log.warning("single_class_y", y_unique=np.unique(y).tolist())
             return {"error": "Only one class present in target array"}, {}
 
-        min_class_counts = np.bincount(y).min()
+        min_class_counts = int(np.bincount(y).min())
         folds = min(n_folds, min_class_counts)
         if folds < 2:
             return (
