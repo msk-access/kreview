@@ -34,14 +34,21 @@ META_COLS = ("_label", "_sample_id", "_sample_label")
 def models():
     return {
         "lr": Pipeline(
-            [("s", StandardScaler()), ("m", LogisticRegression(max_iter=1000, random_state=42))]
+            [
+                ("s", StandardScaler()),
+                ("m", LogisticRegression(max_iter=1000, random_state=42)),
+            ]
         ),
         "rf": RandomForestClassifier(
             n_estimators=200, max_depth=6, random_state=42, n_jobs=-1
         ),
         "xgb": XGBClassifier(
-            n_estimators=100, max_depth=5, eval_metric="logloss",
-            random_state=42, verbosity=0, n_jobs=-1,
+            n_estimators=100,
+            max_depth=5,
+            eval_metric="logloss",
+            random_state=42,
+            verbosity=0,
+            n_jobs=-1,
         ),
     }
 
@@ -72,7 +79,9 @@ def main() -> None:
         out[strat_dir.name] = {"n_features": len(sel)}
         cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
         for mname, model in models().items():
-            probs = cross_val_predict(model, X, y, cv=cv, method="predict_proba", n_jobs=1)[:, 1]
+            probs = cross_val_predict(
+                model, X, y, cv=cv, method="predict_proba", n_jobs=1
+            )[:, 1]
             auc = roc_auc_score(y, probs)
             sens, n_h = sens_at_100spec_healthy(y, probs, healthy)
             out[strat_dir.name][mname] = {
@@ -80,7 +89,10 @@ def main() -> None:
                 "sens_at_100spec_healthy": round(sens, 4),
                 "n_healthy": n_h,
             }
-            print(f"[{strat_dir.name}] {mname}: AUC={auc:.4f} sens@100spec-h={sens:.4f} (k={len(sel)})", flush=True)
+            print(
+                f"[{strat_dir.name}] {mname}: AUC={auc:.4f} sens@100spec-h={sens:.4f} (k={len(sel)})",
+                flush=True,
+            )
 
     (vdir / "downstream_results.json").write_text(json.dumps(out, indent=1))
     print("DONE", flush=True)

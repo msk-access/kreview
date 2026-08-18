@@ -47,12 +47,19 @@ def nogueira(sets: list[set[str]], d: int) -> float:
 def main() -> None:
     vdir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent
     spec = json.loads((vdir / "resample_indices.json").read_text())
-    strategies = [p.name for p in vdir.iterdir() if p.is_dir() and list(p.glob("draw_*.json"))]
+    strategies = [
+        p.name for p in vdir.iterdir() if p.is_dir() and list(p.glob("draw_*.json"))
+    ]
 
-    print(f"{'strategy':12s} {'draws':>5s} {'mean k':>7s} {'jaccard mean±sd':>16s} {'nogueira':>9s} {'mean s/draw':>11s}")
+    print(
+        f"{'strategy':12s} {'draws':>5s} {'mean k':>7s} {'jaccard mean±sd':>16s} {'nogueira':>9s} {'mean s/draw':>11s}"
+    )
     for strat in sorted(strategies):
         sets = load_sets(vdir / strat)
-        recs = [json.loads(f.read_text()) for f in sorted((vdir / strat).glob("draw_*.json"))]
+        recs = [
+            json.loads(f.read_text())
+            for f in sorted((vdir / strat).glob("draw_*.json"))
+        ]
         d = recs[0]["n_input_features"]
         jac = [jaccard(a, b) for a, b in itertools.combinations(sets, 2)]
         walls = [r["wall_seconds"] for r in recs]
@@ -65,9 +72,13 @@ def main() -> None:
     for strat in sorted(strategies):
         sets = load_sets(vdir / strat)
         feats = sorted(set().union(*sets))
-        freq = sorted(((sum(f in s for s in sets) / len(sets), f) for f in feats), reverse=True)
+        freq = sorted(
+            ((sum(f in s for s in sets) / len(sets), f) for f in feats), reverse=True
+        )
         always = [f for p, f in freq if p == 1.0]
-        print(f"\n[{strat}] {len(always)} features selected in 100% of draws; top 15 by frequency:")
+        print(
+            f"\n[{strat}] {len(always)} features selected in 100% of draws; top 15 by frequency:"
+        )
         for p, f in freq[:15]:
             print(f"   {p:5.0%}  {f}")
 
