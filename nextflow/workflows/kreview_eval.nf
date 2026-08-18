@@ -274,8 +274,13 @@ workflow KREVIEW_EVAL {
             .collect()
         : ch_cpu_jsons
 
-    // Step 4d: Build scoreboard (needs all JSONs)
-    KREVIEW_SCOREBOARD(ch_all_jsons)
+    // Step 4d: Build scoreboard (needs all JSONs + the selection-QC sidecars — #108:
+    // selection columns are sourced from the sidecars or explicitly "unknown", never
+    // the legacy default label)
+    KREVIEW_SCOREBOARD(
+        ch_all_jsons,
+        KREVIEW_SELECT_SINGLE.out.selection_qc.collect().ifEmpty(file('NO_SELECTION_QC'))
+    )
 
     // #79: report-facing channels default to sentinels; the optional stages below
     // reassign them when they actually run (NO_* pattern, #97).

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **The scoreboard is rebuilt on an explicit, versioned contract** (#108, found via #107:
+  the shipped v0.0.29 scoreboard stamped `selection_method=legacy_cohens_d`,
+  `n_selected_features=0` and `selection_overlap_pct=0.0` on all 26 evaluators — fabricated
+  defaults for inputs the process never saw). Every field is now **sourced from a named
+  artifact or explicitly unknown** (NaN / None / `"unknown"`) and recorded in a per-row
+  `missing_fields` column (`schema_version=2.0` stamped on every row; fixed column set —
+  an AUC column for every configured model, NaN when it didn't run). `KREVIEW_SCOREBOARD`
+  now stages the selection-QC sidecars (the same channel REPORT consumes), so selection
+  columns are real (`mrmr`, true counts, total inputs). The previously silent
+  `n_features=0`-when-a-GPU-model-wins pathology is now visible as a named missing field.
+  Dead monolithic-era code (embedded `selection_qc` probing, `"stacking"` branches, the
+  legacy label, `selection_overlap_pct`) is deleted. `extract_evaluator_summary` is the
+  single place that knows the model-results key shapes; a drift-canary test fails if a
+  producer renames a key without the extractor learning it. `scoreboard.py` is now
+  nbdev-generated from `nbs/07_scoreboard.ipynb` — the standalone-module exception list
+  shrinks to `reproducibility.py`.
+
 ## [0.0.31] - 2026-08-18
 
 GrootCV migration release (#96): the multimodal all-relevant selector moves from the

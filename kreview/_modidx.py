@@ -835,7 +835,20 @@ d = {
                 "kreview/report_data.py",
             ),
         },
-        "kreview.scoreboard": {},
+        "kreview.scoreboard": {
+            "kreview.scoreboard.build_scoreboard": (
+                "scoreboard.html#build_scoreboard",
+                "kreview/scoreboard.py",
+            ),
+            "kreview.scoreboard.extract_evaluator_summary": (
+                "scoreboard.html#extract_evaluator_summary",
+                "kreview/scoreboard.py",
+            ),
+            "kreview.scoreboard.load_selection_qc": (
+                "scoreboard.html#load_selection_qc",
+                "kreview/scoreboard.py",
+            ),
+        },
         "kreview.selection": {
             "kreview.selection._impute": (
                 "selection.html#_impute",
