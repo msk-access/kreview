@@ -136,8 +136,8 @@ open output/reports/kreview_report.html
 | `mrmr` | Single-evaluator | F-statistic relevance + Pearson redundancy penalty | ✅ |
 | `hybrid_union` | Single-evaluator | Top-X% AUC ∪ Top-X% MI | Legacy |
 | Nested CV ablation | Single-evaluator | Inner CV on feature group subsets → best subset per model | Optional (`--run-ablation`) |
-| `mi` | Multimodal | Mutual Information top-K ranking | ✅ |
-| `grootcv` | Multimodal | Cross-validated LightGBM/SHAP vs shadow variables (arfs) — most stable selection measured (#96) | Recommended |
+| `mi` | Multimodal | Mutual Information top-K ranking | Fast exploration |
+| `grootcv` | Multimodal | Cross-validated LightGBM/SHAP vs shadow variables (arfs) — most stable selection measured (#96) | ✅ Default |
 | `leshy` | Multimodal | Boruta evolution with LightGBM/SHAP (arfs) | Optional |
 | `boruta_shap` | Multimodal | SHAP importance vs shadow variables (50 XGBoost trials) | Deprecated (#96, `[legacy-boruta]` extra) |
 
