@@ -1127,12 +1127,12 @@ def eval_multimodal(
         help="Top N%% features for MI selection (matches per-evaluator pipeline)",
     ),
     multimodal_selection: str = typer.Option(
-        "mi",
+        "grootcv",
         "--multimodal-selection",
-        help="Multimodal feature selection: mi (default), grootcv (recommended "
-        "all-relevant, #96), leshy, or boruta_shap (DEPRECATED — needs "
-        "kreview[legacy-boruta], conflicts with the arfs extra). "
-        "grootcv/leshy require: pip install kreview[arfs]",
+        help="Multimodal feature selection: grootcv (default since #96 — most "
+        "stable all-relevant selector, measured), mi (fast exploration), leshy, "
+        "or boruta_shap (DEPRECATED — needs kreview[legacy-boruta], conflicts "
+        "with the arfs extra). grootcv/leshy require: pip install kreview[arfs]",
     ),
     selection_cutoff: float = typer.Option(
         3.0,
@@ -1342,12 +1342,12 @@ def eval_multimodal_prep(
         help="Optional path to super_matrix.parquet for raw-feature strategy",
     ),
     multimodal_selection: str = typer.Option(
-        "mi",
+        "grootcv",
         "--multimodal-selection",
-        help="Feature selection for raw features: mi (default), grootcv "
-        "(recommended all-relevant, #96), leshy, or boruta_shap (DEPRECATED — "
-        "needs kreview[legacy-boruta], conflicts with the arfs extra). "
-        "grootcv/leshy require: pip install kreview[arfs]",
+        help="Feature selection for raw features: grootcv (default since #96 — "
+        "most stable all-relevant selector, measured), mi (fast exploration), "
+        "leshy, or boruta_shap (DEPRECATED — needs kreview[legacy-boruta], "
+        "conflicts with the arfs extra). grootcv/leshy require: pip install kreview[arfs]",
     ),
     top_percentile: float = typer.Option(
         10.0,
