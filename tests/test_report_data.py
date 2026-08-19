@@ -175,6 +175,37 @@ class TestBuildReportData:
         data = build_report_data(mini_outdir)
         assert data["cohort"]["patients_in_both_splits"] == 0
 
+    def test_findings_derived_and_structured(self, mini_outdir):
+        """The findings engine emits structured, tab-tagged inferences."""
+        data = build_report_data(mini_outdir)
+        fs = data["findings"]
+        assert fs, "no findings derived"
+        assert all(f["kind"] in {"good", "info", "warn"} for f in fs)
+        assert all(
+            f["tab"] in {"overview", "scoreboard", "multimodal", "diagnostics"}
+            for f in fs
+        )
+        # The fixture has patients spanning train/test -> the leakage warning fires.
+        assert any(
+            "BOTH train and test" in f["text"] and f["kind"] == "warn" for f in fs
+        )
+        # Stacking beats the best single in the fixture -> the stacking finding fires.
+        assert any("Stacking" in f["text"] for f in fs)
+
+    def test_findings_clean_split_yields_good(self, mini_outdir):
+        """With a clean patient-grouped split, the good-split finding replaces the warning."""
+        import pandas as pd
+
+        labels = pd.read_parquet(mini_outdir / "labels" / "labels.parquet")
+        labels["split"] = [
+            "train" if i % 2 == 0 else "test" for i in range(len(labels))
+        ]
+        labels["PATIENT_ID"] = [f"Q{i}" for i in range(len(labels))]
+        labels.to_parquet(mini_outdir / "labels" / "labels.parquet", index=False)
+        fs = build_report_data(mini_outdir)["findings"]
+        assert any("split intact" in f["text"] and f["kind"] == "good" for f in fs)
+        assert not any("BOTH train and test" in f["text"] for f in fs)
+
     def test_phantom_ablation_entries_filtered(self, mini_outdir):
         """Pre-fix LOO files carry phantom keys like 'EvalA_tabicl' — dropped."""
         (mini_outdir / "models" / "multimodal" / "ablation_results.json").write_text(

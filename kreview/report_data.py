@@ -416,6 +416,200 @@ def _build_diagnostics(trace_path: Path | None) -> dict:
     return diag
 
 
+def _derive_findings(data: dict) -> list[dict]:
+    """Rules-based automatic inferences from the run's own numbers.
+
+    Deterministic, threshold-based, aggregates-only. Each finding is
+    ``{"kind": "good"|"info"|"warn", "tab": <tab id>, "text": str}`` and states
+    the numbers it is derived from, so a reader can check every claim against
+    the tables. Lives in the data layer (not the template) so the rules are
+    testable and PHI-guarded like everything else.
+    """
+    F: list[dict] = []
+
+    def add(kind: str, tab: str, text: str) -> None:
+        F.append({"kind": kind, "tab": tab, "text": text})
+
+    evs = data.get("evaluators") or []
+    coh = data.get("cohort") or {}
+    mm = data.get("multimodal") or {}
+
+    # ── split integrity ──
+    leaked = coh.get("patients_in_both_splits")
+    if leaked == 0:
+        add(
+            "good",
+            "overview",
+            "Patient-grouped split intact: no patient has samples in both train "
+            "and test, so holdout metrics are on fully unseen patients.",
+        )
+    elif leaked:
+        add(
+            "warn",
+            "overview",
+            f"{leaked} patients have samples in BOTH train and test — holdout "
+            "metrics are optimistically biased (split-leakage).",
+        )
+
+    # ── evaluator health ──
+    n_ok = sum(1 for e in evs if e.get("status") == "OK")
+    if evs and n_ok == len(evs):
+        add("good", "scoreboard", f"All {len(evs)} evaluators completed (status OK).")
+    elif evs:
+        bad = [e["evaluator"] for e in evs if e.get("status") != "OK"]
+        add(
+            "warn",
+            "scoreboard",
+            f"{len(bad)} of {len(evs)} evaluators degraded/failed: {', '.join(bad[:6])}.",
+        )
+
+    # ── best single evaluator + holdout agreement ──
+    ranked = [e for e in evs if e.get("best_auc") is not None]
+    ranked.sort(key=lambda e: e["best_auc"], reverse=True)
+    if ranked:
+        b = ranked[0]
+        txt = (
+            f"Strongest single signal: {b['evaluator']} "
+            f"(best model {b.get('best_model')}, CV AUC {b['best_auc']:.3f}"
+        )
+        if b.get("holdout_auc") is not None:
+            txt += f", holdout {b['holdout_auc']:.3f}"
+        add("info", "scoreboard", txt + ").")
+
+        drops = [e["auc_drop"] for e in evs if e.get("auc_drop") is not None]
+        if drops:
+            med = float(np.median(drops))
+            if abs(med) <= 0.01:
+                add(
+                    "good",
+                    "scoreboard",
+                    f"No systematic overfitting: median CV−holdout gap is "
+                    f"{med:+.3f} across {len(drops)} evaluators.",
+                )
+            else:
+                add(
+                    "warn",
+                    "scoreboard",
+                    f"Median CV−holdout gap is {med:+.3f} across {len(drops)} "
+                    "evaluators — CV numbers are optimistic; trust the holdout column.",
+                )
+
+        weak = [e["evaluator"] for e in ranked if e["best_auc"] < 0.6]
+        if weak:
+            add(
+                "info",
+                "scoreboard",
+                f"{len(weak)} evaluators carry little signal (best AUC < 0.60): "
+                f"{', '.join(weak[:6])}{'…' if len(weak) > 6 else ''}.",
+            )
+
+        gpu_best = sum(1 for e in ranked if str(e.get("best_model")) in _GPU_MODELS)
+        add(
+            "info",
+            "scoreboard",
+            f"GPU foundation models (TabPFN/TabICL) are the best model for "
+            f"{gpu_best} of {len(ranked)} evaluators; classical models win the rest.",
+        )
+
+    # ── healthy-anchor caveat ──
+    n_healthy = (coh.get("label_counts") or {}).get("Healthy Normal")
+    if n_healthy is not None and n_healthy < 100:
+        add(
+            "warn",
+            "overview",
+            f"sens@100spec-healthy thresholds on only {n_healthy} healthy donors — "
+            "treat that operating point as high-variance (a single atypical donor "
+            "moves it).",
+        )
+
+    # ── multimodal ──
+    models = mm.get("models") or {}
+    stacks = {
+        m: d["stacking"]["auc"]
+        for m, d in models.items()
+        if d.get("stacking") and d["stacking"].get("auc") is not None
+    }
+    best_single_auc = mm.get("best_single_auc")
+    if stacks and best_single_auc is not None:
+        bm = max(stacks, key=stacks.get)
+        lift = stacks[bm] - best_single_auc
+        ci = (models[bm].get("stacking") or {}).get("ci") or [None, None]
+        beyond = ci[0] is not None and ci[0] > best_single_auc
+        add(
+            "good" if lift > 0.02 else "info",
+            "multimodal",
+            f"Stacking helps: best meta-learner {bm} reaches AUC {stacks[bm]:.3f} "
+            f"vs {best_single_auc:.3f} for the best single evaluator "
+            f"({lift:+.3f}{', beyond its 95% CI' if beyond else ''}) — the feature "
+            "families are partially complementary, not redundant.",
+        )
+        spread = max(stacks.values()) - min(stacks.values())
+        if spread <= 0.015:
+            add(
+                "info",
+                "multimodal",
+                f"The choice of meta-learner barely matters: all {len(stacks)} "
+                f"stacking models land within {spread:.3f} AUC of each other — the "
+                "signal is in the combined inputs, not the combiner.",
+            )
+
+    abl = mm.get("ablation") or {}
+    deltas = {
+        k: v.get("delta")
+        for k, v in (abl.get("deltas") or {}).items()
+        if v.get("delta") is not None
+    }
+    if deltas:
+        pos = {k: d for k, d in deltas.items() if d > 0}
+        top = sorted(deltas, key=lambda k: deltas[k], reverse=True)[:3]
+        tot = sum(pos.values()) or 1.0
+        share = sum(deltas[k] for k in top if deltas[k] > 0) / tot
+        add(
+            "info",
+            "multimodal",
+            f"Unique contribution concentrates in {', '.join(top)} "
+            f"({share:.0%} of the total leave-one-out AUC drop across "
+            f"{len(deltas)} evaluators).",
+        )
+        redundant = sum(1 for d in deltas.values() if d <= 0.001)
+        if redundant:
+            add(
+                "info",
+                "multimodal",
+                f"{redundant} of {len(deltas)} evaluators are individually "
+                "redundant given the rest (LOO drop ≤ 0.001) — they overlap with "
+                "stronger families rather than adding unique signal.",
+            )
+    if abl.get("fallback"):
+        add(
+            "warn",
+            "multimodal",
+            "The LOO ablation could not build the requested stacking model and "
+            "loudly fell back — deltas are re-baselined against the fallback model.",
+        )
+
+    # ── diagnostics ──
+    wf = (data.get("diagnostics") or {}).get("workflow") or {}
+    if wf.get("total_tasks"):
+        failed = wf.get("failed_tasks") or 0
+        retries = wf.get("retries") or 0
+        if failed and failed == retries:
+            add(
+                "good",
+                "diagnostics",
+                f"All {failed} task failures were transient and recovered by the "
+                f"retry ladder ({wf['total_tasks']} tasks total).",
+            )
+        elif failed:
+            add(
+                "warn",
+                "diagnostics",
+                f"{failed} task failures with {retries} retries — check the "
+                "process table for terminal failures.",
+            )
+    return F
+
+
 # %% ../nbs/06_report_data.ipynb #3cfb5b5a
 def build_report_data(
     outdir: str | Path,
@@ -465,6 +659,7 @@ def build_report_data(
         "multimodal": _build_multimodal(outdir / "models" / "multimodal"),
         "diagnostics": _build_diagnostics(trace_path),
     }
+    data["findings"] = _derive_findings(data)
     log.info(
         "report_data_built",
         n_evaluators=len(evaluators),

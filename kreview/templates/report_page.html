@@ -60,6 +60,20 @@
   .dot { display:inline-block; width:9px; height:9px; border-radius:99px; margin-right:5px; }
   .note { background:#fff8ec; border:1px solid #f2dfb6; color:#7a5a13; border-radius:8px;
           padding:10px 14px; font-size:13px; margin-bottom:14px; }
+  details.how { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+                padding:10px 16px; margin-bottom:14px; font-size:13px; color:var(--muted); }
+  details.how summary { cursor:pointer; font-weight:600; color:var(--ink); font-size:13px; }
+  details.how p { margin:8px 0 2px; max-width:95ch; }
+  details.how b { color:var(--ink); }
+  .findings { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+  .finding { display:flex; gap:10px; align-items:baseline; background:var(--panel);
+             border:1px solid var(--line); border-left-width:4px; border-radius:8px;
+             padding:9px 14px; font-size:13px; }
+  .finding.good { border-left-color:var(--accent2); }
+  .finding.info { border-left-color:var(--accent); }
+  .finding.warn { border-left-color:var(--warn); background:#fff8ec; }
+  .finding .tag { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+                  color:var(--muted); white-space:nowrap; font-family:var(--mono); }
   .chips span { display:inline-block; background:var(--chip); color:var(--accent);
                 border-radius:7px; padding:2px 9px; margin:2px 4px 2px 0; font-size:12px; font-family:var(--mono); }
   .hbars .row { display:grid; grid-template-columns:210px 1fr 64px; gap:10px; align-items:center; margin:4px 0; }
@@ -74,6 +88,18 @@
 <nav id="nav"></nav>
 <main>
   <section class="tab" id="tab-overview">
+    <details class="how"><summary>What this tab computes</summary>
+      <p>Every plasma sample is labeled on the <b>5-tier ctDNA taxonomy</b> by pairing it
+      with the patient's tumor sequencing (cBioPortal): <b>True ctDNA+</b> (variant-confirmed),
+      <b>Possible ctDNA+/−</b> (evidence-weighted), <b>Healthy Normal</b> (donors), and
+      <b>Undetermined</b> (insufficient data — excluded from modeling). The binary target for
+      every model is <b>True&nbsp;+&nbsp;Possible ctDNA+ vs the rest</b>.</p>
+      <p>The 80/20 train/test split is <b>grouped by patient</b> (StratifiedGroupKFold on
+      PATIENT_ID): all of a patient's timepoints land on one side, so holdout metrics are on
+      fully unseen patients. Healthy donors carry one sample each. The evaluator-AUC overview
+      ranks each feature family by its best model's cross-validated AUC.</p>
+    </details>
+    <div class="findings" id="ov-findings"></div>
     <div class="cards" id="ov-cards"></div>
     <div id="ov-leak"></div>
     <div class="grid2">
@@ -87,6 +113,20 @@
   </section>
 
   <section class="tab" id="tab-scoreboard">
+    <details class="how"><summary>What this tab computes</summary>
+      <p>One row per <b>evaluator</b> — a fragmentomics feature family (fragment sizes,
+      TFBS/WPS nucleosome protection, end motifs, ATAC accessibility, …). Per evaluator:
+      features are selected by <b>mRMR</b> (top 10%, relevance − redundancy), then up to 7
+      models (LR/RF/XGB on CPU; TabPFN/TabICL ± fine-tuning on GPU) are trained with
+      stratified cross-validation. <b>Every metric comes from out-of-fold predictions</b> —
+      never refit-on-everything scores.</p>
+      <p><b>AUC (holdout)</b> refits on all of train and scores the patient-disjoint 20%;
+      <b>Δ overfit</b> = CV − holdout (≈0 means the CV numbers are honest).
+      <b>sens@100h</b> = sensitivity at the threshold set by the highest-scoring healthy
+      donor — the screening operating point. A “–” means that value's source artifact was
+      absent (recorded in the scoreboard's missing_fields, never silently defaulted). Click
+      any row for per-model detail, ROC/PR, calibration, decision curves and subgroups.</p>
+    </details>
     <div class="toolbar">
       <input id="q" placeholder="filter evaluators…" oninput="renderTable()">
       <select id="fmodel" onchange="renderTable()"><option value="">all best-models</option></select>
@@ -99,6 +139,18 @@
   </section>
 
   <section class="tab" id="tab-multimodal">
+    <details class="how"><summary>What this tab computes</summary>
+      <p><b>Stacking</b>: each (evaluator, model) pair's out-of-fold probabilities become one
+      column of the stacking matrix (26 evaluators × up to 6 models). A <b>meta-learner</b>
+      (each row of the table is one) is then cross-validated on those columns — it learns to
+      weigh the evaluators' opinions, including where they disagree. <b>Raw</b> rows are the
+      same meta-learners trained directly on GrootCV-selected raw features from the fused
+      super-matrix — the no-stacking baseline.</p>
+      <p>The <b>leave-one-evaluator-out ablation</b> removes one evaluator's columns at a
+      time and retrains the best stacking model: the AUC drop is that family's <b>unique</b>
+      contribution (a small drop means its signal is covered by the others, not that it is
+      weak alone).</p>
+    </details>
     <div id="mm-note"></div>
     <div class="cards" id="mm-cards"></div>
     <div class="grid2">
@@ -113,6 +165,13 @@
   </section>
 
   <section class="tab" id="tab-diagnostics">
+    <details class="how"><summary>What this tab computes</summary>
+      <p>Parsed from the Nextflow <b>execution trace</b>: one row per pipeline process with
+      task counts, failures and the maximum attempt number. Failures that equal the retry
+      count were <b>transient</b> (wall-time/memory) and recovered by the resource ladder;
+      the trace only exists after the workflow ends, so an in-pipeline render leaves this tab
+      empty until <code>kreview report</code> is re-run on the published output.</p>
+    </details>
     <div class="cards" id="dg-cards"></div>
     <div class="grid2">
       <div class="panel"><h3>Process outcomes</h3><div style="overflow:auto"><table id="dg-proc"></table></div></div>
@@ -156,6 +215,13 @@ const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
   legend: {orientation: "h", y: -0.25, font: {size: 11}},
   hovermode: "closest",
 }, extra);
+
+/* ── automatic findings (derived in the data layer, aggregates only) ── */
+const TAB_LABEL = {overview:"cohort", scoreboard:"single-evaluator", multimodal:"multimodal", diagnostics:"pipeline"};
+$("#ov-findings").innerHTML = (R.findings || []).map(f =>
+  `<div class="finding ${esc(f.kind)}"><span class="tag">${esc(TAB_LABEL[f.tab] || f.tab)}</span>` +
+  `<span>${esc(f.text)}</span></div>`).join("") ||
+  `<div class="finding info"><span>No automatic findings for this run.</span></div>`;
 
 /* ── header + nav ────────────────────────────────────────── */
 $("#ttl").textContent = R.meta.title + " — v" + R.meta.version;
