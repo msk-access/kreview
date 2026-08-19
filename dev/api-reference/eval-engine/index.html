@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -4959,7 +4959,7 @@ groups by evaluator name, and merges GPU keys into CPU dicts.</p>
 
 
 <h3 id="kreview.eval_engine.multimodal_eval" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">multimodal_eval</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'rf'</span><span class="p">,</span> <span class="s1">'xgb'</span><span class="p">),</span> <span class="n">gpu_models</span><span class="o">=</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="s1">'cuda'</span><span class="p">,</span> <span class="n">finetune_epochs</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">finetune_lr</span><span class="o">=</span><span class="mf">1e-05</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">top_percentile</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">multimodal_selection</span><span class="o">=</span><span class="s1">'mi'</span><span class="p">,</span> <span class="n">selection_cutoff</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">selection_n_iter</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">selection_n_jobs</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">multimodal_eval</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="p">(</span><span class="s1">'rf'</span><span class="p">,</span> <span class="s1">'xgb'</span><span class="p">),</span> <span class="n">gpu_models</span><span class="o">=</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="s1">'cuda'</span><span class="p">,</span> <span class="n">finetune_epochs</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">finetune_lr</span><span class="o">=</span><span class="mf">1e-05</span><span class="p">,</span> <span class="n">n_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">top_percentile</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">multimodal_selection</span><span class="o">=</span><span class="s1">'grootcv'</span><span class="p">,</span> <span class="n">selection_cutoff</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">selection_n_iter</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">selection_n_jobs</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></code>
 
 </h3>
 
@@ -5183,7 +5183,7 @@ themselves.</p>
               </div>
             </td>
             <td>
-                  <code>'mi'</code>
+                  <code>'grootcv'</code>
             </td>
           </tr>
       </tbody>
@@ -5276,7 +5276,7 @@ rather than returning a partial dict that reads as success.</p>
 
 
 <h3 id="kreview.eval_engine.multimodal_prep" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">multimodal_prep</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">multimodal_selection</span><span class="o">=</span><span class="s1">'mi'</span><span class="p">,</span> <span class="n">top_percentile</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">selection_cutoff</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">selection_n_iter</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">selection_n_jobs</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="s1">'.'</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">multimodal_prep</span><span class="p">(</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">super_matrix_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">multimodal_selection</span><span class="o">=</span><span class="s1">'grootcv'</span><span class="p">,</span> <span class="n">top_percentile</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">selection_cutoff</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">selection_n_iter</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">selection_n_jobs</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="s1">'.'</span><span class="p">)</span></code>
 
 </h3>
 
@@ -5346,7 +5346,7 @@ and writes outputs as parquet files + a metadata JSON.</p>
               </div>
             </td>
             <td>
-                  <code>'mi'</code>
+                  <code>'grootcv'</code>
             </td>
           </tr>
           <tr class="doc-section-item">
