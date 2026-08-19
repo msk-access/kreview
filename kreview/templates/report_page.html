@@ -160,7 +160,7 @@ const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
 /* ── header + nav ────────────────────────────────────────── */
 $("#ttl").textContent = R.meta.title + " — v" + R.meta.version;
 $("#sub").textContent = `${R.meta.run} · ${R.cohort.n_samples.toLocaleString()} samples · ` +
-  `${R.evaluators.length} evaluators · ${R.meta.generated_note}`;
+  `${R.evaluators.length} evaluators · aggregates only, no sample identifiers`;
 const TABS = [["overview","Cohort & labels"],["scoreboard","Scoreboard"],
               ["multimodal","Multimodal"],["diagnostics","Run diagnostics"]];
 $("#nav").innerHTML = TABS.map(([id,l],i) =>
