@@ -109,8 +109,12 @@ def _build_cohort(labels: pd.DataFrame) -> dict:
         # ML-integrity check surfaced in the report: a sample-level split scatters a
         # patient's timepoints across train AND test, optimistically biasing holdout
         # metrics. Counted here, warned about client-side. See the split-leakage issue.
+        # Only train/test rows count: a patient with an additional EXCLUDED sample
+        # (heme / insufficient data) is not leakage — grouping over every split value
+        # false-flagged 14 such patients on the v0.0.32 iris report.
+        tt = labels[labels["split"].isin(["train", "test"])]
         cohort["patients_in_both_splits"] = int(
-            (labels.groupby("PATIENT_ID")["split"].nunique() > 1).sum()
+            (tt.groupby("PATIENT_ID")["split"].nunique() > 1).sum()
         )
         if cohort["patients_in_both_splits"]:
             log.warning(
@@ -340,13 +344,28 @@ def _build_multimodal(mm_dir: Path) -> dict:
             "model": abl.get("ablation_model"),
             "baseline_auc": _r(abl.get("ablation_baseline_auc")),
             "fallback": abl.get("ablation_model_fallback"),
+            # Pre-fix ablation files (< v0.0.33) carry phantom "evaluators" minted by
+            # rsplit on two-part model suffixes ("X_tabicl" from the X_tabicl_ft
+            # column) — drop them so old runs render clean; new runs never emit them.
             "deltas": {
                 k: {
                     "delta": _r(v.get("delta")),
                     "auc_without": _r(v.get("auc_without")),
                 }
                 for k, v in (abl.get("ablation") or {}).items()
-                if isinstance(v, dict) and "delta" in v
+                if isinstance(v, dict)
+                and "delta" in v
+                and not k.endswith(
+                    (
+                        "_lr",
+                        "_rf",
+                        "_xgb",
+                        "_tabpfn",
+                        "_tabpfn_ft",
+                        "_tabicl",
+                        "_tabicl_ft",
+                    )
+                )
             },
         }
 

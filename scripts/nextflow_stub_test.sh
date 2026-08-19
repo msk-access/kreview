@@ -170,6 +170,18 @@ done
 # whole multimodal tail is silently lost (iris v0.0.29 run). Behaviour was verified with a
 # forced-fail ablation stub; a stub run can't exercise it (stubs succeed), so assert the
 # sentinel wire is present. The merge module already handles NO_ABLATION by name.
+# --- 7c. structural: report staging must route GPU results to models/gpu ---------------
+# build_report_data reads the exact path outdir/models/gpu/<eval>_gpu_model_results.json;
+# dumping every JSON into models/cpu/ silently dropped all GPU models from the deep-dive
+# modal (v0.0.32 iris report). Stubs can't exercise the render, so assert the route exists.
+echo "== report staging routes GPU results to models/gpu"
+if ! grep -q '_gpu_model_results.json) cp .* outdir/models/gpu/' "$REPO/nextflow/modules/local/kreview/report.nf"; then
+    echo "FAILED: report.nf no longer routes *_gpu_model_results.json to outdir/models/gpu/" >&2
+    fail=1
+else
+    echo "   GPU-results staging route present in report.nf"
+fi
+
 echo "== #97 structural (merge survives ablation failure via NO_ABLATION sentinel)"
 if ! grep -q "ablation_results.ifEmpty(file('NO_ABLATION'))" "$REPO/nextflow/workflows/kreview_eval.nf"; then
     echo "FAILED: kreview_eval.nf lost the .ifEmpty(file('NO_ABLATION')) on the merge input (#97)" >&2

@@ -106,6 +106,10 @@
       <div class="panel"><div id="mm-pr" style="height:280px"></div></div>
     </div>
     <div class="panel"><h3>Per-model detail</h3><div style="overflow:auto"><table id="mm-tbl"></table></div></div>
+    <div class="panel" id="mm-abl-panel" style="display:none">
+      <h3>Leave-one-evaluator-out ablation — stacking-AUC drop when removed</h3>
+      <div id="mm-abl" style="height:420px"></div>
+    </div>
   </section>
 
   <section class="tab" id="tab-diagnostics">
@@ -357,8 +361,32 @@ function openEval(name) {
 
 /* ── multimodal ──────────────────────────────────────────── */
 const MM = R.multimodal;
-if (!MM.ablation) $("#mm-note").innerHTML =
-  `<div class="note">LOO ablation results are absent from this run (the ablation stage failed — fixed in #97); the section will populate on the next run.</div>`;
+if (!MM.ablation) {
+  $("#mm-note").innerHTML =
+    `<div class="note">LOO ablation results are absent from this run (the ablation stage did not produce output); the section will populate on a run with a successful ablation stage.</div>`;
+} else {
+  const A = MM.ablation;
+  $("#mm-note").innerHTML =
+    `<div class="note">LOO ablation model: <b>${esc(A.model ?? "–")}</b>, full-matrix baseline AUC ${fmt(A.baseline_auc)}` +
+    (A.fallback ? ` · <b>loud fallback:</b> requested ${esc(A.fallback.requested ?? "?")}, used ${esc(A.fallback.used ?? "?")}` : "") +
+    `. Positive bar = stacking AUC drops when that evaluator's columns are removed (its unique contribution).</div>`;
+  const dl = Object.entries(A.deltas || {})
+    .filter(([, v]) => v.delta != null)
+    .sort((a, b) => b[1].delta - a[1].delta);
+  const top = dl.slice(0, 20).reverse();
+  if (top.length) {
+    $("#mm-abl-panel").style.display = "";
+    Plotly.newPlot("mm-abl", [{
+      x: top.map(([, v]) => v.delta), y: top.map(([k]) => k), orientation: "h",
+      type: "bar", marker: {color: top.map(([, v]) => v.delta >= 0 ? "#4650dc" : "#c8560f")},
+      customdata: top.map(([, v]) => v.auc_without),
+      hovertemplate: "<b>%{y}</b><br>ΔAUC %{x:+.4f} · AUC without %{customdata:.4f}<extra></extra>",
+    }], PL_LAYOUT(
+      `Top ${top.length} of ${dl.length} evaluators by |contribution|`,
+      "ΔAUC when removed (baseline − ablated)", "",
+      {margin: {l: 210, r: 14, t: 34, b: 40}}), PL_CFG);
+  }
+}
 const mmNames = Object.keys(MM.models);
 const bestStack = mmNames.reduce((a,b) => (MM.models[b].stacking?.auc||0) > (MM.models[a]?.stacking?.auc||0) ? b : a, mmNames[0]);
 $("#mm-cards").innerHTML = [

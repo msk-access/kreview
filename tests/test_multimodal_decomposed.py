@@ -479,6 +479,42 @@ class TestMultimodalAblation:
             "'_sample' means metadata columns were split into a fake evaluator"
         )
 
+    def test_ablation_no_phantom_from_ft_suffix(self, stacking_results_v0028, tmp_path):
+        """Two-part model suffixes must not mint phantom evaluators.
+
+        rsplit("_", 1) parsed "EvalA_tabicl_ft" into a phantom evaluator
+        "EvalA_tabicl" — the v0.0.32 iris run ablated 52 "evaluators" instead of
+        26, half of them phantoms that each re-trained the stacking model just to
+        drop a single _ft column (doubling the LOO stage's GPU cost).
+        """
+        np.random.seed(42)
+        n = 20
+        df = pd.DataFrame(
+            {
+                "EvalA_lr": np.random.rand(n),
+                "EvalA_tabicl": np.random.rand(n),
+                "EvalA_tabicl_ft": np.random.rand(n),
+                "EvalB_rf": np.random.rand(n),
+                "EvalB_tabpfn_ft": np.random.rand(n),
+                "_label": [0] * 10 + [1] * 10,
+            }
+        )
+        path = tmp_path / "stacking_ft.parquet"
+        df.to_parquet(path, index=False)
+
+        results = multimodal_ablation(
+            stacking_matrix_path=path,
+            stacking_results_dir=stacking_results_v0028,
+            n_folds=3,
+            random_state=42,
+            output_dir=tmp_path / "ablation_ft",
+        )
+        names = set(results["ablation"])
+        assert names == {
+            "EvalA",
+            "EvalB",
+        }, f"phantom evaluator minted from a _ft column: {sorted(names)}"
+
 
 # ── Tests: multimodal_merge ──────────────────────────────────────────────────
 
