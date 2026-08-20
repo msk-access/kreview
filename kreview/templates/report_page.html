@@ -77,6 +77,7 @@
   .chips span { display:inline-block; background:var(--chip); color:var(--accent);
                 border-radius:7px; padding:2px 9px; margin:2px 4px 2px 0; font-size:12px; font-family:var(--mono); }
   .hbars .row { display:grid; grid-template-columns:210px 1fr 64px; gap:10px; align-items:center; margin:4px 0; }
+  .mono { font-family:var(--mono); font-size:12.5px; }
   .hbars .lbl { font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 </head>
@@ -88,22 +89,12 @@
 <nav id="nav"></nav>
 <main>
   <section class="tab" id="tab-overview">
-    <details class="how"><summary>What this tab computes</summary>
-      <p>Every plasma sample is labeled on the <b>5-tier ctDNA taxonomy</b> by pairing it
-      with the patient's tumor sequencing (cBioPortal): <b>True ctDNA+</b> (variant-confirmed),
-      <b>Possible ctDNA+/−</b> (evidence-weighted), <b>Healthy Normal</b> (donors), and
-      <b>Undetermined</b> (insufficient data — excluded from modeling). The binary target for
-      every model is <b>True&nbsp;+&nbsp;Possible ctDNA+ vs the rest</b>.</p>
-      <p>The 80/20 train/test split is <b>grouped by patient</b> (StratifiedGroupKFold on
-      PATIENT_ID): all of a patient's timepoints land on one side, so holdout metrics are on
-      fully unseen patients. Healthy donors carry one sample each. The evaluator-AUC overview
-      ranks each feature family by its best model's cross-validated AUC.</p>
-    </details>
     <div class="panel" id="ov-ops" style="display:none">
       <h3>Operating points — two anchors, two questions</h3>
       <div style="overflow:auto"><table id="ov-ops-tbl"></table></div>
       <div class="legend" id="ov-ops-note"></div>
     </div>
+    <div class="legend" style="margin-bottom:10px">Findings are derived automatically from this run. <a href="#" onclick="showTab('methods');return false;">Methods &amp; interpretation →</a></div>
     <div class="findings" id="ov-findings"></div>
     <div class="cards" id="ov-cards"></div>
     <div id="ov-leak"></div>
@@ -118,20 +109,6 @@
   </section>
 
   <section class="tab" id="tab-scoreboard">
-    <details class="how"><summary>What this tab computes</summary>
-      <p>One row per <b>evaluator</b> — a fragmentomics feature family (fragment sizes,
-      TFBS/WPS nucleosome protection, end motifs, ATAC accessibility, …). Per evaluator:
-      features are selected by <b>mRMR</b> (top 10%, relevance − redundancy), then up to 7
-      models (LR/RF/XGB on CPU; TabPFN/TabICL ± fine-tuning on GPU) are trained with
-      stratified cross-validation. <b>Every metric comes from out-of-fold predictions</b> —
-      never refit-on-everything scores.</p>
-      <p><b>AUC (holdout)</b> refits on all of train and scores the patient-disjoint 20%;
-      <b>Δ overfit</b> = CV − holdout (≈0 means the CV numbers are honest).
-      <b>sens@100h</b> = sensitivity at the threshold set by the highest-scoring healthy
-      donor — the screening operating point. A “–” means that value's source artifact was
-      absent (recorded in the scoreboard's missing_fields, never silently defaulted). Click
-      any row for per-model detail, ROC/PR, calibration, decision curves and subgroups.</p>
-    </details>
     <div class="toolbar">
       <input id="q" placeholder="filter evaluators…" oninput="renderTable()">
       <select id="fmodel" onchange="renderTable()"><option value="">all best-models</option></select>
@@ -144,18 +121,6 @@
   </section>
 
   <section class="tab" id="tab-multimodal">
-    <details class="how"><summary>What this tab computes</summary>
-      <p><b>Stacking</b>: each (evaluator, model) pair's out-of-fold probabilities become one
-      column of the stacking matrix (26 evaluators × up to 6 models). A <b>meta-learner</b>
-      (each row of the table is one) is then cross-validated on those columns — it learns to
-      weigh the evaluators' opinions, including where they disagree. <b>Raw</b> rows are the
-      same meta-learners trained directly on GrootCV-selected raw features from the fused
-      super-matrix — the no-stacking baseline.</p>
-      <p>The <b>leave-one-evaluator-out ablation</b> removes one evaluator's columns at a
-      time and retrains the best stacking model: the AUC drop is that family's <b>unique</b>
-      contribution (a small drop means its signal is covered by the others, not that it is
-      weak alone).</p>
-    </details>
     <div id="mm-note"></div>
     <div class="cards" id="mm-cards"></div>
     <div class="grid2">
@@ -169,14 +134,94 @@
     </div>
   </section>
 
-  <section class="tab" id="tab-diagnostics">
-    <details class="how"><summary>What this tab computes</summary>
-      <p>Parsed from the Nextflow <b>execution trace</b>: one row per pipeline process with
+
+  <section class="tab" id="tab-methods">
+    <div class="panel">
+      <h3>Definitions</h3>
+      <p><b>The 5-tier ctDNA label.</b> Each plasma sample is paired with the patient's tumor
+      sequencing where available. <b>True ctDNA+</b> — plasma variants confirmed against the
+      tumor. <b>Possible ctDNA+</b> — plasma evidence below the confirmation bar.
+      <b>Possible ctDNA−</b> — no qualifying plasma evidence. <b>Healthy Normal</b> — donors.
+      <b>Undetermined</b> — insufficient evidence, excluded from modeling. The binary target
+      is <b>True + Possible ctDNA+ vs the rest</b>.</p>
+      <p><b>Qualified true negative</b> (the MRD anchor) — a sample meeting all three:
+      label is <b>Possible ctDNA−</b>, the patient's tumor <b>was sequenced</b>
+      (<span class="mono">has_paired_impact</span>), and <b>zero</b> of that tumor's variants
+      were found in plasma (<span class="mono">n_impact_confirmed == 0</span>). We knew exactly
+      which mutations to hunt for, looked, and found none — a <i>verified</i> negative.
+      Samples in the same tier <b>without</b> paired tumor sequencing are <b>unlabeled, not
+      negative</b>: nobody looked, because nobody knew what to look for. Pooling the two
+      inflates performance (the report shows both numbers).</p>
+      <p><b>Two anchors, two questions.</b> Specificity against <b>qualified true negatives</b>
+      answers the MRD question — can we tell shedding from non-shedding <i>within cancer
+      patients</i>, who carry inflammation, treatment effects and comorbidity. Specificity
+      against <b>healthy donors</b> answers the screening question, and is a much easier
+      contrast. They are never blended.</p>
+      <p><b>Why the donor number is a one-sided bound.</b> Its threshold is the <i>maximum</i>
+      score among a few dozen donors. Resample those donors and the maximum can only fall, so
+      sensitivity can only rise — a symmetric confidence interval for it is inconsistent by
+      construction. The observed value is reported as a lower bound.</p>
+      <p><b>Out-of-fold (OOF).</b> Every curve, subgroup metric and operating point comes from
+      predictions made on samples the model did not train on. <b>Holdout</b> refits on all of
+      train and scores a patient-disjoint 20% — no patient contributes to both sides.</p>
+      <p><b>Winner's curse.</b> Picking the best of many evaluator×model cells inflates the
+      winner by roughly 0.01–0.02 AUC. The report shows the <i>pre-registered</i> primary
+      (declared in ANALYSIS_PLAN.md) beside the run's argmax for that reason.</p>
+    </div>
+    <div class="panel">
+      <h3>What each tab computes</h3>
+      <h3>Cohort &amp; labels</h3>
+<p>Every plasma sample is labeled on the <b>5-tier ctDNA taxonomy</b> by pairing it
+      with the patient's tumor sequencing (cBioPortal): <b>True ctDNA+</b> (variant-confirmed),
+      <b>Possible ctDNA+/−</b> (evidence-weighted), <b>Healthy Normal</b> (donors), and
+      <b>Undetermined</b> (insufficient data — excluded from modeling). The binary target for
+      every model is <b>True&nbsp;+&nbsp;Possible ctDNA+ vs the rest</b>.</p>
+      <p>The 80/20 train/test split is <b>grouped by patient</b> (StratifiedGroupKFold on
+      PATIENT_ID): all of a patient's timepoints land on one side, so holdout metrics are on
+      fully unseen patients. Healthy donors carry one sample each. The evaluator-AUC overview
+      ranks each feature family by its best model's cross-validated AUC.</p>
+      <h3>Scoreboard (single evaluators)</h3>
+<p>One row per <b>evaluator</b> — a fragmentomics feature family (fragment sizes,
+      TFBS/WPS nucleosome protection, end motifs, ATAC accessibility, …). Per evaluator:
+      features are selected by <b>mRMR</b> (top 10%, relevance − redundancy), then up to 7
+      models (LR/RF/XGB on CPU; TabPFN/TabICL ± fine-tuning on GPU) are trained with
+      stratified cross-validation. <b>Every metric comes from out-of-fold predictions</b> —
+      never refit-on-everything scores.</p>
+      <p><b>AUC (holdout)</b> refits on all of train and scores the patient-disjoint 20%;
+      <b>Δ overfit</b> = CV − holdout (≈0 means the CV numbers are honest).
+      <b>sens@100h</b> = sensitivity at the threshold set by the highest-scoring healthy
+      donor — the screening operating point. A “–” means that value's source artifact was
+      absent (recorded in the scoreboard's missing_fields, never silently defaulted). Click
+      any row for per-model detail, ROC/PR, calibration, decision curves and subgroups.</p>
+      <h3>Multimodal</h3>
+<p><b>Stacking</b>: each (evaluator, model) pair's out-of-fold probabilities become one
+      column of the stacking matrix (26 evaluators × up to 6 models). A <b>meta-learner</b>
+      (each row of the table is one) is then cross-validated on those columns — it learns to
+      weigh the evaluators' opinions, including where they disagree. <b>Raw</b> rows are the
+      same meta-learners trained directly on GrootCV-selected raw features from the fused
+      super-matrix — the no-stacking baseline.</p>
+      <p>The <b>leave-one-evaluator-out ablation</b> removes one evaluator's columns at a
+      time and retrains the best stacking model: the AUC drop is that family's <b>unique</b>
+      contribution (a small drop means its signal is covered by the others, not that it is
+      weak alone).</p>
+      <h3>Run diagnostics</h3>
+<p>Parsed from the Nextflow <b>execution trace</b>: one row per pipeline process with
       task counts, failures and the maximum attempt number. Failures that equal the retry
       count were <b>transient</b> (wall-time/memory) and recovered by the resource ladder;
       the trace only exists after the workflow ends, so an in-pipeline render leaves this tab
       empty until <code>kreview report</code> is re-run on the published output.</p>
-    </details>
+    </div>
+    <div class="panel">
+      <h3>Reading the numbers honestly</h3>
+      <p>Operating points before the tumor-informed anchor, and holdout numbers before the
+      patient-grouped split, are <b>not comparable</b> to later runs. Subgroup cells have an
+      n ≥ 30 floor. Absent values render as “–”: the source artifact was missing, and the
+      scoreboard's <span class="mono">missing_fields</span> column names which. The page
+      carries aggregates only — no sample identifiers, by construction.</p>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-diagnostics">
     <div class="cards" id="dg-cards"></div>
     <div class="grid2">
       <div class="panel"><h3>Process outcomes</h3><div style="overflow:auto"><table id="dg-proc"></table></div></div>
@@ -264,13 +309,20 @@ $("#ttl").textContent = R.meta.title + " — v" + R.meta.version;
 $("#sub").textContent = `${R.meta.run} · ${R.cohort.n_samples.toLocaleString()} samples · ` +
   `${R.evaluators.length} evaluators · aggregates only, no sample identifiers`;
 const TABS = [["overview","Cohort & labels"],["scoreboard","Scoreboard"],
-              ["multimodal","Multimodal"],["diagnostics","Run diagnostics"]];
+              ["multimodal","Multimodal"],["diagnostics","Run diagnostics"],
+              ["methods","Methods & interpretation"]];
 $("#nav").innerHTML = TABS.map(([id,l],i) =>
   `<button class="${i?'':'on'}" onclick="showTab('${id}',this)">${l}</button>`).join("");
 function showTab(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("on"));
-  document.querySelectorAll("nav button").forEach(b => b.classList.remove("on"));
-  $("#tab-"+id).classList.add("on"); btn.classList.add("on");
+  const buttons = [...document.querySelectorAll("nav button")];
+  buttons.forEach(b => b.classList.remove("on"));
+  $("#tab-"+id).classList.add("on");
+  // btn is absent when called from an in-page link — find the matching nav button
+  // so the highlight always follows the visible tab.
+  const target = btn || buttons[TABS.findIndex(t => t[0] === id)];
+  if (target) target.classList.add("on");
+  window.scrollTo({top: 0, behavior: "instant"});
 }
 $("#tab-overview").classList.add("on");
 
