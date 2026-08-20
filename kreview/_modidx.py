@@ -805,6 +805,10 @@ d = {
                 "report_data.html#_build_multimodal",
                 "kreview/report_data.py",
             ),
+            "kreview.report_data._derive_findings": (
+                "report_data.html#_derive_findings",
+                "kreview/report_data.py",
+            ),
             "kreview.report_data._downsample": (
                 "report_data.html#_downsample",
                 "kreview/report_data.py",
