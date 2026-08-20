@@ -15,6 +15,12 @@ sample identifiers are ever written.
 | `assay_effect.py` | assay-version battery: feature fingerprint, cross-assay generalization gap, negative-score threshold shift |
 | `lod_audit.py` | VAF-stratified LOD curve at the 98%-spec-TN operating point: detection per burden bin, miss composition, family LODs |
 | `silent_flag.py` | are fragmentomics flags in genotype-silent samples corroborated (sub-threshold VAF, future conversion, histology)? |
+| `quant_review.py` | quantification: isotonic score→VAF calibration stats + the per-sample review workbook (fraction bands, discordance queues) |
+| `silent_list.py` | the blinded chart-review study workbook for the flagged variant-silent samples + matched controls |
 
 Findings, numbers and interpretation live on the research-roadmap issue —
 these scripts exist so every claim there is reproducible.
+
+> **`quant_review.py` and `silent_list.py` write workbooks that CONTAIN SAMPLE
+> IDENTIFIERS** (to `~/Downloads`). Those outputs are clinical working files:
+> keep them local, never commit them, never attach them to issues or PRs.
