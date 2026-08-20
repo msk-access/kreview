@@ -630,9 +630,14 @@ class TestDepthColumn:
         assert "krewlyzer_dir" in inspect.signature(label).parameters
 
     def test_label_help_documents_the_option(self):
+        """Rich wraps help text at the terminal width (80 in CI), which can split
+        the flag across lines — normalize before asserting."""
+        import re
+
         from typer.testing import CliRunner
 
         from kreview.cli import app
 
-        out = CliRunner().invoke(app, ["label", "--help"]).output
-        assert "--krewlyzer-dir" in out
+        out = CliRunner(env={"COLUMNS": "200"}).invoke(app, ["label", "--help"]).output
+        flat = re.sub(r"\s+", "", re.sub(r"\x1b\[[0-9;]*m", "", out))
+        assert "krewlyzer" in flat
