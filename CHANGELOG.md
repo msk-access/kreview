@@ -28,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one *excluded* sample (heme / insufficient data) counted as "in both splits" — the
   v0.0.32 report showed a leakage banner for 14 such patients despite zero true
   train/test leakage. The counter now considers train/test rows only.
+### Changed
+- **`multimodal_selection` default flipped `mi` → `grootcv`** (#96 closeout). The
+  confirmation criterion was met on the v0.0.32 iris run: stacking AUC within ±0.002 of
+  the boruta_shap baseline across all six models (tabicl 0.8556), raw-feature models
+  *better* for the in-context learners (tabicl_ft +0.010), grootcv+sanitization+GPU
+  ablation routing all verified in production — with the standing stability advantage
+  (Nogueira 0.85 vs 0.65) as the reason to switch. Applies to the Nextflow param, the
+  CLI options, and `multimodal_prep`/`multimodal_eval`; the low-level
+  `_select_multimodal_features` primitive keeps `mi`. **Behavior note:** the default
+  path now needs the `arfs` extra outside the shipped containers
+  (`pip install kreview[arfs]`); pass `--multimodal-selection mi` to keep the old
+  dependency-free behavior.
 
 ## [0.0.32] - 2026-08-18
 
