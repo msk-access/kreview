@@ -789,6 +789,10 @@ d = {
             )
         },
         "kreview.report_data": {
+            "kreview.report_data._anchored_operating_points": (
+                "report_data.html#_anchored_operating_points",
+                "kreview/report_data.py",
+            ),
             "kreview.report_data._build_cohort": (
                 "report_data.html#_build_cohort",
                 "kreview/report_data.py",

@@ -99,6 +99,11 @@
       fully unseen patients. Healthy donors carry one sample each. The evaluator-AUC overview
       ranks each feature family by its best model's cross-validated AUC.</p>
     </details>
+    <div class="panel" id="ov-ops" style="display:none">
+      <h3>Operating points — two anchors, two questions</h3>
+      <div style="overflow:auto"><table id="ov-ops-tbl"></table></div>
+      <div class="legend" id="ov-ops-note"></div>
+    </div>
     <div class="findings" id="ov-findings"></div>
     <div class="cards" id="ov-cards"></div>
     <div id="ov-leak"></div>
@@ -216,6 +221,37 @@ const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
   hovermode: "closest",
 }, extra);
 
+/* ── operating points (dual anchor, #123) ─────────────────── */
+const P = R.primary || {};
+(function ops() {
+  const o = P.operating_points || {};
+  const tn = o.tn_anchor, don = o.donor_anchor;
+  if (!tn && !don) return;
+  $("#ov-ops").style.display = "";
+  const ppv = tn?.ppv_at_98spec || {};
+  const rows = [];
+  if (tn) {
+    rows.push(["MRD — within cancer patients", "98% spec vs verified true negatives",
+      pct(tn.sens_at_98spec), `${tn.n_tn?.toLocaleString?.() ?? "–"} negatives` +
+      (tn.n_tn_patients ? ` / ${tn.n_tn_patients.toLocaleString()} patients` : "")]);
+    rows.push(["MRD — stricter", "99% spec vs verified true negatives",
+      pct(tn.sens_at_99spec), "same anchor"]);
+  }
+  if (don) {
+    rows.push(["Screening — vs healthy donors", "100% spec (one-sided lower bound)",
+      "≥ " + pct(don.sens_at_100spec_lower_bound), `${don.n_donors} donors — max-statistic threshold`]);
+  }
+  $("#ov-ops-tbl").innerHTML = `<tr><th>question</th><th>operating point</th><th>sensitivity</th><th>anchor</th></tr>` +
+    rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td class="num">${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`).join("");
+  const aucs = [["all negatives", o.auc_vs_all_negatives], ["verified true negatives", o.auc_vs_verified_tn],
+                ["healthy donors only", o.auc_vs_donors]].filter(a => a[1] != null);
+  $("#ov-ops-note").innerHTML =
+    (Object.keys(ppv).length ? `PPV at 98% spec: ` +
+      Object.entries(ppv).sort().map(([k,v]) => `${pct(v)} at ${pct(+k)} prevalence`).join(" · ") + ". " : "") +
+    (aucs.length ? `AUC by negative class: ` + aucs.map(([k,v]) => `${esc(k)} ${fmt(v)}`).join(" · ") +
+      ` — pooled negatives include unpaired samples that are unlabeled, not verified.` : "");
+})();
+
 /* ── automatic findings (derived in the data layer, aggregates only) ── */
 const TAB_LABEL = {overview:"cohort", scoreboard:"single-evaluator", multimodal:"multimodal", diagnostics:"pipeline"};
 $("#ov-findings").innerHTML = (R.findings || []).map(f =>
@@ -244,8 +280,11 @@ const bestEv = [...R.evaluators].sort((a,b) => (b.best_auc||0)-(a.best_auc||0))[
 $("#ov-cards").innerHTML = [
   ["Samples", C.n_samples.toLocaleString(), `${C.n_patients.toLocaleString()} patients`],
   ["True ctDNA+", (C.label_counts["True ctDNA+"]||0).toLocaleString(), "tier-1 positives"],
-  ["Healthy normals", (C.label_counts["Healthy Normal"]||0).toLocaleString(), "spec@100 anchor"],
-  ["Best evaluator", bestEv ? bestEv.evaluator : "–", bestEv ? `AUC ${fmt(bestEv.best_auc)} (${bestEv.best_model})` : ""],
+  ["Healthy normals", (C.label_counts["Healthy Normal"]||0).toLocaleString(), "screening anchor (one-sided)"],
+  ["Verified true negatives", (P.operating_points?.tn_anchor?.n_tn ?? "–").toLocaleString?.() ?? "–",
+     P.operating_points?.tn_anchor?.n_tn_patients ? `${P.operating_points.tn_anchor.n_tn_patients.toLocaleString()} patients · MRD anchor` : "MRD anchor"],
+  ["Primary evaluator", P.evaluator ?? "–",
+     `a priori · AUC ${fmt(P.auc)}${P.argmax_evaluator && P.argmax_evaluator !== P.evaluator ? ` · run argmax ${esc(P.argmax_evaluator)} ${fmt(P.argmax_auc)}` : ""}`],
   ["Best stacking AUC", fmt(Math.max(...Object.values(R.multimodal.models).map(m => m.stacking?.auc||0))),
      `vs best single ${fmt(R.multimodal.best_single_auc)}`],
 ].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");

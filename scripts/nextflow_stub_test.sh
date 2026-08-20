@@ -182,6 +182,19 @@ else
     echo "   GPU-results staging route present in report.nf"
 fi
 
+# --- 7d. #122 structural: the label stage must receive the krewlyzer dir ----------------
+# Without it `kreview label` cannot load per-sample fragment counts, so
+# total_fragments_pf is unknown AND the --min-fragments Insufficient-Data rule silently
+# never fires (it never fired in production before #122). Stub runs cannot exercise the
+# rule, so assert the wire exists.
+echo "== #122 structural (label stage receives krewlyzer dir for depth metadata)"
+if ! grep -q '\-\-krewlyzer-dir' "$REPO/nextflow/modules/local/kreview/label.nf"; then
+    echo "FAILED: label.nf no longer passes --krewlyzer-dir (#122): the min_fragments rule cannot fire" >&2
+    fail=1
+else
+    echo "   label.nf passes --krewlyzer-dir"
+fi
+
 echo "== #97 structural (merge survives ablation failure via NO_ABLATION sentinel)"
 if ! grep -q "ablation_results.ifEmpty(file('NO_ABLATION'))" "$REPO/nextflow/workflows/kreview_eval.nf"; then
     echo "FAILED: kreview_eval.nf lost the .ifEmpty(file('NO_ABLATION')) on the merge input (#97)" >&2

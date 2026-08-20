@@ -23,6 +23,12 @@ log = structlog.get_logger()
 
 # Subgroup metrics are emitted only when the group has at least this many samples —
 # below it the AUC is noise, and tiny groups edge toward re-identifiability.
+# Declared a priori in ANALYSIS_PLAN.md so the report can show the pre-registered
+# primary next to the run's argmax: best-of-156 selection inflates the winner by
+# ~0.01–0.02 AUC, so the argmax evaluator/model is exploratory, not confirmatory.
+PRIMARY_EVALUATOR = "FSCGenomewide"
+PRIMARY_MODEL = "tabicl_ft"
+
 MIN_SUBGROUP = 30
 # Curves are thinned to this many points before embedding (endpoints always kept).
 CURVE_POINTS = 120
@@ -37,6 +43,8 @@ _GPU_MODELS = ("tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft")
 # %% auto #0
 __all__ = [
     "log",
+    "PRIMARY_EVALUATOR",
+    "PRIMARY_MODEL",
     "MIN_SUBGROUP",
     "CURVE_POINTS",
     "CALIBRATION_BINS",
@@ -125,6 +133,83 @@ def _build_cohort(labels: pd.DataFrame) -> dict:
     return cohort
 
 
+def _anchored_operating_points(
+    y_arr: np.ndarray, p_arr: np.ndarray, ids: list, lab_by_id: pd.DataFrame
+) -> dict:
+    """Dual-anchor operating points (#123), computed from OOF scores.
+
+    Two anchors answer two different questions and are never blended:
+      * **tumor-informed true negatives** (label ``Possible ctDNA−`` AND a paired
+        IMPACT tumor AND zero confirmed variants) — the MRD question, "can we tell
+        shedding from non-shedding *within cancer patients*". Thresholds are
+        quantiles of thousands of samples, so 98/99% specificity is estimable.
+      * **healthy donors** — the screening question. Its sens@100spec threshold is
+        the MAX score over a few dozen donors; a symmetric CI for a max-statistic is
+        inconsistent (the argmax donor drops out of resamples, so the threshold can
+        only fall), which is why only a one-sided lower bound is reported.
+
+    Also returns the verification-bias comparison: the same score's AUC against
+    verified negatives vs all negatives vs donors only — pooled negatives include
+    unpaired samples that are *unlabeled*, not verified.
+    """
+    from sklearn.metrics import roc_auc_score
+
+    out: dict = {}
+    if not ids or len(ids) != len(y_arr):
+        return out
+    meta = lab_by_id.reindex(ids)
+    pos = y_arr == 1
+    have = lambda c: c in meta.columns  # noqa: E731
+
+    tn = None
+    if have("label") and have("has_paired_impact") and have("n_impact_confirmed"):
+        tn = (
+            meta["label"].eq("Possible ctDNA−").to_numpy()
+            & meta["has_paired_impact"].eq(True).to_numpy()
+            & meta["n_impact_confirmed"].fillna(-1).eq(0).to_numpy()
+        )
+    healthy = meta["label"].eq("Healthy Normal").to_numpy() if have("label") else None
+
+    if tn is not None and tn.sum() >= 200 and pos.sum() > 0:
+        neg = np.sort(p_arr[tn])
+        pts = {}
+        for spec in (0.98, 0.99):
+            thr = neg[min(int(np.ceil(spec * len(neg))) - 1, len(neg) - 1)]
+            sens = float((p_arr[pos] > thr).mean())
+            pts[f"sens_at_{int(spec * 100)}spec"] = _r(sens)
+            pts[f"ppv_at_{int(spec * 100)}spec"] = {
+                str(pv): _r(sens * pv / (sens * pv + (1 - spec) * (1 - pv)))
+                for pv in (0.05, 0.10, 0.25)
+            }
+        pts["n_tn"] = int(tn.sum())
+        pts["n_tn_patients"] = (
+            int(meta.loc[tn, "PATIENT_ID"].nunique()) if have("PATIENT_ID") else None
+        )
+        out["tn_anchor"] = pts
+        out["auc_vs_verified_tn"] = _r(
+            roc_auc_score(y_arr[pos | tn], p_arr[pos | tn])
+            if len(set(y_arr[pos | tn])) > 1
+            else np.nan
+        )
+
+    if healthy is not None and healthy.sum() > 0 and pos.sum() > 0:
+        thr = p_arr[healthy].max()
+        out["donor_anchor"] = {
+            # One-sided: the max-statistic threshold can only fall on resampling, so
+            # the observed sensitivity is a LOWER bound, not a point estimate.
+            "sens_at_100spec_lower_bound": _r(float((p_arr[pos] > thr).mean())),
+            "n_donors": int(healthy.sum()),
+        }
+        if len(set(y_arr[pos | healthy])) > 1:
+            out["auc_vs_donors"] = _r(
+                roc_auc_score(y_arr[pos | healthy], p_arr[pos | healthy])
+            )
+
+    if len(set(y_arr)) > 1:
+        out["auc_vs_all_negatives"] = _r(roc_auc_score(y_arr, p_arr))
+    return out
+
+
 # %% ../nbs/06_report_data.ipynb #7eb86ed0
 def _oof_extras(mr: dict, best: str, lab_by_id: pd.DataFrame) -> dict:
     """Curves, calibration, decision curve and subgroup AUCs from the OOF arrays.
@@ -184,6 +269,9 @@ def _oof_extras(mr: dict, best: str, lab_by_id: pd.DataFrame) -> dict:
 
     ids = mr.get("oof_sample_ids")
     if ids and len(ids) == len(y):
+        out["operating_points"] = _anchored_operating_points(
+            y_arr, p_arr, list(ids), lab_by_id
+        )
         sub: dict = defaultdict(dict)
         meta = lab_by_id.reindex(ids)
         for col, key in (("CANCER_TYPE", "cancer_type"), ("split", "split")):
@@ -511,6 +599,63 @@ def _derive_findings(data: dict) -> list[dict]:
             f"{gpu_best} of {len(ranked)} evaluators; classical models win the rest.",
         )
 
+    # ── dual-anchor operating points (#123) ──
+    ops = (data.get("primary") or {}).get("operating_points") or {}
+    tn = ops.get("tn_anchor") or {}
+    if tn.get("sens_at_98spec") is not None:
+        pat = tn.get("n_tn_patients")
+        add(
+            "info",
+            "scoreboard",
+            f"MRD operating point (tumor-informed anchor): {tn['sens_at_98spec']:.1%} "
+            f"sensitivity at 98% specificity against {tn['n_tn']:,} verified true "
+            f"negatives"
+            + (f" from {pat:,} patients" if pat else "")
+            + f"; {tn.get('sens_at_99spec', float('nan')):.1%} at 99%. This is the "
+            "clinical headline — thresholds are quantiles of thousands of samples.",
+        )
+        ppv = tn.get("ppv_at_98spec") or {}
+        if ppv:
+            add(
+                "info",
+                "scoreboard",
+                "At that operating point, a positive call means PPV "
+                + ", ".join(
+                    f"{float(v):.0%} at {float(k):.0%} prevalence"
+                    for k, v in sorted(ppv.items())
+                )
+                + ".",
+            )
+    don = ops.get("donor_anchor") or {}
+    if don.get("sens_at_100spec_lower_bound") is not None:
+        add(
+            "warn",
+            "scoreboard",
+            f"Donor-anchored sens@100spec is a ONE-SIDED LOWER BOUND "
+            f"(≥{don['sens_at_100spec_lower_bound']:.1%}, {don['n_donors']} donors): the "
+            "threshold is the maximum score over those donors, so a symmetric "
+            "confidence interval for it is inconsistent by construction.",
+        )
+    a_all, a_tn, a_don = (
+        ops.get("auc_vs_all_negatives"),
+        ops.get("auc_vs_verified_tn"),
+        ops.get("auc_vs_donors"),
+    )
+    if a_all is not None and a_tn is not None:
+        add(
+            "info",
+            "scoreboard",
+            f"Verification bias: AUC {a_all:.3f} against all negatives vs "
+            f"{a_tn:.3f} against verified true negatives"
+            + (
+                f" (and {a_don:.3f} against healthy donors — the contrast most of the "
+                "literature reports, which flatters this assay)"
+                if a_don
+                else ""
+            )
+            + ". Pooled negatives include unpaired samples that are unlabeled, not verified.",
+        )
+
     # ── healthy-anchor caveat ──
     n_healthy = (coh.get("label_counts") or {}).get("Healthy Normal")
     if n_healthy is not None and n_healthy < 100:
@@ -658,6 +803,68 @@ def build_report_data(
         "evaluators": evaluators,
         "multimodal": _build_multimodal(outdir / "models" / "multimodal"),
         "diagnostics": _build_diagnostics(trace_path),
+    }
+    # Operating points come from the PRE-REGISTERED score (multimodal stacking,
+    # PRIMARY_MODEL) when the stacking matrix is available to supply sample ids —
+    # that is the published-outdir case. In-pipeline the matrix is not staged, so
+    # the report falls back to the primary evaluator's own score and says which
+    # score produced the numbers (never silently mixing the two).
+    stack_ops, ops_source = {}, None
+    stack_path = outdir / "models" / "multimodal" / "stacking_matrix.parquet"
+    stack_res = (
+        outdir / "models" / "multimodal" / f"stacking_{PRIMARY_MODEL}_results.json"
+    )
+    if stack_path.exists() and stack_res.exists():
+        try:
+            smx = pd.read_parquet(stack_path, columns=["_sample_id", "_label"])
+            probs = json.loads(stack_res.read_text()).get(
+                f"stacking_{PRIMARY_MODEL}_oof_probs"
+            )
+            if probs and len(probs) == len(smx):
+                stack_ops = _anchored_operating_points(
+                    smx["_label"].to_numpy(dtype=int),
+                    np.asarray(probs, dtype=float),
+                    list(smx["_sample_id"]),
+                    lab_by_id,
+                )
+                ops_source = f"multimodal stacking ({PRIMARY_MODEL}), OOF"
+        except (OSError, ValueError, KeyError) as exc:
+            log.warning("report_stacking_ops_unavailable", error=str(exc))
+
+    # Pre-registered primary (ANALYSIS_PLAN.md) alongside the run's argmax, plus the
+    # verification-bias triple — pooled negatives contain UNPAIRED samples that are
+    # unlabeled rather than verified, so the honest number is the verified-TN one.
+    primary = next(
+        (e for e in evaluators if e.get("evaluator") == PRIMARY_EVALUATOR), None
+    )
+    ranked = [e for e in evaluators if e.get("best_auc") is not None]
+    argmax = max(ranked, key=lambda e: e["best_auc"]) if ranked else None
+    if stack_ops:
+        ops = stack_ops
+    else:
+        # Fall back to the a-priori evaluator's own score; if that evaluator is not
+        # in this run, fall back to the argmax — always naming the score the numbers
+        # came from, never silently mixing scores or going blank.
+        fallback = primary or argmax
+        ops = (fallback or {}).get("operating_points") or {}
+        if ops:
+            which = (fallback or {}).get("evaluator")
+            extra = (
+                ""
+                if which == PRIMARY_EVALUATOR
+                else f"; a-priori {PRIMARY_EVALUATOR} absent from this run"
+            )
+            ops_source = f"single evaluator {which} (stacking scores not staged{extra})"
+    data["primary"] = {
+        "evaluator": PRIMARY_EVALUATOR,
+        "model": PRIMARY_MODEL,
+        "operating_points_source": ops_source,
+        "declared_in": "ANALYSIS_PLAN.md",
+        "auc": (primary or {}).get("best_auc"),
+        "holdout_auc": (primary or {}).get("holdout_auc"),
+        "argmax_evaluator": (argmax or {}).get("evaluator"),
+        "argmax_auc": (argmax or {}).get("best_auc"),
+        "operating_points": ops,
     }
     data["findings"] = _derive_findings(data)
     log.info(

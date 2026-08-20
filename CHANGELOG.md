@@ -41,6 +41,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`pip install kreview[arfs]`); pass `--multimodal-selection mi` to keep the old
   dependency-free behavior.
 
+## [Unreleased]
+
+### Fixed
+- **`kreview label` never accepted `--krewlyzer-dir`, so the `--min-fragments`
+  Insufficient-Data rule has never fired in production** (#122, found while implementing
+  the depth-covariate work). The label stage constructed `Paths(..., [])`, so metadata
+  never loaded, `total_fragments_pf` was never computed, and a labeling rule that is
+  configured, printed and documented silently did nothing — the "looks protected,
+  isn't" class from invariant #4. The option now exists, `label.nf`/both workflows/
+  `main.nf` pass it, and a missing depth source is **loud** (`depth_metadata_unavailable`
+  warning naming the impact). **Behaviour change**: runs that supply the krewlyzer dir
+  will now label low-depth, evidence-free samples `Undetermined` as designed, so label
+  counts shift slightly versus ≤ v0.0.32.
+
+### Added
+- **Per-sample sequencing depth is a first-class label column** (#122):
+  `total_fragments_pf` is always emitted (NaN when unavailable — explicit unknown, never
+  a fabricated 0) and registered in `LABEL_META_COLS`, so it is available to every
+  downstream depth-confounding analysis and, per `ANALYSIS_PLAN.md`'s metadata firewall,
+  **never enters a model as a feature**.
+- **Dual-anchor operating points in the report** (#123). The report now leads with the
+  clinically meaningful pair: sensitivity at 98%/99% specificity against **tumor-informed
+  true negatives** (the MRD question, thresholds = quantiles of thousands of samples) and
+  the donor-anchored number demoted to an explicit **one-sided lower bound** (its
+  threshold is a max-statistic over ~55 donors, for which a symmetric bootstrap CI is
+  inconsistent by construction — the argmax donor drops out of resamples, so the
+  threshold can only fall). Operating points are computed from the **pre-registered**
+  score (multimodal stacking, `PRIMARY_MODEL`) when the stacking matrix is available and
+  the source is always named; otherwise they fall back to the a-priori evaluator (or the
+  run's argmax) and say so. Also added: the **verification-bias triple** (AUC against all
+  negatives vs verified true negatives vs healthy donors — pooled negatives include
+  unpaired samples that are *unlabeled*, not verified), **PPV at stated prevalences**, and
+  a **winner's-curse annotation** showing the a-priori primary evaluator beside the run's
+  argmax. All of it flows into the findings engine.
+
 ## [0.0.32] - 2026-08-18
 
 Scoreboard-contract release (#108, closing #107): the scoreboard stops fabricating values

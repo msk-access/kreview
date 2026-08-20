@@ -914,6 +914,11 @@ LABEL_META_COLS = {
     "GENE_PANEL",
     "label",
     "split",  # train/test/exclude — assigned by label pipeline (v0.0.16+)
+    # #122: per-sample sequencing depth. METADATA, never a feature — it is the
+    # covariate every depth-confounding analysis needs (fragmentomics features and
+    # sub-threshold VAF are both depth-sensitive), and ANALYSIS_PLAN.md's metadata
+    # firewall keeps it out of the models.
+    "total_fragments_pf",
     "has_impact_match",
     "has_snv",
     "has_sv",

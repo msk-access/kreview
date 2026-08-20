@@ -19,6 +19,7 @@ process KREVIEW_LABEL {
     path(healthy_xs1,   stageAs: 'healthy_xs1_samplesheet.csv')
     path(healthy_xs2,   stageAs: 'healthy_xs2_samplesheet.csv')
     val cbioportal_dir
+    val krewlyzer_dir
 
     output:
     path "labels.parquet", emit: labels
@@ -34,6 +35,7 @@ process KREVIEW_LABEL {
         --healthy-xs1-samplesheet ${healthy_xs1} \\
         --healthy-xs2-samplesheet ${healthy_xs2} \\
         --cbioportal-dir "${cbioportal_dir}" \\
+        --krewlyzer-dir "${krewlyzer_dir}" \\
         --min-vaf ${params.min_vaf ?: 0.01} \\
         --min-fragments ${params.min_fragments ?: 2000} \\
         --min-variants ${params.min_variants ?: 1} \\

@@ -578,7 +578,21 @@ class CtDNALabeler:
 
             labels["label"] = self.LABEL_POSS_NEG
 
-            # Apply Insufficient Data fallback for 0 signal + low depth
+            # Apply Insufficient Data fallback for 0 signal + low depth.
+            # #122: the column is ALWAYS emitted (NaN when metadata is unavailable)
+            # so downstream can control for depth, and a missing depth source is
+            # LOUD — the rule silently never fired in production before this.
+            labels["total_fragments_pf"] = np.nan
+            if self.metadata_df.empty:
+                log.warning(
+                    "depth_metadata_unavailable",
+                    impact=(
+                        "total_fragments_pf unknown; the min_fragments "
+                        "Insufficient-Data rule is NOT applied"
+                    ),
+                    hint="pass --krewlyzer-dir to `kreview label`",
+                    min_fragments=self.config.min_fragments,
+                )
             if not self.metadata_df.empty:
                 # Resolve col name (schema changed in v0.8.2)
                 tf_col = (
@@ -595,12 +609,31 @@ class CtDNALabeler:
                     right_on="sample_id",
                     how="left",
                 )
-                labels["total_fragments_pf"] = labels[tf_col].fillna(0)
+                labels["total_fragments_pf"] = pd.to_numeric(
+                    labels[tf_col], errors="coerce"
+                )
+                labels = labels.drop(
+                    columns=[c for c in ("sample_id", "assay") if c in labels.columns]
+                )
+                n_known = int(labels["total_fragments_pf"].notna().sum())
+                log.info(
+                    "depth_metadata_loaded",
+                    n_with_depth=n_known,
+                    n_samples=int(len(labels)),
+                    median_fragments=(
+                        float(labels["total_fragments_pf"].median())
+                        if n_known
+                        else None
+                    ),
+                )
                 insufficient = (
                     (~labels["has_snv"])
                     & (~labels["has_sv"])
                     & (~labels["has_cna"])
-                    & (labels["total_fragments_pf"] < self.config.min_fragments)
+                    & (
+                        labels["total_fragments_pf"].fillna(np.inf)
+                        < self.config.min_fragments
+                    )
                 )
                 labels.loc[insufficient, "label"] = self.LABEL_INSUF_DATA
 

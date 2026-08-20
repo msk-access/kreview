@@ -606,3 +606,33 @@ class TestPatientGroupedSplit:
         )
         result = labeler._assign_train_test_split(df)
         assert set(result["split"].unique()) == {"train", "test"}
+
+
+class TestDepthColumn:
+    """#122: per-sample depth is emitted as metadata, and its absence is loud.
+
+    Root cause this guards: `kreview label` had no --krewlyzer-dir option at all,
+    so metadata never loaded, `total_fragments_pf` was never computed, and the
+    --min-fragments Insufficient-Data rule silently never fired in production.
+    """
+
+    def test_depth_column_is_label_metadata_not_a_feature(self):
+        from kreview.core import LABEL_META_COLS
+
+        assert "total_fragments_pf" in LABEL_META_COLS
+
+    def test_label_cli_exposes_krewlyzer_dir(self):
+        """The option must exist — without it the depth gate cannot fire."""
+        import inspect
+
+        from kreview.cli import label
+
+        assert "krewlyzer_dir" in inspect.signature(label).parameters
+
+    def test_label_help_documents_the_option(self):
+        from typer.testing import CliRunner
+
+        from kreview.cli import app
+
+        out = CliRunner().invoke(app, ["label", "--help"]).output
+        assert "--krewlyzer-dir" in out

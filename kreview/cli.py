@@ -65,6 +65,13 @@ def label(
         ..., help="Healthy XS2 samplesheet CSV"
     ),
     cbioportal_dir: Path = typer.Option(..., help="Directory with cBioPortal files"),
+    krewlyzer_dir: list[str] = typer.Option(
+        None,
+        "--krewlyzer-dir",
+        help="krewlyzer output directory (repeatable). Supplies per-sample fragment "
+        "counts: without it the --min-fragments Insufficient-Data rule cannot fire "
+        "and total_fragments_pf is emitted as unknown (#122).",
+    ),
     output: Path = typer.Option("labels.parquet", help="Output parquet file"),
     min_vaf: float = typer.Option(
         0.01, help="Min VAF for Possible ctDNA+ (default 1%)"
@@ -91,19 +98,34 @@ def label(
     print(f"  --healthy-xs1       : {healthy_xs1_samplesheet}", flush=True)
     print(f"  --healthy-xs2       : {healthy_xs2_samplesheet}", flush=True)
     print(f"  --cbioportal-dir    : {cbioportal_dir}", flush=True)
+    print(f"  --krewlyzer-dir     : {krewlyzer_dir or '(not provided)'}", flush=True)
     print(f"  --output            : {output}", flush=True)
     print(f"  --min-vaf           : {min_vaf}", flush=True)
     print(f"  --min-variants      : {min_variants}", flush=True)
     print(f"  --ch-hotspot-maf    : {ch_hotspot_maf or 'disabled'}", flush=True)
     print("", flush=True)
 
+    # #122: the 5th arg is krewlyzer_dirs — passing [] here (as this command did
+    # since inception) meant metadata never loaded, so total_fragments_pf was never
+    # computed and the --min-fragments Insufficient-Data rule could not fire.
     paths = Paths(
         str(cancer_samplesheet),
         str(healthy_xs1_samplesheet),
         str(healthy_xs2_samplesheet),
         str(cbioportal_dir),
-        [],
+        [
+            str(d)
+            for d in (krewlyzer_dir or [])
+            if str(d) not in ("NO_KREWLYZER_DIR", "")
+        ],
     )
+    if not [d for d in (krewlyzer_dir or []) if str(d) not in ("NO_KREWLYZER_DIR", "")]:
+        print(
+            "  WARNING: --krewlyzer-dir not given — per-sample fragment counts are "
+            "unavailable, so total_fragments_pf will be unknown and the "
+            "--min-fragments Insufficient-Data rule will NOT be applied.",
+            flush=True,
+        )
     # Metadata is ~1 row/sample — load everything in a single large batch.
     config = LabelConfig(
         min_vaf=min_vaf,
