@@ -4917,11 +4917,19 @@ def multimodal_ablation(
     # "_sample" evaluator that produces a meaningless delta while looking legitimate.
     # The guard is belt-and-braces — _drop_stacking_metadata already removed the known
     # ones — so a metadata column added later cannot silently become a fake evaluator.
+    # Strip the KNOWN model suffix rather than rsplit("_", 1): the two-part suffixes
+    # (tabicl_ft, tabpfn_ft) otherwise mint phantom evaluators — "X_tabicl_ft" rsplits
+    # to "X_tabicl", and the v0.0.32 iris run ablated 52 "evaluators" instead of 26,
+    # half of them phantoms that each re-trained the stacking model on GPU just to
+    # drop a single _ft column (found reviewing that run's ablation_results.json).
+    _suffixes = sorted(_GPU_MODEL_NAMES | {"lr", "rf", "xgb"}, key=len, reverse=True)
     evaluator_names = sorted(
         {
-            col.rsplit("_", 1)[0]
+            col[: -len(suffix) - 1]
             for col in stacking_df.columns
             if "_" in col and not col.startswith("_")
+            for suffix in [next((s for s in _suffixes if col.endswith("_" + s)), None)]
+            if suffix is not None
         }
     )
     if not evaluator_names:

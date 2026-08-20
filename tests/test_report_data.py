@@ -87,6 +87,22 @@ def mini_outdir(tmp_path):
         json.dumps(mr)
     )
 
+    # GPU results live in models/gpu/<eval>_gpu_model_results.json — a separate
+    # file with its own exact path (the NF report staging once dumped these into
+    # models/cpu/, silently dropping every GPU model from the deep-dive modal).
+    (tmp_path / "models" / "gpu").mkdir()
+    (tmp_path / "models" / "gpu" / "EvalA_gpu_model_results.json").write_text(
+        json.dumps(
+            {
+                "auc_tabicl": 0.83,
+                "auc_tabicl_ci_lower": 0.79,
+                "auc_tabicl_ci_upper": 0.87,
+                "tabicl_fold_aucs": [0.82, 0.84],
+                "oof_sample_ids": ids,
+            }
+        )
+    )
+
     (tmp_path / "matrices" / "selected").mkdir(parents=True)
     (tmp_path / "matrices" / "selected" / "EvalA_selection_qc.json").write_text(
         json.dumps({"method": "mrmr", "total_input_features": 10, "n_mrmr_selected": 3})
@@ -130,6 +146,84 @@ class TestBuildReportData:
         # By construction most patients span train/test (alternating splits) except
         # the pairs fixed to a single split — assert the counter sees the leakage.
         assert data["cohort"]["patients_in_both_splits"] >= 1
+
+    def test_gpu_models_reach_model_metrics(self, mini_outdir):
+        """models/gpu results must appear in the deep-dive model metrics."""
+        data = build_report_data(mini_outdir)
+        mm = data["evaluators"][0]["model_metrics"]
+        assert "tabicl" in mm, f"GPU model missing from modal metrics: {sorted(mm)}"
+        assert mm["tabicl"]["auc"] == 0.83
+
+    def test_excluded_samples_are_not_split_leakage(self, tmp_path, mini_outdir):
+        """A patient with a train sample plus an EXCLUDED sample is not leakage.
+
+        The counter once grouped over every split value and false-flagged 14
+        patients on the v0.0.32 iris report — all (exclude, train/test) combos.
+        """
+        import pandas as pd
+
+        labels = pd.read_parquet(mini_outdir / "labels" / "labels.parquet")
+        # Make the split clean (no train/test overlap), then give patient PT0 an
+        # extra excluded sample — the counter must stay at 0.
+        labels["split"] = [
+            "train" if i % 2 == 0 else "test" for i in range(len(labels))
+        ]
+        labels["PATIENT_ID"] = [f"Q{i}" for i in range(len(labels))]
+        labels.loc[labels.index[-1], "PATIENT_ID"] = "Q0"
+        labels.loc[labels.index[-1], "split"] = "exclude"
+        labels.to_parquet(mini_outdir / "labels" / "labels.parquet", index=False)
+        data = build_report_data(mini_outdir)
+        assert data["cohort"]["patients_in_both_splits"] == 0
+
+    def test_findings_derived_and_structured(self, mini_outdir):
+        """The findings engine emits structured, tab-tagged inferences."""
+        data = build_report_data(mini_outdir)
+        fs = data["findings"]
+        assert fs, "no findings derived"
+        assert all(f["kind"] in {"good", "info", "warn"} for f in fs)
+        assert all(
+            f["tab"] in {"overview", "scoreboard", "multimodal", "diagnostics"}
+            for f in fs
+        )
+        # The fixture has patients spanning train/test -> the leakage warning fires.
+        assert any(
+            "BOTH train and test" in f["text"] and f["kind"] == "warn" for f in fs
+        )
+        # Stacking beats the best single in the fixture -> the stacking finding fires.
+        assert any("Stacking" in f["text"] for f in fs)
+
+    def test_findings_clean_split_yields_good(self, mini_outdir):
+        """With a clean patient-grouped split, the good-split finding replaces the warning."""
+        import pandas as pd
+
+        labels = pd.read_parquet(mini_outdir / "labels" / "labels.parquet")
+        labels["split"] = [
+            "train" if i % 2 == 0 else "test" for i in range(len(labels))
+        ]
+        labels["PATIENT_ID"] = [f"Q{i}" for i in range(len(labels))]
+        labels.to_parquet(mini_outdir / "labels" / "labels.parquet", index=False)
+        fs = build_report_data(mini_outdir)["findings"]
+        assert any("split intact" in f["text"] and f["kind"] == "good" for f in fs)
+        assert not any("BOTH train and test" in f["text"] for f in fs)
+
+    def test_phantom_ablation_entries_filtered(self, mini_outdir):
+        """Pre-fix LOO files carry phantom keys like 'EvalA_tabicl' — dropped."""
+        (mini_outdir / "models" / "multimodal" / "ablation_results.json").write_text(
+            json.dumps(
+                {
+                    "ablation_model": "tabicl",
+                    "ablation_baseline_auc": 0.85,
+                    "ablation": {
+                        "EvalA": {"delta": 0.01, "auc_without": 0.84},
+                        "EvalA_tabicl": {"delta": 0.001, "auc_without": 0.849},
+                        "EvalA_tabpfn_ft": {"delta": 0.002, "auc_without": 0.848},
+                    },
+                }
+            )
+        )
+        data = build_report_data(mini_outdir)
+        deltas = data["multimodal"]["ablation"]["deltas"]
+        assert set(deltas) == {"EvalA"}, f"phantoms not filtered: {sorted(deltas)}"
 
     def test_subgroup_breakdowns_are_aggregates(self, mini_outdir):
         data = build_report_data(mini_outdir)

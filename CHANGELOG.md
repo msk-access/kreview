@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Report: GPU models missing from the deep-dive modal** (found on the v0.0.32 iris
+  report). The Nextflow report staging dumped every model-results JSON into
+  `models/cpu/`, but `build_report_data` reads GPU results from the exact path
+  `models/gpu/<eval>_gpu_model_results.json` — the modal silently showed only
+  lr/rf/xgb. Staging now routes by filename; guarded by a structural check in the
+  stub test and a fixture test.
+- **Report: the LOO ablation panel now actually renders.** The multimodal tab embedded
+  the leave-one-evaluator-out results but had no rendering code for the success case —
+  only the "absent" note. Added the contribution bar chart (ΔAUC when an evaluator is
+  removed, loud-fallback annotation when #97 substitution occurred).
+- **Multimodal LOO ablation no longer mints phantom evaluators** from two-part model
+  suffixes: `rsplit("_", 1)` parsed `X_tabicl_ft` into a phantom "X_tabicl", and the
+  v0.0.32 run ablated 52 "evaluators" instead of 26 — half the LOO stage's GPU compute
+  spent re-training the stacking model to drop single `_ft` columns. Discovery now
+  strips known model suffixes; the report filters phantom entries out of pre-fix files.
+- **Report: excluded samples no longer false-flag the patient-leakage banner.** The
+  counter grouped over every split value, so a patient with one modelable sample plus
+  one *excluded* sample (heme / insufficient data) counted as "in both splits" — the
+  v0.0.32 report showed a leakage banner for 14 such patients despite zero true
+  train/test leakage. The counter now considers train/test rows only.
 ### Changed
 - **`multimodal_selection` default flipped `mi` → `grootcv`** (#96 closeout). The
   confirmation criterion was met on the v0.0.32 iris run: stacking AUC within ±0.002 of

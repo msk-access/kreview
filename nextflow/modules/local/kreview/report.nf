@@ -44,10 +44,19 @@ process KREVIEW_REPORT {
     ${params.report_env_setup}
 
     # Stage channel inputs into the canonical outdir layout build_report_data expects.
-    mkdir -p outdir/labels outdir/models/cpu outdir/matrices/selected \\
+    mkdir -p outdir/labels outdir/models/cpu outdir/models/gpu outdir/matrices/selected \\
              outdir/models/multimodal outdir/ablation/merged reports
     cp ${labels_file} outdir/labels/labels.parquet
-    for f in ${model_results}; do cp "\${f}" outdir/models/cpu/ 2>/dev/null || true; done
+    # Route GPU results to models/gpu/ — build_report_data reads the exact path
+    # outdir/models/gpu/<eval>_gpu_model_results.json; dumping everything into
+    # models/cpu/ silently dropped every GPU model from the deep-dive modal
+    # (found on the v0.0.32 iris report).
+    for f in ${model_results}; do
+        case "\${f}" in
+            *_gpu_model_results.json) cp "\${f}" outdir/models/gpu/ 2>/dev/null || true ;;
+            *)                        cp "\${f}" outdir/models/cpu/ 2>/dev/null || true ;;
+        esac
+    done
     for f in ${selection_qc}; do cp "\${f}" outdir/matrices/selected/ 2>/dev/null || true; done
     if [ "${scoreboard_file}" != "NO_SCOREBOARD" ]; then
         cp ${scoreboard_file} outdir/scoreboard_combined__all.parquet
