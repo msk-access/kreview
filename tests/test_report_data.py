@@ -245,6 +245,71 @@ class TestBuildReportData:
         assert "tn_anchor" not in ops  # explicitly absent, never fabricated
         assert ops.get("auc_vs_all_negatives") is not None
 
+    def test_lod_curve_and_tradeoff(self):
+        """The burden-response curve and spec/sens trade-off, built directly from
+        OOF arrays: sensitivity must fall as specificity tightens, and detection
+        must rise with tumor burden (the curve that makes every other number
+        interpretable)."""
+        import numpy as np
+        import pandas as pd
+
+        from kreview.report_data import _anchored_operating_points
+
+        rng = np.random.RandomState(0)
+        n_pos, n_tn = 400, 400
+        ids = [f"S{i}" for i in range(n_pos + n_tn)]
+        y = np.array([1] * n_pos + [0] * n_tn)
+        # positives: score rises with burden; negatives: low scores
+        vaf = np.concatenate([np.geomspace(0.0005, 0.4, n_pos), np.zeros(n_tn)])
+        score = np.concatenate(
+            [
+                np.clip(0.25 + 0.55 * (np.log10(vaf[:n_pos]) + 3.3) / 3.0, 0, 1)
+                + rng.normal(0, 0.05, n_pos),
+                rng.uniform(0, 0.45, n_tn),
+            ]
+        )
+        lab = pd.DataFrame(
+            {
+                "SAMPLE_ID": ids,
+                "PATIENT_ID": ids,
+                "label": ["True ctDNA+"] * n_pos + ["Possible ctDNA−"] * n_tn,
+                "has_paired_impact": True,
+                "n_impact_confirmed": [2] * n_pos + [0] * n_tn,
+                "max_vaf": vaf,
+            }
+        ).set_index("SAMPLE_ID")
+
+        ops = _anchored_operating_points(y, score, ids, lab)
+        c = ops["sens_spec_curve"]
+        assert len(c["spec"]) == len(c["sens"]) > 5
+        assert all(
+            b <= a + 1e-9 for a, b in zip(c["sens"], c["sens"][1:])
+        ), "sensitivity must not rise as specificity tightens"
+
+        lod = ops["lod"]
+        det = [b["detected"] for b in lod["bins"]]
+        assert len(det) >= 4
+        assert det[0] < det[-1], "detection must rise with tumor burden"
+        assert 0 < lod["lod50_vaf"] < 1
+        # TF ~ 2 x VAF for a clonal heterozygous variant
+        assert lod["lod50_tumor_fraction"] == pytest.approx(
+            2 * lod["lod50_vaf"], rel=1e-6
+        )
+        for b in lod["bins"]:
+            assert b["ci"][0] <= b["detected"] <= b["ci"][1]
+
+    def test_wilson_interval_bounds(self):
+        """Wilson beats the normal approximation exactly where the LOD curve lives:
+        tiny p and small n, where normal CIs go below zero."""
+        from kreview.report_data import _wilson
+
+        lo, hi = _wilson(0, 50)
+        assert lo == 0.0 and 0 < hi < 0.15
+        lo, hi = _wilson(25, 50)
+        assert lo < 0.5 < hi
+        lo, hi = _wilson(50, 50)
+        assert hi == 1.0 and 0.9 < lo < 1.0
+
     def test_phantom_ablation_entries_filtered(self, mini_outdir):
         """Pre-fix LOO files carry phantom keys like 'EvalA_tabicl' — dropped."""
         (mini_outdir / "models" / "multimodal" / "ablation_results.json").write_text(

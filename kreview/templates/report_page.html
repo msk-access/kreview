@@ -78,6 +78,18 @@
                 border-radius:7px; padding:2px 9px; margin:2px 4px 2px 0; font-size:12px; font-family:var(--mono); }
   .hbars .row { display:grid; grid-template-columns:210px 1fr 64px; gap:10px; align-items:center; margin:4px 0; }
   .mono { font-family:var(--mono); font-size:12.5px; }
+  .hero { display:grid; grid-template-columns:minmax(260px,1fr) 1.35fr 1fr; gap:16px; margin:16px 0 22px; }
+  @media (max-width:1000px){ .hero { grid-template-columns:1fr; } }
+  .hero .panel { margin:0; display:flex; flex-direction:column; }
+  .hero .eyebrow { color:var(--muted); font-size:11px; text-transform:uppercase;
+                   letter-spacing:.06em; font-weight:600; }
+  .hero .big { font-size:44px; font-weight:680; line-height:1.05; margin:6px 0 2px;
+               font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .hero .qual { color:var(--muted); font-size:13px; }
+  .hero .sub { margin-top:auto; padding-top:12px; color:var(--muted); font-size:12.5px;
+               border-top:1px solid var(--line); }
+  .hero .kv { display:flex; justify-content:space-between; gap:10px; padding:3px 0; font-size:13px; }
+  .hero .kv b { font-variant-numeric:tabular-nums; }
   .hbars .lbl { font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 </head>
@@ -89,9 +101,32 @@
 <nav id="nav"></nav>
 <main>
   <section class="tab" id="tab-overview">
+    <div class="hero" id="ov-hero" style="display:none">
+      <div class="panel">
+        <div class="eyebrow">Primary endpoint</div>
+        <div class="big" id="hero-sens">–</div>
+        <div class="qual" id="hero-sens-q"></div>
+        <div class="sub" id="hero-sens-sub"></div>
+      </div>
+      <div class="panel">
+        <div class="eyebrow">Detection depends on tumor burden</div>
+        <div id="hero-lod" style="height:212px"></div>
+        <div class="sub" id="hero-lod-sub"></div>
+      </div>
+      <div class="panel">
+        <div class="eyebrow">Does combining families help?</div>
+        <div class="big" id="hero-lift">–</div>
+        <div class="qual" id="hero-lift-q"></div>
+        <div class="sub" id="hero-lift-sub"></div>
+      </div>
+    </div>
+
     <div class="panel" id="ov-ops" style="display:none">
       <h3>Operating points — two anchors, two questions</h3>
-      <div style="overflow:auto"><table id="ov-ops-tbl"></table></div>
+      <div class="grid2">
+        <div><div style="overflow:auto"><table id="ov-ops-tbl"></table></div></div>
+        <div><div id="ov-tradeoff" style="height:260px"></div></div>
+      </div>
       <div class="legend" id="ov-ops-note"></div>
     </div>
     <div class="legend" style="margin-bottom:10px">Findings are derived automatically from this run. <a href="#" onclick="showTab('methods');return false;">Methods &amp; interpretation →</a></div>
@@ -266,6 +301,57 @@ const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
   hovermode: "closest",
 }, extra);
 
+/* ── hero: how good · at what burden · does combining help ── */
+(function hero() {
+  const o = (R.primary || {}).operating_points || {};
+  const tn = o.tn_anchor, lod = o.lod, MM = R.multimodal || {};
+  if (!tn && !lod) return;
+  $("#ov-hero").style.display = "";
+
+  if (tn) {
+    $("#hero-sens").textContent = pct(tn.sens_at_98spec);
+    $("#hero-sens-q").innerHTML =
+      `sensitivity at <b>98% specificity</b> against ${tn.n_tn?.toLocaleString?.() ?? "–"} ` +
+      `tumor-informed true negatives`;
+    $("#hero-sens-sub").innerHTML =
+      `${pct(tn.sens_at_99spec)} at 99% specificity · ` +
+      (tn.n_tn_patients ? `${tn.n_tn_patients.toLocaleString()} patients · ` : "") +
+      `out-of-fold`;
+  }
+
+  if (lod?.bins?.length) {
+    const b = lod.bins;
+    Plotly.newPlot("hero-lod", [
+      {x: b.map(r => r.label), y: b.map(r => r.detected), type: "scatter", mode: "lines+markers",
+       line: {color: PALETTE[0], width: 2.5, shape: "spline"}, marker: {size: 7, color: PALETTE[0]},
+       error_y: {type: "data", symmetric: false,
+                 array: b.map(r => r.ci[1] - r.detected), arrayminus: b.map(r => r.detected - r.ci[0]),
+                 color: "#aab3d0", thickness: 1.2, width: 3},
+       customdata: b.map(r => r.n),
+       hovertemplate: "max VAF %{x}<br><b>%{y:.1%}</b> detected · n=%{customdata}<extra></extra>"},
+    ], PL_LAYOUT("", "plasma max VAF", "detected",
+        {margin: {l: 48, r: 10, t: 6, b: 46}, yaxis: {tickformat: ".0%", range: [0, 1],
+         gridcolor: "#eceff5"}, xaxis: {tickangle: -35}}), PL_CFG);
+    $("#hero-lod-sub").innerHTML = lod.lod50_vaf
+      ? `50% detection at <b>${pct(lod.lod50_vaf)}</b> max VAF ` +
+        `(~${pct(lod.lod50_tumor_fraction)} tumor fraction) · at ${esc(lod.operating_point)}`
+      : `at ${esc(lod.operating_point)}`;
+  }
+
+  const stacks = Object.entries(MM.models || {})
+    .map(([m, d]) => [m, d.stacking?.auc]).filter(e => e[1] != null);
+  if (stacks.length && MM.best_single_auc != null) {
+    const best = stacks.reduce((a, b) => b[1] > a[1] ? b : a);
+    $("#hero-lift").textContent = "+" + fmt(best[1] - MM.best_single_auc);
+    $("#hero-lift-q").innerHTML =
+      `AUC over the best single evaluator — ${fmt(best[1])} stacking (${esc(best[0])}) ` +
+      `vs ${fmt(MM.best_single_auc)} for ${esc(MM.best_single_evaluator ?? "–")}`;
+    $("#hero-lift-sub").innerHTML =
+      `${stacks.length} meta-learners, spread ${fmt(Math.max(...stacks.map(s => s[1])) - Math.min(...stacks.map(s => s[1])))} AUC ` +
+      `· ${MM.n_evaluators ?? "–"} evaluators combined`;
+  }
+})();
+
 /* ── operating points (dual anchor, #123) ─────────────────── */
 const P = R.primary || {};
 (function ops() {
@@ -290,6 +376,25 @@ const P = R.primary || {};
     rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td class="num">${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`).join("");
   const aucs = [["all negatives", o.auc_vs_all_negatives], ["verified true negatives", o.auc_vs_verified_tn],
                 ["healthy donors only", o.auc_vs_donors]].filter(a => a[1] != null);
+  const c = o.sens_spec_curve;
+  if (c?.spec?.length) {
+    const marks = [[0.98, tn?.sens_at_98spec], [0.99, tn?.sens_at_99spec]].filter(m => m[1] != null);
+    Plotly.newPlot("ov-tradeoff", [
+      {x: c.spec, y: c.sens, mode: "lines", line: {color: PALETTE[0], width: 2.5},
+       name: "vs verified TN",
+       hovertemplate: "spec %{x:.1%} → sens %{y:.1%}<extra></extra>"},
+      {x: marks.map(m => m[0]), y: marks.map(m => m[1]), mode: "markers+text", showlegend: false,
+       marker: {size: 11, color: PALETTE[0], line: {color: "#fff", width: 2}},
+       text: marks.map(m => pct(m[1])), textposition: "top right", textfont: {size: 11},
+       hovertemplate: "declared operating point<br>spec %{x:.0%} → sens %{y:.1%}<extra></extra>"},
+    ].concat(don?.sens_at_100spec_lower_bound != null ? [{
+       x: [1.0], y: [don.sens_at_100spec_lower_bound], mode: "markers", showlegend: false,
+       marker: {size: 11, symbol: "arrow-up", color: "#c8560f"},
+       hovertemplate: `donor anchor: ≥%{y:.1%} (one-sided, ${don.n_donors} donors)<extra></extra>`}] : []),
+      PL_LAYOUT("Sensitivity vs specificity on the tumor-informed anchor", "specificity", "sensitivity",
+        {margin: {l: 52, r: 14, t: 34, b: 44}, xaxis: {tickformat: ".0%", gridcolor: "#eceff5"},
+         yaxis: {tickformat: ".0%", gridcolor: "#eceff5"}, showlegend: false}), PL_CFG);
+  }
   $("#ov-ops-note").innerHTML =
     (Object.keys(ppv).length ? `PPV at 98% spec: ` +
       Object.entries(ppv).sort().map(([k,v]) => `${pct(v)} at ${pct(+k)} prevalence`).join(" · ") + ". " : "") +
