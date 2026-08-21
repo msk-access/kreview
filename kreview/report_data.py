@@ -604,8 +604,14 @@ def _derive_findings(data: dict) -> list[dict]:
     """
     F: list[dict] = []
 
-    def add(kind: str, tab: str, text: str) -> None:
-        F.append({"kind": kind, "tab": tab, "text": text})
+    def add(kind: str, tab: str, text: str, chart: str | None = None) -> None:
+        # `chart` names the element whose title this sentence should become — the
+        # claim then sits on its own evidence instead of in a separate wall of text
+        # (charted findings render as titles and drop out of the findings list).
+        entry: dict = {"kind": kind, "tab": tab, "text": text}
+        if chart:
+            entry["chart"] = chart
+        F.append(entry)
 
     evs = data.get("evaluators") or []
     coh = data.get("cohort") or {}
@@ -651,7 +657,7 @@ def _derive_findings(data: dict) -> list[dict]:
         )
         if b.get("holdout_auc") is not None:
             txt += f", holdout {b['holdout_auc']:.3f}"
-        add("info", "scoreboard", txt + ").")
+        add("info", "scoreboard", txt + ").", chart="ov-aucbars")
 
         drops = [e["auc_drop"] for e in evs if e.get("auc_drop") is not None]
         if drops:
@@ -776,6 +782,7 @@ def _derive_findings(data: dict) -> list[dict]:
             f"vs {best_single_auc:.3f} for the best single evaluator "
             f"({lift:+.3f}{', beyond its 95% CI' if beyond else ''}) — the feature "
             "families are partially complementary, not redundant.",
+            chart="mm-auc",
         )
         spread = max(stacks.values()) - min(stacks.values())
         if spread <= 0.015:
@@ -804,6 +811,7 @@ def _derive_findings(data: dict) -> list[dict]:
             f"Unique contribution concentrates in {', '.join(top)} "
             f"({share:.0%} of the total leave-one-out AUC drop across "
             f"{len(deltas)} evaluators).",
+            chart="mm-abl",
         )
         redundant = sum(1 for d in deltas.values() if d <= 0.001)
         if redundant:

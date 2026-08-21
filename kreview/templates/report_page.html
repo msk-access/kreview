@@ -89,6 +89,11 @@
   .finding.warn { border-left-color:var(--warn); background:#fff8ec; }
   .finding .tag { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
                   color:var(--muted); white-space:nowrap; font-family:var(--mono); }
+  /* Status is never colour alone — the glyph carries it in greyscale too. */
+  .finding .glyph { font-weight:700; width:14px; text-align:center; flex:none; }
+  .finding.good .glyph { color:var(--accent2); }
+  .finding.info .glyph { color:var(--accent); }
+  .finding.warn .glyph { color:var(--warn); }
   .chips span { display:inline-block; background:var(--chip); color:var(--accent);
                 border-radius:7px; padding:2px 9px; margin:2px 4px 2px 0; font-size:12px; font-family:var(--mono); }
   .hbars .row { display:grid; grid-template-columns:210px 1fr 64px; gap:10px; align-items:center; margin:4px 0; }
@@ -305,7 +310,26 @@ function hbars(el, obj, denom, color) {
       <div class="num">${denom ? (100*v/denom).toFixed(1)+"%" : fmt(v,3)}</div></div>`).join("");
 }
 
-const PALETTE = ["#4650dc","#0ea472","#c8560f","#8636c9","#b8236e","#1272b8","#67707e"];
+/* Three colour scales, deliberately disjoint (a hue means exactly one thing):
+   CATEGORICAL — model/series identity. Excludes every STATUS hue so a series can
+                 never be mistaken for a verdict.
+   STATUS      — good / warning / bad only, always paired with a glyph so the
+                 meaning survives greyscale printing and colour-blind vision.
+   BURDEN      — sequential ramp, reserved for tumour-burden and depth encodings. */
+const PALETTE = ["#4650dc","#7a4fd6","#1272b8","#b0459b","#5a6b8c","#0f8f8f","#8a6d3b"];
+const STATUS  = {good:"#0a7a50", warn:"#c8560f", bad:"#c02942", info:"#4650dc"};
+const GLYPH   = {good:"✓", warn:"!", bad:"✕", info:"i"};
+const BURDEN  = ["#dfe3f7","#b9c0ee","#8f99e2","#6a74d8","#4650dc","#343cae","#252a80"];
+/* Wrap an assertion sentence so plotly renders it as a readable multi-line title. */
+const wrapTitle = (t, n=78) => {
+  const words = String(t).split(" "); const out = []; let line = "";
+  for (const w of words) {
+    if ((line + " " + w).trim().length > n) { out.push(line.trim()); line = w; }
+    else line += " " + w;
+  }
+  if (line.trim()) out.push(line.trim());
+  return out.join("<br>");
+};
 const PL_CFG = {displayModeBar: "hover", displaylogo: false, responsive: true,
   modeBarButtonsToRemove: ["lasso2d","select2d","autoScale2d"]};
 const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
@@ -341,7 +365,9 @@ const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
     const b = lod.bins;
     Plotly.newPlot("hero-lod", [
       {x: b.map(r => r.label), y: b.map(r => r.detected), type: "scatter", mode: "lines+markers",
-       line: {color: PALETTE[0], width: 2.5, shape: "spline"}, marker: {size: 7, color: PALETTE[0]},
+       line: {color: PALETTE[0], width: 2.5, shape: "spline"},
+       marker: {size: 8, color: b.map((_, i) => BURDEN[Math.min(i, BURDEN.length - 1)]),
+                line: {color: PALETTE[0], width: 1}},
        error_y: {type: "data", symmetric: false,
                  array: b.map(r => r.ci[1] - r.detected), arrayminus: b.map(r => r.detected - r.ci[0]),
                  color: "#aab3d0", thickness: 1.2, width: 3},
@@ -406,9 +432,14 @@ const P = R.primary || {};
        text: marks.map(m => pct(m[1])), textposition: "top right", textfont: {size: 11},
        hovertemplate: "declared operating point<br>spec %{x:.0%} → sens %{y:.1%}<extra></extra>"},
     ].concat(don?.sens_at_100spec_lower_bound != null ? [{
-       x: [1.0], y: [don.sens_at_100spec_lower_bound], mode: "markers", showlegend: false,
-       marker: {size: 11, symbol: "arrow-up", color: "#c8560f"},
-       hovertemplate: `donor anchor: ≥%{y:.1%} (one-sided, ${don.n_donors} donors)<extra></extra>`}] : []),
+       // STATUS.warn is deliberate here: this mark is a caveat annotation (the value
+       // is a one-sided bound), not a data series — and it carries a text label so
+       // the meaning does not depend on colour.
+       x: [1.0], y: [don.sens_at_100spec_lower_bound], mode: "markers+text", showlegend: false,
+       marker: {size: 12, symbol: "arrow-up", color: STATUS.warn},
+       text: ["≥ one-sided"], textposition: "middle left",
+       textfont: {size: 10.5, color: STATUS.warn},
+       hovertemplate: `donor anchor: ≥%{y:.1%} (one-sided bound, ${don.n_donors} donors)<extra></extra>`}] : []),
       PL_LAYOUT("Sensitivity vs specificity on the tumor-informed anchor", "specificity", "sensitivity",
         {margin: {l: 52, r: 14, t: 34, b: 44}, xaxis: {tickformat: ".0%", gridcolor: "#eceff5"},
          yaxis: {tickformat: ".0%", gridcolor: "#eceff5"}, showlegend: false}), PL_CFG);
@@ -420,10 +451,19 @@ const P = R.primary || {};
       ` — pooled negatives include unpaired samples that are unlabeled, not verified.` : "");
 })();
 
+/* Findings tagged with a chart become that chart's title (assertion titles): the
+   claim sits on its own evidence, and the findings list keeps only what has no
+   chart home. */
+const CHART_CLAIM = Object.fromEntries(
+  (R.findings || []).filter(f => f.chart).map(f => [f.chart, f]));
+const claimTitle = (id, fallback) =>
+  CHART_CLAIM[id] ? wrapTitle(CHART_CLAIM[id].text) : fallback;
+
 /* ── automatic findings (derived in the data layer, aggregates only) ── */
 const TAB_LABEL = {overview:"cohort", scoreboard:"single-evaluator", multimodal:"multimodal", diagnostics:"pipeline"};
-$("#ov-findings").innerHTML = (R.findings || []).map(f =>
-  `<div class="finding ${esc(f.kind)}"><span class="tag">${esc(TAB_LABEL[f.tab] || f.tab)}</span>` +
+$("#ov-findings").innerHTML = (R.findings || []).filter(f => !f.chart).map(f =>
+  `<div class="finding ${esc(f.kind)}"><span class="glyph" aria-hidden="true">${GLYPH[f.kind] || "i"}</span>` +
+  `<span class="tag">${esc(TAB_LABEL[f.tab] || f.tab)}</span>` +
   `<span>${esc(f.text)}</span></div>`).join("") ||
   `<div class="finding info"><span>No automatic findings for this run.</span></div>`;
 
@@ -539,16 +579,29 @@ $("#ov-cards").innerHTML = [
   }], PL_LAYOUT(`Cancer types (top ${ct.length}; +${C.cancer_types_other.toLocaleString()} other)`,
        "samples", "", {margin:{l:190,r:14,t:34,b:40}}), PL_CFG);
 
+  // AUC is drawn the same way everywhere in this report: a dot with its 95% CI on a
+  // shared axis (see the multimodal chart). Bars imply a meaningful zero and hide
+  // uncertainty; for a discrimination measure both are wrong.
   const evs = [...R.evaluators].sort((a,b) => (a.best_auc||0)-(b.best_auc||0));
-  Plotly.newPlot("ov-aucbars", [{
-    type: "bar", orientation: "h",
-    y: evs.map(e=>e.evaluator), x: evs.map(e=>e.best_auc||0),
-    marker: {color: "#4650dc"},
-    hovertemplate: "<b>%{y}</b><br>CV AUC %{x:.3f} (%{customdata[0]})" +
-      "<br>holdout %{customdata[1]:.3f} · sens@95 %{customdata[2]:.1%}<extra></extra>",
-    customdata: evs.map(e => [e.best_model, e.holdout_auc, e.sens_at_95spec]),
-  }], PL_LAYOUT("Evaluator AUC (best model, CV) — hover for holdout & sens@95", "AUC", "",
-       {margin:{l:190,r:14,t:34,b:40}, xaxis:{range:[0.5,0.9], gridcolor:"#eceff5"}}), PL_CFG);
+  const ci = e => (e.model_metrics && e.best_model && e.model_metrics[e.best_model]
+                   && e.model_metrics[e.best_model].ci) || [null, null];
+  Plotly.newPlot("ov-aucbars", [
+    {x: evs.map(e => e.holdout_auc), y: evs.map(e => e.evaluator), mode: "markers",
+     name: "holdout", marker: {size: 7, symbol: "diamond-open", color: PALETTE[4]},
+     hovertemplate: "<b>%{y}</b><br>holdout AUC %{x:.3f}<extra></extra>"},
+    {x: evs.map(e => e.best_auc || 0), y: evs.map(e => e.evaluator), mode: "markers",
+     name: "CV (best model)",
+     error_x: {type: "data", symmetric: false,
+       array: evs.map(e => (ci(e)[1] ?? e.best_auc ?? 0) - (e.best_auc ?? 0)),
+       arrayminus: evs.map(e => (e.best_auc ?? 0) - (ci(e)[0] ?? e.best_auc ?? 0)),
+       color: "#aab3d0", thickness: 1.2, width: 3},
+     marker: {size: 8, color: PALETTE[0]},
+     customdata: evs.map(e => [e.best_model, e.sens_at_95spec]),
+     hovertemplate: "<b>%{y}</b><br>CV AUC %{x:.3f} (%{customdata[0]})" +
+       "<br>sens@95 %{customdata[1]:.1%}<extra></extra>"},
+  ], PL_LAYOUT(claimTitle("ov-aucbars", "Evaluator AUC — dot = CV (best model), bar = 95% CI, diamond = holdout"),
+       "AUC", "", {margin:{l:190,r:14,t:52,b:40}, xaxis:{range:[0.5,0.95], gridcolor:"#eceff5"},
+       showlegend:true, legend:{orientation:"h", y:-0.16, font:{size:10.5}}}), PL_CFG);
 
   if (C.patients_in_both_splits > 0) $("#ov-leak").innerHTML =
     `<div class="note"><b>⚠ Patient overlap between splits:</b> ${C.patients_in_both_splits.toLocaleString()} ` +
@@ -702,11 +755,11 @@ if (!MM.ablation) {
     $("#mm-abl-panel").style.display = "";
     Plotly.newPlot("mm-abl", [{
       x: top.map(([, v]) => v.delta), y: top.map(([k]) => k), orientation: "h",
-      type: "bar", marker: {color: top.map(([, v]) => v.delta >= 0 ? "#4650dc" : "#c8560f")},
+      type: "bar", marker: {color: top.map(([, v]) => v.delta >= 0 ? PALETTE[0] : PALETTE[3])},
       customdata: top.map(([, v]) => v.auc_without),
       hovertemplate: "<b>%{y}</b><br>ΔAUC %{x:+.4f} · AUC without %{customdata:.4f}<extra></extra>",
     }], PL_LAYOUT(
-      `Top ${top.length} of ${dl.length} evaluators by |contribution|`,
+      claimTitle("mm-abl", `Top ${top.length} of ${dl.length} evaluators by |contribution|`),
       "ΔAUC when removed (baseline − ablated)", "",
       {margin: {l: 210, r: 14, t: 34, b: 40}}), PL_CFG);
   }
@@ -728,12 +781,15 @@ $("#mm-cards").innerHTML = [
      error_x: {type:"data", symmetric:false,
        array: rows.map(r => (r.ci?.[1] ?? r.auc) - r.auc),
        arrayminus: rows.map(r => r.auc - (r.ci?.[0] ?? r.auc)), color:"#aab3d0"},
-     marker: {size: 9, color: rows.map(r => r.sc === "stacking" ? "#4650dc" : "#0ea472")},
+     // scope is series identity, so it takes CATEGORICAL hues — the old green here
+     // collided with the status scale's "good".
+     marker: {size: 9, color: rows.map(r => r.sc === "stacking" ? PALETTE[0] : PALETTE[1])},
      customdata: rows.map(r => [r.sens95, r.sens100h, r.vs_best_single]),
      hovertemplate: "<b>%{y}</b><br>AUC %{x:.3f}<br>sens@95 %{customdata[0]:.1%} · " +
        "sens@100h %{customdata[1]:.1%}<br>vs best single %{customdata[2]:+.3f}<extra></extra>",
      showlegend: false},
-  ], PL_LAYOUT(`Stacking vs raw (dot = AUC, bar = 95% CI; dashed = best single ${fmt(MM.best_single_auc)})`,
+  ], PL_LAYOUT(claimTitle("mm-auc",
+       `Stacking vs raw (dot = AUC, bar = 95% CI; dashed = best single ${fmt(MM.best_single_auc)})`),
        "AUC", "", {margin:{l:150,r:14,t:34,b:40},
        shapes:[{type:"line", x0:MM.best_single_auc, x1:MM.best_single_auc, y0:-0.5, y1:rows.length-0.5,
                 line:{dash:"dash", color:"#c8560f"}}]}), PL_CFG);
