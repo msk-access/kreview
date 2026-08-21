@@ -17,7 +17,8 @@
   header { background:var(--panel); border-bottom:1px solid var(--line); padding:18px 28px; }
   header h1 { margin:0; font-size:20px; font-weight:650; }
   header .sub { color:var(--muted); font-size:12.5px; margin-top:3px; }
-  nav { display:flex; gap:4px; padding:0 20px; background:var(--panel); border-bottom:1px solid var(--line); }
+  nav { display:flex; flex-wrap:wrap; gap:4px; padding:0 20px; background:var(--panel);
+        border-bottom:1px solid var(--line); }
   nav button { border:0; background:none; padding:12px 14px; font:inherit; font-weight:550;
                color:var(--muted); cursor:pointer; border-bottom:2.5px solid transparent; }
   nav button.on { color:var(--accent); border-bottom-color:var(--accent); }
@@ -35,8 +36,12 @@
      forces its column wider than the panel and pushes the neighbouring chart past
      the panel edge. min-width:0 lets columns shrink; the table scrolls instead. */
   .grid2 > * { min-width:0; }
+  /* Column sizing lives in a class, never inline: an inline grid-template-columns
+     outranks the stacking media query below, so the row would stay side-by-side on
+     narrow viewports and push its own panel past the screen edge. */
+  .grid2.ops { grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); }
   .grid2 .js-plotly-plot { width:100%; }
-  @media (max-width:900px){ .grid2 { grid-template-columns:1fr; } }
+  @media (max-width:900px){ .grid2, .grid2.ops { grid-template-columns:1fr; } }
   table { border-collapse:collapse; width:100%; font-size:13px; }
   th, td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
   th { color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em;
@@ -131,7 +136,7 @@
 
     <div class="panel" id="ov-ops" style="display:none">
       <h3>Operating points — two anchors, two questions</h3>
-      <div class="grid2" style="grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)">
+      <div class="grid2 ops">
         <div style="overflow-x:auto"><table id="ov-ops-tbl"></table></div>
         <div><div id="ov-tradeoff" style="height:260px;width:100%"></div></div>
       </div>
@@ -438,7 +443,7 @@ function showTab(id, btn) {
   // Plots created while their tab was hidden have no measurable container width, and
   // switching tabs fires no resize event — so size them on reveal.
   $("#tab-"+id).querySelectorAll(".js-plotly-plot").forEach(el => {
-    Plotly.Plots.resize(el);
+    fitPlot(el);
     plotObserver.observe(el);
   });
   window.scrollTo({top: 0, behavior: "instant"});
@@ -449,17 +454,39 @@ $("#tab-overview").classList.add("on");
 // resizes. A chart drawn in a narrow/hidden container (grid cell, hidden tab,
 // dialog) therefore keeps a stale width and can spill outside its panel. Observing
 // each container makes every chart track its own box, whenever it changes.
+// Plotly.Plots.resize() is unreliable here: on charts whose container was narrower
+// than plotly's 700px default at draw time it returns without error and leaves
+// _fullLayout.width untouched, so the SVG keeps overflowing its panel. Measuring the
+// container and relayouting explicitly always works.
+const fitPlot = el => {
+  const w = el.clientWidth, h = el.clientHeight;
+  if (w > 0 && h > 0 && el._fullLayout &&
+      (Math.abs(el._fullLayout.width - w) > 1 || Math.abs(el._fullLayout.height - h) > 1)) {
+    Plotly.relayout(el, {width: w, height: h});
+  }
+};
 const plotObserver = new ResizeObserver(entries => {
   for (const e of entries) {
     if (e.contentRect.width > 0 && e.target.classList.contains("js-plotly-plot")) {
-      Plotly.Plots.resize(e.target);
+      fitPlot(e.target);
     }
   }
 });
 const observePlots = () =>
-  document.querySelectorAll(".js-plotly-plot").forEach(el => plotObserver.observe(el));
-// Charts are created below; observe after the current task completes.
+  document.querySelectorAll(".js-plotly-plot").forEach(el => {
+    // Fit once on registration too: a chart drawn before layout settled keeps
+    // plotly's default 700px SVG inside a narrower container, and the observer
+    // alone never fires because the container itself never changes size.
+    fitPlot(el);
+    plotObserver.observe(el);
+  });
+// Charts are created below. Plotly finishes drawing some of them asynchronously,
+// so a single pass can run before the last chart exists and leave it at plotly's
+// default 700px SVG inside a narrower panel. Register after the current task, then
+// again after paint and on load — resizing is idempotent, so extra passes are free.
 setTimeout(observePlots, 0);
+requestAnimationFrame(() => requestAnimationFrame(observePlots));
+window.addEventListener("load", observePlots);
 
 /* ── overview ────────────────────────────────────────────── */
 const C = R.cohort;
