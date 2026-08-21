@@ -40,6 +40,11 @@
      outranks the stacking media query below, so the row would stay side-by-side on
      narrow viewports and push its own panel past the screen edge. */
   .grid2.ops { grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); }
+  /* Cells are globally nowrap (right for dense numeric tables), but the operating-
+     points rows carry prose — let them wrap so the anchor column stays visible
+     instead of scrolling out of sight. */
+  .ops-tbl th, .ops-tbl td { white-space:normal; vertical-align:top; }
+  .ops-tbl td:first-child { font-weight:550; }
   .grid2 .js-plotly-plot { width:100%; }
   @media (max-width:900px){ .grid2, .grid2.ops { grid-template-columns:1fr; } }
   table { border-collapse:collapse; width:100%; font-size:13px; }
@@ -137,7 +142,7 @@
     <div class="panel" id="ov-ops" style="display:none">
       <h3>Operating points — two anchors, two questions</h3>
       <div class="grid2 ops">
-        <div style="overflow-x:auto"><table id="ov-ops-tbl"></table></div>
+        <div><table id="ov-ops-tbl" class="ops-tbl"></table></div>
         <div><div id="ov-tradeoff" style="height:260px;width:100%"></div></div>
       </div>
       <div class="legend" id="ov-ops-note"></div>
