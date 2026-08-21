@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from kreview.pipeline_diagram import CLUSTERS
 from kreview.report_data import (
     assert_no_phi,
     build_report_data,
@@ -379,3 +380,14 @@ class TestRenderReport:
             r'<(?:script[^>]+src|link[^>]+href|img[^>]+src)="https?://[^"]+"', page
         )
         assert externals == [], f"page references external resources: {externals[:3]}"
+
+    def test_pipeline_diagram_is_injected(self, mini_outdir, tmp_path):
+        out = render_report(mini_outdir, tmp_path / "report.html", run_label="unit")
+        page = out.read_text()
+        # every injection token must be consumed -- a leftover placeholder ships a
+        # literal "__PIPELINE_METHODS__" into the page
+        assert "__PIPELINE" not in page
+        # two layouts in Methods (overview + standard), one in Run diagnostics
+        assert page.count('class="pd-dag"') == 3
+        assert page.count('<div data-cluster="') == len(CLUSTERS)
+        assert '"pipeline":' in page

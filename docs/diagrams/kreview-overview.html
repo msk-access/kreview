@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What kreview measures</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:  #f7f8fa;
+      --color-ink:    #1a2233;
+      --color-muted:  #66708a;
+      --color-accent: #4650dc;
+      --font-sans:   'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --font-serif:  'Instrument Serif', Georgia, serif;
+      --font-mono:   'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    body {
+      font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+      letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 0.5rem;
+    }
+    .sub { font-size: 0.9rem; color: var(--color-muted); margin-bottom: 1.5rem; max-width: 62ch; line-height: 1.5; }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · kreview</p>
+    <h1>What kreview measures</h1>
+    <p class="sub">Two inputs, one readout: fragmentomics from plasma supplies the signal, the paired tumour supplies the truth, and the two meet again at a fixed operating point.</p>
+
+    <svg viewBox="0 0 1200 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="kreview-overview-title kreview-overview-desc">
+      <title id="kreview-overview-title">What kreview measures</title>
+      <desc id="kreview-overview-desc">Plasma cfDNA becomes 26 fragmentomics feature families, which are selected with GrootCV and evaluated per family by cross-validation and by a multimodal stack. A paired tumour sample supplies the five-tier ctDNA label and the verified true-negative set. Both paths converge on one operating point: sensitivity at 98 percent specificity.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#66708a"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4650dc"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1272b8"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f7f8fa"/>
+
+      <!-- ── arrows (drawn before boxes) ───────────────────────── -->
+      <!-- signal lane -->
+      <line x1="200" y1="112" x2="280" y2="112" stroke="#66708a" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="440" y1="112" x2="520" y2="112" stroke="#66708a" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="680" y1="112" x2="760" y2="112" stroke="#66708a" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- truth lane -->
+      <line x1="200" y1="272" x2="280" y2="272" stroke="#66708a" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="440" y1="272" x2="520" y2="272" stroke="#66708a" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- cv → stacking -->
+      <line x1="840" y1="144" x2="840" y2="240" stroke="#66708a" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- cv → operating point (the pre-registered primary path) -->
+      <line x1="920" y1="112" x2="1000" y2="112" stroke="#4650dc" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <!-- stacking → operating point -->
+      <path d="M 920,272 H 1088 Q 1096,272 1096,264 V 144" fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- verified TN → operating point; hops the cv→stacking connector at x=840 -->
+      <path d="M 600,240 V 200 Q 600,192 608,192 H 832 a 8,8 0 0,1 16,0 H 1040 Q 1048,192 1048,184 V 144"
+            fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- ── arrow labels (masked, 8px clear of the stroke) ────── -->
+      <rect x="212" y="92" width="56" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="240" y="101" fill="#8a93a8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">FRAGMENTS</text>
+      <rect x="448" y="92" width="64" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="480" y="101" fill="#8a93a8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">26 MATRICES</text>
+      <rect x="692" y="92" width="56" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="720" y="101" fill="#8a93a8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">SELECTED</text>
+      <rect x="212" y="252" width="56" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="240" y="261" fill="#8a93a8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">VARIANTS</text>
+      <rect x="448" y="252" width="64" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="480" y="261" fill="#8a93a8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">TN SUBSET</text>
+      <rect x="852" y="212" width="64" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="884" y="221" fill="#8a93a8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">OOF SCORES</text>
+      <rect x="936" y="92" width="48" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="960" y="101" fill="#4650dc" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">PRIMARY</text>
+      <rect x="972" y="252" width="64" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="1004" y="261" fill="#8a93a8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">+0.048 AUC</text>
+      <rect x="664" y="172" width="72" height="12" rx="2" fill="#f7f8fa"/>
+      <text x="700" y="181" fill="#8a93a8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">SPECIFICITY</text>
+
+      <!-- ── nodes ─────────────────────────────────────────────── -->
+      <!-- plasma cfDNA (input) -->
+      <rect x="40" y="80" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="40" y="80" width="160" height="64" rx="6" fill="rgba(102,112,138,0.10)" stroke="#8a93a8" stroke-width="1"/>
+      <text x="120" y="114" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Plasma cfDNA</text>
+      <text x="120" y="130" fill="#66708a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">duplex BAM</text>
+      <!-- paired tumour (external) -->
+      <rect x="40" y="240" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="40" y="240" width="160" height="64" rx="6" fill="rgba(26,34,51,0.03)" stroke="rgba(26,34,51,0.30)" stroke-width="1"/>
+      <text x="120" y="274" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Paired tumour</text>
+      <text x="120" y="290" fill="#66708a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">MSK-IMPACT</text>
+      <!-- fragmentomics -->
+      <rect x="280" y="80" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="280" y="80" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+      <text x="360" y="114" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Fragmentomics</text>
+      <text x="360" y="130" fill="#66708a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">26 families</text>
+      <!-- ctDNA label -->
+      <rect x="280" y="240" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="280" y="240" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+      <text x="360" y="274" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ctDNA label</text>
+      <text x="360" y="290" fill="#66708a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">5-tier taxonomy</text>
+      <!-- feature selection -->
+      <rect x="520" y="80" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="520" y="80" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+      <text x="600" y="114" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Feature selection</text>
+      <text x="600" y="130" fill="#66708a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">GrootCV</text>
+      <!-- verified true negatives (store) -->
+      <rect x="520" y="240" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="520" y="240" width="160" height="64" rx="6" fill="rgba(26,34,51,0.05)" stroke="#66708a" stroke-width="1"/>
+      <text x="600" y="274" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Verified negatives</text>
+      <text x="600" y="290" fill="#66708a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">paired, 0 variants</text>
+      <!-- per-evaluator CV -->
+      <rect x="760" y="80" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="760" y="80" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+      <text x="840" y="114" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Per-family models</text>
+      <text x="840" y="130" fill="#66708a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">6 models · 5-fold CV</text>
+      <!-- multimodal stacking -->
+      <rect x="760" y="240" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="760" y="240" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+      <text x="840" y="274" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Stacking</text>
+      <text x="840" y="290" fill="#66708a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">26 → 156 columns</text>
+      <!-- operating point (focal) -->
+      <rect x="1000" y="80" width="160" height="64" rx="6" fill="#f7f8fa"/>
+      <rect x="1000" y="80" width="160" height="64" rx="6" fill="rgba(70,80,220,0.08)" stroke="#4650dc" stroke-width="1"/>
+      <text x="1080" y="114" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Operating point</text>
+      <text x="1080" y="130" fill="#4650dc" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">sens @ 98% spec</text>
+
+      <!-- ── legend ────────────────────────────────────────────── -->
+      <line x1="40" y1="344" x2="1160" y2="344" stroke="rgba(26,34,51,0.10)" stroke-width="0.8"/>
+      <text x="40" y="368" fill="#66708a" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+      <rect x="128" y="360" width="12" height="12" rx="2" fill="rgba(102,112,138,0.10)" stroke="#8a93a8" stroke-width="0.8"/>
+      <text x="148" y="369" fill="#66708a" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.1em">MEASURED INPUT</text>
+      <rect x="288" y="360" width="12" height="12" rx="2" fill="rgba(26,34,51,0.03)" stroke="rgba(26,34,51,0.30)" stroke-width="0.8"/>
+      <text x="308" y="369" fill="#66708a" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.1em">EXTERNAL ASSAY</text>
+      <rect x="448" y="360" width="12" height="12" rx="2" fill="#ffffff" stroke="#1a2233" stroke-width="0.8"/>
+      <text x="468" y="369" fill="#66708a" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.1em">KREVIEW STEP</text>
+      <rect x="608" y="360" width="12" height="12" rx="2" fill="rgba(26,34,51,0.05)" stroke="#66708a" stroke-width="0.8"/>
+      <text x="628" y="369" fill="#66708a" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.1em">EVALUATION ANCHOR</text>
+      <rect x="800" y="360" width="12" height="12" rx="2" fill="rgba(70,80,220,0.08)" stroke="#4650dc" stroke-width="0.8"/>
+      <text x="820" y="369" fill="#66708a" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.1em">PRIMARY READOUT</text>
+    </svg>
+  </div>
+</body>
+</html>

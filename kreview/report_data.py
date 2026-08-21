@@ -19,6 +19,14 @@ import numpy as np
 import pandas as pd
 import structlog
 
+from kreview.pipeline_diagram import (
+    CLUSTERS,
+    mini_store,
+    node_names,
+    node_process_map,
+    pipeline_svg,
+)
+
 log = structlog.get_logger()
 
 # Subgroup metrics are emitted only when the group has at least this many samples —
@@ -574,11 +582,16 @@ def _build_diagnostics(trace_path: Path | None) -> dict:
     tr = pd.read_csv(trace_path, sep="\t")
     tr["proc"] = tr["process"].str.split(":").str[-1]
     for proc, grp in tr.groupby("proc"):
+        ok = grp[grp["status"] == "COMPLETED"].sort_values("realtime", ascending=False)
         diag["processes"][proc] = {
             "n": int(len(grp)),
             "completed": int((grp["status"] == "COMPLETED").sum()),
             "failed": int((grp["status"] == "FAILED").sum()),
             "max_attempt": int(grp["attempt"].max()),
+            # per-process worst case: the pipeline diagram's node panel reports these,
+            # and the global "longest tasks" table cannot answer "which stage was slow".
+            "slowest": (str(ok["duration"].iloc[0]) if len(ok) else None),
+            "peak_rss": (str(ok["peak_rss"].iloc[0]) if len(ok) else None),
         }
     done = tr[tr["status"] == "COMPLETED"]
     diag["longest"] = [
@@ -900,6 +913,13 @@ def build_report_data(
         "evaluators": evaluators,
         "multimodal": _build_multimodal(outdir / "models" / "multimodal"),
         "diagnostics": _build_diagnostics(trace_path),
+        # The diagram's geometry is markup injected by render_page; only the join keys
+        # and display names are data, so the blob stays PHI-checkable and layout-free.
+        "pipeline": {
+            "nodes": node_process_map(),
+            "names": node_names(),
+            "clusters": sorted(CLUSTERS),
+        },
     }
     # Operating points come from the PRE-REGISTERED score (multimodal stacking,
     # PRIMARY_MODEL) when the stacking matrix is available to supply sample ids —
@@ -1001,6 +1021,15 @@ def render_page(data: dict, out_html: str | Path) -> Path:
     template = files("kreview.templates").joinpath("report_page.html").read_text()
     page = template.replace("__PLOTLY_JS__", _po.get_plotlyjs(), 1)
     page = page.replace("__REPORT_DATA__", blob, 1)
+    # Both layouts are computed here, not in the browser: the page shows or hides a
+    # finished SVG, so the geometry that ships is the geometry that was verified.
+    page = page.replace(
+        "__PIPELINE_METHODS__",
+        pipeline_svg("overview", chips=False) + pipeline_svg("standard", chips=False),
+        1,
+    )
+    page = page.replace("__PIPELINE_DIAGNOSTICS__", pipeline_svg("standard"), 1)
+    page = page.replace("__PIPELINE_MINIS__", mini_store(), 1)
     assert_no_phi(page)
 
     out_html = Path(out_html)
