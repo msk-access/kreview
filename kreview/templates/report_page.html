@@ -31,6 +31,11 @@
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:18px; }
   .panel h3 { margin:0 0 10px; font-size:14.5px; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  /* Grid items default to min-width:auto, so a nowrap table's min-content width
+     forces its column wider than the panel and pushes the neighbouring chart past
+     the panel edge. min-width:0 lets columns shrink; the table scrolls instead. */
+  .grid2 > * { min-width:0; }
+  .grid2 .js-plotly-plot { width:100%; }
   @media (max-width:900px){ .grid2 { grid-template-columns:1fr; } }
   table { border-collapse:collapse; width:100%; font-size:13px; }
   th, td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
@@ -78,7 +83,10 @@
                 border-radius:7px; padding:2px 9px; margin:2px 4px 2px 0; font-size:12px; font-family:var(--mono); }
   .hbars .row { display:grid; grid-template-columns:210px 1fr 64px; gap:10px; align-items:center; margin:4px 0; }
   .mono { font-family:var(--mono); font-size:12.5px; }
-  .hero { display:grid; grid-template-columns:minmax(260px,1fr) 1.35fr 1fr; gap:16px; margin:16px 0 22px; }
+  .hero { display:grid; grid-template-columns:minmax(260px,1fr) minmax(0,1.35fr) minmax(0,1fr);
+          gap:16px; margin:16px 0 22px; }
+  .hero > * { min-width:0; }
+  .hero .js-plotly-plot { width:100%; }
   @media (max-width:1000px){ .hero { grid-template-columns:1fr; } }
   .hero .panel { margin:0; display:flex; flex-direction:column; }
   .hero .eyebrow { color:var(--muted); font-size:11px; text-transform:uppercase;
@@ -123,9 +131,9 @@
 
     <div class="panel" id="ov-ops" style="display:none">
       <h3>Operating points — two anchors, two questions</h3>
-      <div class="grid2">
-        <div><div style="overflow:auto"><table id="ov-ops-tbl"></table></div></div>
-        <div><div id="ov-tradeoff" style="height:260px"></div></div>
+      <div class="grid2" style="grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)">
+        <div style="overflow-x:auto"><table id="ov-ops-tbl"></table></div>
+        <div><div id="ov-tradeoff" style="height:260px;width:100%"></div></div>
       </div>
       <div class="legend" id="ov-ops-note"></div>
     </div>
@@ -427,9 +435,31 @@ function showTab(id, btn) {
   // so the highlight always follows the visible tab.
   const target = btn || buttons[TABS.findIndex(t => t[0] === id)];
   if (target) target.classList.add("on");
+  // Plots created while their tab was hidden have no measurable container width, and
+  // switching tabs fires no resize event — so size them on reveal.
+  $("#tab-"+id).querySelectorAll(".js-plotly-plot").forEach(el => {
+    Plotly.Plots.resize(el);
+    plotObserver.observe(el);
+  });
   window.scrollTo({top: 0, behavior: "instant"});
 }
 $("#tab-overview").classList.add("on");
+
+// Plotly sizes a chart to its container at draw time and only listens for WINDOW
+// resizes. A chart drawn in a narrow/hidden container (grid cell, hidden tab,
+// dialog) therefore keeps a stale width and can spill outside its panel. Observing
+// each container makes every chart track its own box, whenever it changes.
+const plotObserver = new ResizeObserver(entries => {
+  for (const e of entries) {
+    if (e.contentRect.width > 0 && e.target.classList.contains("js-plotly-plot")) {
+      Plotly.Plots.resize(e.target);
+    }
+  }
+});
+const observePlots = () =>
+  document.querySelectorAll(".js-plotly-plot").forEach(el => plotObserver.observe(el));
+// Charts are created below; observe after the current task completes.
+setTimeout(observePlots, 0);
 
 /* ── overview ────────────────────────────────────────────── */
 const C = R.cohort;
