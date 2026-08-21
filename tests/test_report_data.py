@@ -206,6 +206,45 @@ class TestBuildReportData:
         assert any("split intact" in f["text"] and f["kind"] == "good" for f in fs)
         assert not any("BOTH train and test" in f["text"] for f in fs)
 
+    def test_dual_anchor_operating_points(self, mini_outdir):
+        """#123: TN-anchored points, one-sided donor bound, verification-bias AUCs."""
+        import pandas as pd
+
+        # give the fixture a qualified-TN population: paired IMPACT, zero confirmed
+        labels = pd.read_parquet(mini_outdir / "labels" / "labels.parquet")
+        labels["has_paired_impact"] = True
+        labels["n_impact_confirmed"] = 0
+        labels.loc[labels["label"] == "True ctDNA+", "n_impact_confirmed"] = 2
+        labels.loc[labels["label"] == "True ctDNA+", "label"] = "True ctDNA+"
+        labels.loc[labels["label"] == "Possible ctDNA−", "label"] = "Possible ctDNA−"
+        labels.to_parquet(mini_outdir / "labels" / "labels.parquet", index=False)
+
+        data = build_report_data(mini_outdir)
+        ops = data["primary"]["operating_points"]
+        assert "auc_vs_all_negatives" in ops
+        don = ops.get("donor_anchor")
+        assert don and "sens_at_100spec_lower_bound" in don
+        # the donor number must NEVER be presented as a two-sided point estimate
+        assert "sens_at_100spec" not in don
+        assert data["primary"]["evaluator"] and data["primary"]["model"]
+        # winner's-curse annotation: the a-priori primary is reported with the argmax
+        assert "argmax_evaluator" in data["primary"]
+
+    def test_operating_points_absent_degrades_quietly(self, mini_outdir):
+        """No TN population (and no crash) when the label columns are missing."""
+        import pandas as pd
+
+        labels = pd.read_parquet(mini_outdir / "labels" / "labels.parquet")
+        labels = labels.drop(
+            columns=[
+                c for c in ("has_paired_impact", "n_impact_confirmed") if c in labels
+            ]
+        )
+        labels.to_parquet(mini_outdir / "labels" / "labels.parquet", index=False)
+        ops = build_report_data(mini_outdir)["primary"]["operating_points"]
+        assert "tn_anchor" not in ops  # explicitly absent, never fabricated
+        assert ops.get("auc_vs_all_negatives") is not None
+
     def test_phantom_ablation_entries_filtered(self, mini_outdir):
         """Pre-fix LOO files carry phantom keys like 'EvalA_tabicl' — dropped."""
         (mini_outdir / "models" / "multimodal" / "ablation_results.json").write_text(
