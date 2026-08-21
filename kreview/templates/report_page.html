@@ -176,7 +176,7 @@
     </div>
     <div class="grid2">
       <div class="panel"><div id="ov-cancers" style="height:340px"></div></div>
-      <div class="panel"><div id="ov-aucbars" style="height:340px"></div></div>
+      <div class="panel"><div id="ov-aucbars" style="height:620px"></div></div>
     </div>
   </section>
 
@@ -431,14 +431,17 @@ const PL_LAYOUT = (title, xlab, ylab, extra={}) => {
   paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
   legend: {orientation: "h", y: -0.25, font: {size: 11}},
   hovermode: "closest",
-  }, extra);
-  // Merge margins rather than letting a caller's partial margin drop the computed
-  // top; an explicit t from the caller still wins.
-  base.margin = Object.assign({l: 52, r: 14, t: lines ? 12 + 23 * lines : 10, b: 40},
-                              extra.margin || {});
-  if (!(extra.margin && extra.margin.t !== undefined)) {
-    base.margin.t = lines ? 12 + 23 * lines : 10;
-  }
+  });
+  // Object.assign is shallow, so a caller passing {xaxis:{range:...}} used to replace
+  // the whole axis object and silently drop its title and gridcolor — that is why the
+  // evaluator chart lost its "AUC" label. Merge the nested objects one level deep so a
+  // partial override composes with the defaults instead of erasing them.
+  const NESTED = ["title", "xaxis", "yaxis", "legend", "font", "margin"];
+  Object.keys(extra).forEach(k => {
+    base[k] = NESTED.includes(k) && extra[k] && typeof extra[k] === "object" && !Array.isArray(extra[k])
+      ? Object.assign({}, base[k], extra[k])
+      : extra[k];
+  });
   return base;
 };
 
@@ -701,8 +704,12 @@ $("#ov-cards").innerHTML = [
      hovertemplate: "<b>%{y}</b><br>CV AUC %{x:.3f} (%{customdata[0]})" +
        "<br>sens@95 %{customdata[1]:.1%}<extra></extra>"},
   ], PL_LAYOUT(claimTitle("ov-aucbars", "Evaluator AUC — dot = CV (best model), bar = 95% CI, diamond = holdout"),
-       "AUC", "", {margin:{l:190,r:14,b:40}, xaxis:{range:[0.5,0.95], gridcolor:"#eceff5"},
-       showlegend:true, legend:{orientation:"h", y:-0.16, font:{size:10.5}}}), PL_CFG);
+       "AUC", "", {margin:{l:190,r:14,b:78}, xaxis:{range:[0.5,0.95], gridcolor:"#eceff5"},
+       // every evaluator gets its own tick: plotly thins category labels on a short
+       // plot, and the row it dropped first was the best evaluator at the top
+       yaxis:{tickmode:"linear", dtick:1, automargin:true, tickfont:{size:10.5}},
+       // the legend clears the restored "AUC" axis title, which sits ~30px below the axis
+       showlegend:true, legend:{orientation:"h", y:-0.105, font:{size:10.5}}}), PL_CFG);
 
   if (C.patients_in_both_splits > 0) $("#ov-leak").innerHTML =
     `<div class="note"><b>⚠ Patient overlap between splits:</b> ${C.patients_in_both_splits.toLocaleString()} ` +
