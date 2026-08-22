@@ -33,7 +33,8 @@ from sklearn.model_selection import (
 )
 
 D = Path.home() / "Downloads" / "v0.0.32_eval"
-CACHE = Path(__file__).resolve().parents[2] / ".cache_review_round3.npz"
+# cache beside the data it derives from, never in the repo working tree
+CACHE = D / ".cache_review_round3.npz"
 SEED, FOLDS, BOOT = 42, 5, 500
 rng = np.random.default_rng(SEED)
 
