@@ -822,6 +822,10 @@ d = {
                 "kreview/report_data.py",
             ),
             "kreview.report_data._r": ("report_data.html#_r", "kreview/report_data.py"),
+            "kreview.report_data._wilson": (
+                "report_data.html#_wilson",
+                "kreview/report_data.py",
+            ),
             "kreview.report_data.assert_no_phi": (
                 "report_data.html#assert_no_phi",
                 "kreview/report_data.py",

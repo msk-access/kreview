@@ -29,6 +29,19 @@ log = structlog.get_logger()
 PRIMARY_EVALUATOR = "FSCGenomewide"
 PRIMARY_MODEL = "tabicl_ft"
 
+# Detection-vs-burden bins (plasma max VAF as a fraction). Chosen to bracket the
+# assay's transition zone: flat below 1%, steep 1-10%, saturated above.
+LOD_BINS = (
+    (0.0, 0.001, "<0.1%"),
+    (0.001, 0.005, "0.1-0.5%"),
+    (0.005, 0.01, "0.5-1%"),
+    (0.01, 0.02, "1-2%"),
+    (0.02, 0.05, "2-5%"),
+    (0.05, 0.10, "5-10%"),
+    (0.10, 0.20, "10-20%"),
+    (0.20, 1.01, ">20%"),
+)
+
 MIN_SUBGROUP = 30
 # Curves are thinned to this many points before embedding (endpoints always kept).
 CURVE_POINTS = 120
@@ -45,6 +58,7 @@ __all__ = [
     "log",
     "PRIMARY_EVALUATOR",
     "PRIMARY_MODEL",
+    "LOD_BINS",
     "MIN_SUBGROUP",
     "CURVE_POINTS",
     "CALIBRATION_BINS",
@@ -133,6 +147,18 @@ def _build_cohort(labels: pd.DataFrame) -> dict:
     return cohort
 
 
+def _wilson(k: int, n: int) -> tuple[float, float]:
+    """Wilson score interval — correct binomial coverage at small n and extreme p,
+    where the normal approximation produces impossible bounds."""
+    if n == 0:
+        return (float("nan"), float("nan"))
+    p_hat, z = k / n, 1.96
+    denom = 1 + z * z / n
+    centre = p_hat + z * z / (2 * n)
+    half = z * np.sqrt(p_hat * (1 - p_hat) / n + z * z / (4 * n * n))
+    return ((centre - half) / denom, (centre + half) / denom)
+
+
 def _anchored_operating_points(
     y_arr: np.ndarray, p_arr: np.ndarray, ids: list, lab_by_id: pd.DataFrame
 ) -> dict:
@@ -207,6 +233,69 @@ def _anchored_operating_points(
 
     if len(set(y_arr)) > 1:
         out["auc_vs_all_negatives"] = _r(roc_auc_score(y_arr, p_arr))
+
+    # ── specificity/sensitivity trade-off on the TN anchor ──
+    # Drawn rather than tabulated: the reader sees where the declared operating
+    # points sit on a curve, and that the donor point is a boundary (one-sided).
+    if tn is not None and tn.sum() >= 200 and pos.sum() > 0:
+        neg = np.sort(p_arr[tn])
+        curve = []
+        for spec in np.round(np.arange(0.90, 0.9991, 0.005), 4):
+            thr = neg[min(int(np.ceil(spec * len(neg))) - 1, len(neg) - 1)]
+            curve.append((float(spec), _r(float((p_arr[pos] > thr).mean()))))
+        out["sens_spec_curve"] = {
+            "spec": [c[0] for c in curve],
+            "sens": [c[1] for c in curve],
+        }
+
+        # ── detection vs tumor burden (the LOD curve) ──
+        # The interpretive key to every other number on the page: sensitivity is a
+        # burden-response, so a single sensitivity figure is meaningless without it.
+        if "max_vaf" in meta.columns:
+            thr98 = neg[min(int(np.ceil(0.98 * len(neg))) - 1, len(neg) - 1)]
+            vaf = pd.to_numeric(meta["max_vaf"], errors="coerce").to_numpy()
+            det = p_arr > thr98
+            bins = []
+            for lo, hi, lab in LOD_BINS:
+                m = pos & (vaf > 0) & (vaf >= lo) & (vaf < hi)
+                n = int(m.sum())
+                if n < 20:
+                    continue
+                k = int(det[m].sum())
+                bins.append(
+                    {
+                        "label": lab,
+                        "n": n,
+                        "detected": _r(k / n),
+                        "ci": [_r(v) for v in _wilson(k, n)],
+                    }
+                )
+            no_vaf = pos & ~(vaf > 0)
+            lod = {"bins": bins, "operating_point": "98% spec vs verified TN"}
+            if no_vaf.sum() >= 20:
+                lod["no_snv_vaf"] = {
+                    "n": int(no_vaf.sum()),
+                    "detected": _r(float(det[no_vaf].mean())),
+                }
+            # LOD50: linear interpolation in log10(VAF) between the bracketing bins.
+            mids = [
+                (np.sqrt(max(lo, 1e-4) * min(hi, 1.0)), b["detected"])
+                for (lo, hi, _), b in zip(
+                    [x for x in LOD_BINS if any(b["label"] == x[2] for b in bins)], bins
+                )
+            ]
+            below = [m for m in mids if m[1] < 0.5]
+            above = [m for m in mids if m[1] >= 0.5]
+            if below and above:
+                x0, y0 = below[-1]
+                x1, y1 = above[0]
+                lx = np.log10(x0) + (0.5 - y0) * (np.log10(x1) - np.log10(x0)) / (
+                    y1 - y0
+                )
+                lod["lod50_vaf"] = _r(float(10**lx))
+                # TF ~ 2 x VAF for a clonal heterozygous variant in a diploid locus
+                lod["lod50_tumor_fraction"] = _r(float(2 * 10**lx))
+            out["lod"] = lod
     return out
 
 
@@ -515,8 +604,14 @@ def _derive_findings(data: dict) -> list[dict]:
     """
     F: list[dict] = []
 
-    def add(kind: str, tab: str, text: str) -> None:
-        F.append({"kind": kind, "tab": tab, "text": text})
+    def add(kind: str, tab: str, text: str, chart: str | None = None) -> None:
+        # `chart` names the element whose title this sentence should become — the
+        # claim then sits on its own evidence instead of in a separate wall of text
+        # (charted findings render as titles and drop out of the findings list).
+        entry: dict = {"kind": kind, "tab": tab, "text": text}
+        if chart:
+            entry["chart"] = chart
+        F.append(entry)
 
     evs = data.get("evaluators") or []
     coh = data.get("cohort") or {}
@@ -562,7 +657,7 @@ def _derive_findings(data: dict) -> list[dict]:
         )
         if b.get("holdout_auc") is not None:
             txt += f", holdout {b['holdout_auc']:.3f}"
-        add("info", "scoreboard", txt + ").")
+        add("info", "scoreboard", txt + ").", chart="ov-aucbars")
 
         drops = [e["auc_drop"] for e in evs if e.get("auc_drop") is not None]
         if drops:
@@ -687,6 +782,7 @@ def _derive_findings(data: dict) -> list[dict]:
             f"vs {best_single_auc:.3f} for the best single evaluator "
             f"({lift:+.3f}{', beyond its 95% CI' if beyond else ''}) — the feature "
             "families are partially complementary, not redundant.",
+            chart="mm-auc",
         )
         spread = max(stacks.values()) - min(stacks.values())
         if spread <= 0.015:
@@ -715,6 +811,7 @@ def _derive_findings(data: dict) -> list[dict]:
             f"Unique contribution concentrates in {', '.join(top)} "
             f"({share:.0%} of the total leave-one-out AUC drop across "
             f"{len(deltas)} evaluators).",
+            chart="mm-abl",
         )
         redundant = sum(1 for d in deltas.values() if d <= 0.001)
         if redundant:

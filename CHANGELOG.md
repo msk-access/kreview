@@ -56,6 +56,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counts shift slightly versus ≤ v0.0.32.
 
 ### Added
+- **The report leads with a hero zone that answers the three questions a reader
+  arrives with**: *how good* (the pre-registered primary endpoint, large, with its
+  anchor and 99%-spec companion), *at what burden* (the **detection-vs-tumor-burden
+  curve** — Wilson CIs per VAF bin, with the interpolated LOD50 reported in both VAF
+  and tumor fraction), and *does combining help* (stacking lift over the best single
+  evaluator, with the meta-learner spread). The burden curve is the interpretive key
+  to every other number on the page and was previously computable only offline.
+- **The specificity/sensitivity trade-off is drawn, not tabulated**: the curve against
+  the tumor-informed anchor with the declared operating points marked, and the
+  donor-anchored value plotted as a one-sided arrow at 100% specificity — so the
+  max-statistic caveat is visible rather than a footnote.
+
+### Added
 - **Per-sample sequencing depth is a first-class label column** (#122):
   `total_fragments_pf` is always emitted (NaN when unavailable — explicit unknown, never
   a fabricated 0) and registered in `LABEL_META_COLS`, so it is available to every

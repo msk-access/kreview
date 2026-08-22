@@ -17,7 +17,8 @@
   header { background:var(--panel); border-bottom:1px solid var(--line); padding:18px 28px; }
   header h1 { margin:0; font-size:20px; font-weight:650; }
   header .sub { color:var(--muted); font-size:12.5px; margin-top:3px; }
-  nav { display:flex; gap:4px; padding:0 20px; background:var(--panel); border-bottom:1px solid var(--line); }
+  nav { display:flex; flex-wrap:wrap; gap:4px; padding:0 20px; background:var(--panel);
+        border-bottom:1px solid var(--line); }
   nav button { border:0; background:none; padding:12px 14px; font:inherit; font-weight:550;
                color:var(--muted); cursor:pointer; border-bottom:2.5px solid transparent; }
   nav button.on { color:var(--accent); border-bottom-color:var(--accent); }
@@ -31,7 +32,21 @@
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:18px; }
   .panel h3 { margin:0 0 10px; font-size:14.5px; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-  @media (max-width:900px){ .grid2 { grid-template-columns:1fr; } }
+  /* Grid items default to min-width:auto, so a nowrap table's min-content width
+     forces its column wider than the panel and pushes the neighbouring chart past
+     the panel edge. min-width:0 lets columns shrink; the table scrolls instead. */
+  .grid2 > * { min-width:0; }
+  /* Column sizing lives in a class, never inline: an inline grid-template-columns
+     outranks the stacking media query below, so the row would stay side-by-side on
+     narrow viewports and push its own panel past the screen edge. */
+  .grid2.ops { grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); }
+  /* Cells are globally nowrap (right for dense numeric tables), but the operating-
+     points rows carry prose — let them wrap so the anchor column stays visible
+     instead of scrolling out of sight. */
+  .ops-tbl th, .ops-tbl td { white-space:normal; vertical-align:top; }
+  .ops-tbl td:first-child { font-weight:550; }
+  .grid2 .js-plotly-plot { width:100%; }
+  @media (max-width:900px){ .grid2, .grid2.ops { grid-template-columns:1fr; } }
   table { border-collapse:collapse; width:100%; font-size:13px; }
   th, td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
   th { color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em;
@@ -74,10 +89,44 @@
   .finding.warn { border-left-color:var(--warn); background:#fff8ec; }
   .finding .tag { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
                   color:var(--muted); white-space:nowrap; font-family:var(--mono); }
+  /* Status is never colour alone — the glyph carries it in greyscale too. */
+  .finding .glyph { font-weight:700; width:14px; text-align:center; flex:none; }
+  .finding.good .glyph { color:var(--accent2); }
+  .finding.info .glyph { color:var(--accent); }
+  .finding.warn .glyph { color:var(--warn); }
   .chips span { display:inline-block; background:var(--chip); color:var(--accent);
                 border-radius:7px; padding:2px 9px; margin:2px 4px 2px 0; font-size:12px; font-family:var(--mono); }
   .hbars .row { display:grid; grid-template-columns:210px 1fr 64px; gap:10px; align-items:center; margin:4px 0; }
   .mono { font-family:var(--mono); font-size:12.5px; }
+  .infoi { display:inline-flex; align-items:center; justify-content:center; width:14px;
+           height:14px; border-radius:50%; border:1px solid var(--line); background:var(--chip);
+           color:var(--accent); font-size:9.5px; font-weight:700; font-style:normal;
+           cursor:pointer; margin-left:5px; vertical-align:middle; user-select:none;
+           line-height:1; font-family:var(--mono); }
+  .infoi:hover, .infoi:focus { border-color:var(--accent); outline:none;
+                               box-shadow:0 0 0 2px rgba(70,80,220,.18); }
+  #gloss { position:absolute; z-index:50; max-width:340px; background:var(--panel);
+           border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+           box-shadow:0 12px 34px rgba(20,25,60,.18); font-size:12.5px; line-height:1.5;
+           color:var(--ink); display:none; }
+  #gloss b { display:block; margin-bottom:4px; }
+  #gloss .ref { display:block; margin-top:7px; color:var(--muted); font-size:11.5px; }
+  #gloss a { color:var(--accent); }
+  .hero { display:grid; grid-template-columns:minmax(260px,1fr) minmax(0,1.35fr) minmax(0,1fr);
+          gap:16px; margin:16px 0 22px; }
+  .hero > * { min-width:0; }
+  .hero .js-plotly-plot { width:100%; }
+  @media (max-width:1000px){ .hero { grid-template-columns:1fr; } }
+  .hero .panel { margin:0; display:flex; flex-direction:column; }
+  .hero .eyebrow { color:var(--muted); font-size:11px; text-transform:uppercase;
+                   letter-spacing:.06em; font-weight:600; }
+  .hero .big { font-size:44px; font-weight:680; line-height:1.05; margin:6px 0 2px;
+               font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .hero .qual { color:var(--muted); font-size:13px; }
+  .hero .sub { margin-top:auto; padding-top:12px; color:var(--muted); font-size:12.5px;
+               border-top:1px solid var(--line); }
+  .hero .kv { display:flex; justify-content:space-between; gap:10px; padding:3px 0; font-size:13px; }
+  .hero .kv b { font-variant-numeric:tabular-nums; }
   .hbars .lbl { font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 </head>
@@ -89,9 +138,32 @@
 <nav id="nav"></nav>
 <main>
   <section class="tab" id="tab-overview">
+    <div class="hero" id="ov-hero" style="display:none">
+      <div class="panel">
+        <div class="eyebrow">Primary endpoint</div>
+        <div class="big" id="hero-sens">–</div>
+        <div class="qual" id="hero-sens-q"></div>
+        <div class="sub" id="hero-sens-sub"></div>
+      </div>
+      <div class="panel">
+        <div class="eyebrow">Detection depends on tumor burden</div>
+        <div id="hero-lod" style="height:212px"></div>
+        <div class="sub" id="hero-lod-sub"></div>
+      </div>
+      <div class="panel">
+        <div class="eyebrow">Does combining families help?</div>
+        <div class="big" id="hero-lift">–</div>
+        <div class="qual" id="hero-lift-q"></div>
+        <div class="sub" id="hero-lift-sub"></div>
+      </div>
+    </div>
+
     <div class="panel" id="ov-ops" style="display:none">
       <h3>Operating points — two anchors, two questions</h3>
-      <div style="overflow:auto"><table id="ov-ops-tbl"></table></div>
+      <div class="grid2 ops">
+        <div><table id="ov-ops-tbl" class="ops-tbl"></table></div>
+        <div><div id="ov-tradeoff" style="height:260px;width:100%"></div></div>
+      </div>
       <div class="legend" id="ov-ops-note"></div>
     </div>
     <div class="legend" style="margin-bottom:10px">Findings are derived automatically from this run. <a href="#" onclick="showTab('methods');return false;">Methods &amp; interpretation →</a></div>
@@ -104,7 +176,7 @@
     </div>
     <div class="grid2">
       <div class="panel"><div id="ov-cancers" style="height:340px"></div></div>
-      <div class="panel"><div id="ov-aucbars" style="height:340px"></div></div>
+      <div class="panel"><div id="ov-aucbars" style="height:620px"></div></div>
     </div>
   </section>
 
@@ -124,12 +196,12 @@
     <div id="mm-note"></div>
     <div class="cards" id="mm-cards"></div>
     <div class="grid2">
-      <div class="panel"><div id="mm-auc" style="height:280px"></div></div>
-      <div class="panel"><div id="mm-pr" style="height:280px"></div></div>
+      <div class="panel"><div id="mm-auc" style="height:380px"></div></div>
+      <div class="panel"><div id="mm-pr" style="height:380px"></div></div>
     </div>
     <div class="panel"><h3>Per-model detail</h3><div style="overflow:auto"><table id="mm-tbl"></table></div></div>
     <div class="panel" id="mm-abl-panel" style="display:none">
-      <h3>Leave-one-evaluator-out ablation — stacking-AUC drop when removed</h3>
+      <h3>Leave-one-evaluator-out ablation<span id="loo-ii"></span> — stacking-AUC drop when removed</h3>
       <div id="mm-abl" style="height:420px"></div>
     </div>
   </section>
@@ -230,6 +302,8 @@
   </section>
 </main>
 
+<div id="gloss" role="dialog" aria-label="term definition"></div>
+
 <dialog id="dlg">
   <div class="dlg-head"><h2 id="dlg-t"></h2><button class="x" onclick="dlg.close()">close</button></div>
   <div class="dlg-body" id="dlg-b"></div>
@@ -244,6 +318,76 @@ const fmt = (v, d=3) => v == null ? "–" : (+v).toFixed(d);
 const pct = v => v == null ? "–" : (100*v).toFixed(1) + "%";
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
+/* ── glossary: every term of art carries an info icon with a definition and, where
+   one exists, a pointer to the tool or to the Methods tab. Self-contained: the
+   popover is plain DOM, no external assets. */
+const GLOSSARY = {
+  grootcv: ["GrootCV (all-relevant selection)",
+    "Cross-validated LightGBM importances (SHAP) tested against shuffled shadow copies of every feature; a feature is kept only if it consistently beats its own shadow. Chosen as the multimodal default because its selections were the most reproducible across patient-grouped resamples.",
+    "arfs package · github.com/ThomasBury/arfs"],
+  mrmr: ["mRMR (per-evaluator selection)",
+    "Minimum Redundancy Maximum Relevance: greedily picks features with high relevance to the label (F-statistic) and low redundancy (Pearson correlation) with what is already selected.",
+    "github.com/smazzanti/mrmr"],
+  oof: ["Out-of-fold (OOF)",
+    "Every metric and curve here is computed from predictions made on samples the model did not train on, so nothing is scored by a model that has seen it.", null],
+  holdout: ["Holdout",
+    "A patient-disjoint 20% of the cohort: the model refits on the remaining 80% and scores it once. No patient appears on both sides, so holdout metrics are on entirely unseen people.", null],
+  overfit: ["\u0394 overfit",
+    "Cross-validated AUC minus holdout AUC. Near zero means the CV numbers are honest; a large positive gap means CV is optimistic.", null],
+  tn: ["Verified true negative",
+    "A plasma sample labelled Possible ctDNA\u2212 whose patient HAD tumour sequencing and in which zero of that tumour's variants were found. We knew what to look for, looked, and found none. Samples without paired tumour sequencing are unlabelled, not negative.", null],
+  onesided: ["One-sided lower bound",
+    "The donor-anchored threshold is the maximum score among a few dozen healthy donors. Resampling can only remove the top donor, so the threshold can only fall and sensitivity only rise: the observed value is a floor, and a symmetric confidence interval for it is not valid.", null],
+  ppv: ["PPV at prevalence",
+    "Of samples the model flags, the share that are truly positive. It depends on how common ctDNA positivity is in the population being tested, so it is quoted at several plausible prevalences rather than at the cohort rate.", null],
+  tf: ["Tumour fraction (TF)",
+    "The share of plasma cfDNA originating from tumour. For a clonal heterozygous variant in a copy-neutral locus, TF \u2248 2 \u00d7 VAF, so a 5% max-VAF sample carries roughly 10% tumour fraction.", null],
+  lod: ["LOD50",
+    "The tumour burden at which half of positive samples are detected, read off the burden-response curve at the declared operating point.", null],
+  stacking: ["Stacking",
+    "Each evaluator\u00d7model pair contributes one column of out-of-fold probabilities; a meta-learner is then cross-validated on those columns, learning how to weigh the evaluators\u2014including where they disagree.", null],
+  rawscope: ["Raw",
+    "The same meta-learners trained directly on selected raw fragmentomics features instead of on evaluator predictions \u2014 the no-stacking baseline.", null],
+  loo: ["Leave-one-evaluator-out ablation",
+    "Remove one evaluator's columns, retrain the best stacking model, and record the AUC drop. That drop is the family's UNIQUE contribution: a small drop means its signal is covered by other families, not that it is weak alone.", null],
+  sens95: ["sens@95",
+    "Sensitivity when the threshold is set so that 95% of negatives are correctly called negative.", null],
+  sens100h: ["sens@100spec-healthy",
+    "Sensitivity at a threshold set by the highest-scoring healthy donor. High-variance with few donors \u2014 a single atypical donor moves it \u2014 and answers the screening question, not the MRD one.", null],
+  gpumodels: ["TabPFN / TabICL",
+    "Tabular foundation models that predict in-context rather than by fitting parameters per dataset; run on GPU alongside the classical LR/RF/XGB models.", "priorlabs.ai (TabPFN) · github.com/soda-inria/tabicl"],
+};
+const ii = key => GLOSSARY[key]
+  ? `<i class="infoi" role="button" tabindex="0" data-gloss="${key}" aria-label="What is ${esc(GLOSSARY[key][0])}?">i</i>`
+  : "";
+(function glossary() {
+  const box = $("#gloss");
+  const close = () => { box.style.display = "none"; };
+  document.addEventListener("click", ev => {
+    const icon = ev.target.closest?.(".infoi");
+    if (!icon) { if (!ev.target.closest?.("#gloss")) close(); return; }
+    const g = GLOSSARY[icon.dataset.gloss];
+    if (!g) return;
+    box.innerHTML = `<b>${esc(g[0])}</b>${esc(g[1])}` +
+      (g[2] ? `<span class="ref">${esc(g[2])}</span>` : `<span class="ref">See the Methods &amp; interpretation tab.</span>`);
+    const r = icon.getBoundingClientRect();
+    box.style.display = "block";
+    const w = box.offsetWidth;
+    box.style.left = Math.max(8, Math.min(window.scrollX + r.left - w / 2 + 7,
+                     window.scrollX + document.documentElement.clientWidth - w - 8)) + "px";
+    box.style.top = (window.scrollY + r.bottom + 8) + "px";
+    ev.stopPropagation();
+  });
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Escape") close();
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target.classList?.contains("infoi")) {
+      ev.preventDefault(); ev.target.click();
+    }
+  });
+  window.addEventListener("scroll", close, {passive: true});
+})();
+
+
 function hbars(el, obj, denom, color) {
   const max = Math.max(...Object.values(obj));
   el.innerHTML = Object.entries(obj).map(([k,v]) => `
@@ -252,19 +396,107 @@ function hbars(el, obj, denom, color) {
       <div class="num">${denom ? (100*v/denom).toFixed(1)+"%" : fmt(v,3)}</div></div>`).join("");
 }
 
-const PALETTE = ["#4650dc","#0ea472","#c8560f","#8636c9","#b8236e","#1272b8","#67707e"];
+/* Three colour scales, deliberately disjoint (a hue means exactly one thing):
+   CATEGORICAL — model/series identity. Excludes every STATUS hue so a series can
+                 never be mistaken for a verdict.
+   STATUS      — good / warning / bad only, always paired with a glyph so the
+                 meaning survives greyscale printing and colour-blind vision.
+   BURDEN      — sequential ramp, reserved for tumour-burden and depth encodings. */
+const PALETTE = ["#4650dc","#7a4fd6","#1272b8","#b0459b","#5a6b8c","#0f8f8f","#8a6d3b"];
+const STATUS  = {good:"#0a7a50", warn:"#c8560f", bad:"#c02942", info:"#4650dc"};
+const GLYPH   = {good:"✓", warn:"!", bad:"✕", info:"i"};
+const BURDEN  = ["#dfe3f7","#b9c0ee","#8f99e2","#6a74d8","#4650dc","#343cae","#252a80"];
+/* Wrap an assertion sentence so plotly renders it as a readable multi-line title. */
+const wrapTitle = (t, n=78) => {
+  const words = String(t).split(" "); const out = []; let line = "";
+  for (const w of words) {
+    if ((line + " " + w).trim().length > n) { out.push(line.trim()); line = w; }
+    else line += " " + w;
+  }
+  if (line.trim()) out.push(line.trim());
+  return out.join("<br>");
+};
 const PL_CFG = {displayModeBar: "hover", displaylogo: false, responsive: true,
   modeBarButtonsToRemove: ["lasso2d","select2d","autoScale2d"]};
-const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
+const PL_LAYOUT = (title, xlab, ylab, extra={}) => {
+  // Assertion titles wrap to several lines; a fixed top margin lets them sit on top
+  // of the plotting area, so the margin is derived from the line count.
+  const lines = title ? String(title).split("<br>").length : 0;
+  const base = Object.assign({
   title: {text: title, font: {size: 13.5}, x: 0.02, xanchor: "left"},
-  margin: {l: 52, r: 14, t: title ? 34 : 10, b: 40},
+  margin: {l: 52, r: 14, t: lines ? 12 + 23 * lines : 10, b: 40},
   xaxis: {title: {text: xlab, font: {size: 11.5}}, gridcolor: "#eceff5", zeroline: false},
   yaxis: {title: {text: ylab, font: {size: 11.5}}, gridcolor: "#eceff5", zeroline: false},
   font: {family: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif", size: 11.5, color: "#66708a"},
   paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
   legend: {orientation: "h", y: -0.25, font: {size: 11}},
   hovermode: "closest",
-}, extra);
+  });
+  // Object.assign is shallow, so a caller passing {xaxis:{range:...}} used to replace
+  // the whole axis object and silently drop its title and gridcolor — that is why the
+  // evaluator chart lost its "AUC" label. Merge the nested objects one level deep so a
+  // partial override composes with the defaults instead of erasing them.
+  const NESTED = ["title", "xaxis", "yaxis", "legend", "font", "margin"];
+  Object.keys(extra).forEach(k => {
+    base[k] = NESTED.includes(k) && extra[k] && typeof extra[k] === "object" && !Array.isArray(extra[k])
+      ? Object.assign({}, base[k], extra[k])
+      : extra[k];
+  });
+  return base;
+};
+
+/* ── hero: how good · at what burden · does combining help ── */
+(function hero() {
+  const o = (R.primary || {}).operating_points || {};
+  const tn = o.tn_anchor, lod = o.lod, MM = R.multimodal || {};
+  if (!tn && !lod) return;
+  $("#ov-hero").style.display = "";
+
+  if (tn) {
+    $("#hero-sens").textContent = pct(tn.sens_at_98spec);
+    $("#hero-sens-q").innerHTML =
+      `sensitivity at <b>98% specificity</b> against ${tn.n_tn?.toLocaleString?.() ?? "–"} ` +
+      `tumor-informed true negatives${ii("tn")}`;
+    $("#hero-sens-sub").innerHTML =
+      `${pct(tn.sens_at_99spec)} at 99% specificity · out-of-fold${ii("oof")} · ` +
+      (tn.n_tn_patients ? `${tn.n_tn_patients.toLocaleString()} patients · ` : "") +
+      `out-of-fold`;
+  }
+
+  if (lod?.bins?.length) {
+    const b = lod.bins;
+    Plotly.newPlot("hero-lod", [
+      {x: b.map(r => r.label), y: b.map(r => r.detected), type: "scatter", mode: "lines+markers",
+       line: {color: PALETTE[0], width: 2.5, shape: "spline"},
+       marker: {size: 8, color: b.map((_, i) => BURDEN[Math.min(i, BURDEN.length - 1)]),
+                line: {color: PALETTE[0], width: 1}},
+       error_y: {type: "data", symmetric: false,
+                 array: b.map(r => r.ci[1] - r.detected), arrayminus: b.map(r => r.detected - r.ci[0]),
+                 color: "#aab3d0", thickness: 1.2, width: 3},
+       customdata: b.map(r => r.n),
+       hovertemplate: "max VAF %{x}<br><b>%{y:.1%}</b> detected · n=%{customdata}<extra></extra>"},
+    ], PL_LAYOUT("", "plasma max VAF", "detected",
+        {margin: {l: 48, r: 10, t: 6, b: 46}, yaxis: {tickformat: ".0%", range: [0, 1],
+         gridcolor: "#eceff5"}, xaxis: {tickangle: -35}}), PL_CFG);
+    $("#hero-lod-sub").innerHTML = lod.lod50_vaf
+      ? `50% detection${ii("lod")} at <b>${pct(lod.lod50_vaf)}</b> max VAF ` +
+        `(~${pct(lod.lod50_tumor_fraction)} tumor fraction${ii("tf")}) · at ${esc(lod.operating_point)}`
+      : `at ${esc(lod.operating_point)}`;
+  }
+
+  const stacks = Object.entries(MM.models || {})
+    .map(([m, d]) => [m, d.stacking?.auc]).filter(e => e[1] != null);
+  if (stacks.length && MM.best_single_auc != null) {
+    const best = stacks.reduce((a, b) => b[1] > a[1] ? b : a);
+    $("#hero-lift").textContent = "+" + fmt(best[1] - MM.best_single_auc);
+    $("#hero-lift-q").innerHTML =
+      `AUC over the best single evaluator — ${fmt(best[1])} stacking (${esc(best[0])}) ` +
+      `vs ${fmt(MM.best_single_auc)} for ${esc(MM.best_single_evaluator ?? "–")}`;
+    $("#hero-lift-sub").innerHTML =
+      `${stacks.length} meta-learners, spread ${fmt(Math.max(...stacks.map(s => s[1])) - Math.min(...stacks.map(s => s[1])))} AUC ` +
+      `· ${MM.n_evaluators ?? "–"} evaluators combined`;
+  }
+})();
 
 /* ── operating points (dual anchor, #123) ─────────────────── */
 const P = R.primary || {};
@@ -283,24 +515,59 @@ const P = R.primary || {};
       pct(tn.sens_at_99spec), "same anchor"]);
   }
   if (don) {
-    rows.push(["Screening — vs healthy donors", "100% spec (one-sided lower bound)",
+    rows.push(["Screening — vs healthy donors", "100% spec (one-sided lower bound)" + ii("onesided"),
       "≥ " + pct(don.sens_at_100spec_lower_bound), `${don.n_donors} donors — max-statistic threshold`]);
   }
-  $("#ov-ops-tbl").innerHTML = `<tr><th>question</th><th>operating point</th><th>sensitivity</th><th>anchor</th></tr>` +
-    rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td class="num">${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`).join("");
+  $("#ov-ops-tbl").innerHTML = `<tr><th>question</th><th>operating point</th>` +
+    `<th>sensitivity</th><th>anchor${ii("tn")}</th></tr>` +
+    rows.map(r => `<tr><td>${esc(r[0])}</td><td>${r[1]}</td><td class="num">${esc(r[2])}</td>` +
+      `<td>${esc(r[3])}</td></tr>`).join("");
   const aucs = [["all negatives", o.auc_vs_all_negatives], ["verified true negatives", o.auc_vs_verified_tn],
                 ["healthy donors only", o.auc_vs_donors]].filter(a => a[1] != null);
+  const c = o.sens_spec_curve;
+  if (c?.spec?.length) {
+    const marks = [[0.98, tn?.sens_at_98spec], [0.99, tn?.sens_at_99spec]].filter(m => m[1] != null);
+    Plotly.newPlot("ov-tradeoff", [
+      {x: c.spec, y: c.sens, mode: "lines", line: {color: PALETTE[0], width: 2.5},
+       name: "vs verified TN",
+       hovertemplate: "spec %{x:.1%} → sens %{y:.1%}<extra></extra>"},
+      {x: marks.map(m => m[0]), y: marks.map(m => m[1]), mode: "markers+text", showlegend: false,
+       marker: {size: 11, color: PALETTE[0], line: {color: "#fff", width: 2}},
+       text: marks.map(m => pct(m[1])), textposition: "top right", textfont: {size: 11},
+       hovertemplate: "declared operating point<br>spec %{x:.0%} → sens %{y:.1%}<extra></extra>"},
+    ].concat(don?.sens_at_100spec_lower_bound != null ? [{
+       // STATUS.warn is deliberate here: this mark is a caveat annotation (the value
+       // is a one-sided bound), not a data series — and it carries a text label so
+       // the meaning does not depend on colour.
+       x: [1.0], y: [don.sens_at_100spec_lower_bound], mode: "markers+text", showlegend: false,
+       marker: {size: 12, symbol: "arrow-up", color: STATUS.warn},
+       text: ["≥ one-sided"], textposition: "middle left",
+       textfont: {size: 10.5, color: STATUS.warn},
+       hovertemplate: `donor anchor: ≥%{y:.1%} (one-sided bound, ${don.n_donors} donors)<extra></extra>`}] : []),
+      PL_LAYOUT("Sensitivity vs specificity on the tumor-informed anchor", "specificity", "sensitivity",
+        {margin: {l: 52, r: 14, b: 44}, xaxis: {tickformat: ".0%", gridcolor: "#eceff5"},
+         yaxis: {tickformat: ".0%", gridcolor: "#eceff5"}, showlegend: false}), PL_CFG);
+  }
   $("#ov-ops-note").innerHTML =
-    (Object.keys(ppv).length ? `PPV at 98% spec: ` +
+    (Object.keys(ppv).length ? `PPV${ii("ppv")} at 98% spec: ` +
       Object.entries(ppv).sort().map(([k,v]) => `${pct(v)} at ${pct(+k)} prevalence`).join(" · ") + ". " : "") +
     (aucs.length ? `AUC by negative class: ` + aucs.map(([k,v]) => `${esc(k)} ${fmt(v)}`).join(" · ") +
       ` — pooled negatives include unpaired samples that are unlabeled, not verified.` : "");
 })();
 
+/* Findings tagged with a chart become that chart's title (assertion titles): the
+   claim sits on its own evidence, and the findings list keeps only what has no
+   chart home. */
+const CHART_CLAIM = Object.fromEntries(
+  (R.findings || []).filter(f => f.chart).map(f => [f.chart, f]));
+const claimTitle = (id, fallback) =>
+  CHART_CLAIM[id] ? wrapTitle(CHART_CLAIM[id].text) : fallback;
+
 /* ── automatic findings (derived in the data layer, aggregates only) ── */
 const TAB_LABEL = {overview:"cohort", scoreboard:"single-evaluator", multimodal:"multimodal", diagnostics:"pipeline"};
-$("#ov-findings").innerHTML = (R.findings || []).map(f =>
-  `<div class="finding ${esc(f.kind)}"><span class="tag">${esc(TAB_LABEL[f.tab] || f.tab)}</span>` +
+$("#ov-findings").innerHTML = (R.findings || []).filter(f => !f.chart).map(f =>
+  `<div class="finding ${esc(f.kind)}"><span class="glyph" aria-hidden="true">${GLYPH[f.kind] || "i"}</span>` +
+  `<span class="tag">${esc(TAB_LABEL[f.tab] || f.tab)}</span>` +
   `<span>${esc(f.text)}</span></div>`).join("") ||
   `<div class="finding info"><span>No automatic findings for this run.</span></div>`;
 
@@ -322,9 +589,53 @@ function showTab(id, btn) {
   // so the highlight always follows the visible tab.
   const target = btn || buttons[TABS.findIndex(t => t[0] === id)];
   if (target) target.classList.add("on");
+  // Plots created while their tab was hidden have no measurable container width, and
+  // switching tabs fires no resize event — so size them on reveal.
+  $("#tab-"+id).querySelectorAll(".js-plotly-plot").forEach(el => {
+    fitPlot(el);
+    plotObserver.observe(el);
+  });
   window.scrollTo({top: 0, behavior: "instant"});
 }
 $("#tab-overview").classList.add("on");
+
+// Plotly sizes a chart to its container at draw time and only listens for WINDOW
+// resizes. A chart drawn in a narrow/hidden container (grid cell, hidden tab,
+// dialog) therefore keeps a stale width and can spill outside its panel. Observing
+// each container makes every chart track its own box, whenever it changes.
+// Plotly.Plots.resize() is unreliable here: on charts whose container was narrower
+// than plotly's 700px default at draw time it returns without error and leaves
+// _fullLayout.width untouched, so the SVG keeps overflowing its panel. Measuring the
+// container and relayouting explicitly always works.
+const fitPlot = el => {
+  const w = el.clientWidth, h = el.clientHeight;
+  if (w > 0 && h > 0 && el._fullLayout &&
+      (Math.abs(el._fullLayout.width - w) > 1 || Math.abs(el._fullLayout.height - h) > 1)) {
+    Plotly.relayout(el, {width: w, height: h});
+  }
+};
+const plotObserver = new ResizeObserver(entries => {
+  for (const e of entries) {
+    if (e.contentRect.width > 0 && e.target.classList.contains("js-plotly-plot")) {
+      fitPlot(e.target);
+    }
+  }
+});
+const observePlots = () =>
+  document.querySelectorAll(".js-plotly-plot").forEach(el => {
+    // Fit once on registration too: a chart drawn before layout settled keeps
+    // plotly's default 700px SVG inside a narrower container, and the observer
+    // alone never fires because the container itself never changes size.
+    fitPlot(el);
+    plotObserver.observe(el);
+  });
+// Charts are created below. Plotly finishes drawing some of them asynchronously,
+// so a single pass can run before the last chart exists and leave it at plotly's
+// default 700px SVG inside a narrower panel. Register after the current task, then
+// again after paint and on load — resizing is idempotent, so extra passes are free.
+setTimeout(observePlots, 0);
+requestAnimationFrame(() => requestAnimationFrame(observePlots));
+window.addEventListener("load", observePlots);
 
 /* ── overview ────────────────────────────────────────────── */
 const C = R.cohort;
@@ -372,16 +683,33 @@ $("#ov-cards").innerHTML = [
   }], PL_LAYOUT(`Cancer types (top ${ct.length}; +${C.cancer_types_other.toLocaleString()} other)`,
        "samples", "", {margin:{l:190,r:14,t:34,b:40}}), PL_CFG);
 
+  // AUC is drawn the same way everywhere in this report: a dot with its 95% CI on a
+  // shared axis (see the multimodal chart). Bars imply a meaningful zero and hide
+  // uncertainty; for a discrimination measure both are wrong.
   const evs = [...R.evaluators].sort((a,b) => (a.best_auc||0)-(b.best_auc||0));
-  Plotly.newPlot("ov-aucbars", [{
-    type: "bar", orientation: "h",
-    y: evs.map(e=>e.evaluator), x: evs.map(e=>e.best_auc||0),
-    marker: {color: "#4650dc"},
-    hovertemplate: "<b>%{y}</b><br>CV AUC %{x:.3f} (%{customdata[0]})" +
-      "<br>holdout %{customdata[1]:.3f} · sens@95 %{customdata[2]:.1%}<extra></extra>",
-    customdata: evs.map(e => [e.best_model, e.holdout_auc, e.sens_at_95spec]),
-  }], PL_LAYOUT("Evaluator AUC (best model, CV) — hover for holdout & sens@95", "AUC", "",
-       {margin:{l:190,r:14,t:34,b:40}, xaxis:{range:[0.5,0.9], gridcolor:"#eceff5"}}), PL_CFG);
+  const ci = e => (e.model_metrics && e.best_model && e.model_metrics[e.best_model]
+                   && e.model_metrics[e.best_model].ci) || [null, null];
+  Plotly.newPlot("ov-aucbars", [
+    {x: evs.map(e => e.holdout_auc), y: evs.map(e => e.evaluator), mode: "markers",
+     name: "holdout", marker: {size: 7, symbol: "diamond-open", color: PALETTE[4]},
+     hovertemplate: "<b>%{y}</b><br>holdout AUC %{x:.3f}<extra></extra>"},
+    {x: evs.map(e => e.best_auc || 0), y: evs.map(e => e.evaluator), mode: "markers",
+     name: "CV (best model)",
+     error_x: {type: "data", symmetric: false,
+       array: evs.map(e => (ci(e)[1] ?? e.best_auc ?? 0) - (e.best_auc ?? 0)),
+       arrayminus: evs.map(e => (e.best_auc ?? 0) - (ci(e)[0] ?? e.best_auc ?? 0)),
+       color: "#aab3d0", thickness: 1.2, width: 3},
+     marker: {size: 8, color: PALETTE[0]},
+     customdata: evs.map(e => [e.best_model, e.sens_at_95spec]),
+     hovertemplate: "<b>%{y}</b><br>CV AUC %{x:.3f} (%{customdata[0]})" +
+       "<br>sens@95 %{customdata[1]:.1%}<extra></extra>"},
+  ], PL_LAYOUT(claimTitle("ov-aucbars", "Evaluator AUC — dot = CV (best model), bar = 95% CI, diamond = holdout"),
+       "AUC", "", {margin:{l:190,r:14,b:78}, xaxis:{range:[0.5,0.95], gridcolor:"#eceff5"},
+       // every evaluator gets its own tick: plotly thins category labels on a short
+       // plot, and the row it dropped first was the best evaluator at the top
+       yaxis:{tickmode:"linear", dtick:1, automargin:true, tickfont:{size:10.5}},
+       // the legend clears the restored "AUC" axis title, which sits ~30px below the axis
+       showlegend:true, legend:{orientation:"h", y:-0.105, font:{size:10.5}}}), PL_CFG);
 
   if (C.patients_in_both_splits > 0) $("#ov-leak").innerHTML =
     `<div class="note"><b>⚠ Patient overlap between splits:</b> ${C.patients_in_both_splits.toLocaleString()} ` +
@@ -395,16 +723,16 @@ const COLS = [
   ["status","Status", v=>`<span class="badge ${v==='OK'?'b-ok':v==='PARTIAL'?'b-warn':'b-bad'}">${v||'–'}</span>`],
   ["best_model","Best", v=>`<span class="badge b-mut">${v||'–'}</span>`],
   ["best_auc","AUC (CV)", v=>`<span class="num">${fmt(v)}</span>`],
-  ["holdout_auc","AUC (holdout)", v=>`<span class="num">${fmt(v)}</span>`],
-  ["auc_drop","Δ overfit", v=>`<span class="num">${fmt(v)}</span>`],
-  ["sens_at_95spec","Sens@95", v=>`<span class="num">${pct(v)}</span>`],
-  ["best_sens_100spec_healthy","Sens@100h", v=>`<span class="num">${pct(v)}</span>`],
+  ["holdout_auc","AUC (holdout)" + ii("holdout"), v=>`<span class="num">${fmt(v)}</span>`],
+  ["auc_drop","Δ overfit" + ii("overfit"), v=>`<span class="num">${fmt(v)}</span>`],
+  ["sens_at_95spec","Sens@95" + ii("sens95"), v=>`<span class="num">${pct(v)}</span>`],
+  ["best_sens_100spec_healthy","Sens@100h" + ii("sens100h"), v=>`<span class="num">${pct(v)}</span>`],
   ["n_selected_features","#feat", v=>`<span class="num">${v??'–'}</span>`],
-  ["selection_method","Selection", v=>esc(v||'–')],
+  ["selection_method","Selection" + ii("mrmr"), v=>esc(v||'–')],
 ];
 let sortKey = "best_auc", sortDir = -1;
 $("#tbl thead").innerHTML = "<tr>" + COLS.map(([k,l]) =>
-  `<th onclick="sortBy('${k}')">${l} <span class="arr" id="arr-${k}"></span></th>`).join("") + "</tr>";
+  `<th onclick="if(!event.target.closest('.infoi'))sortBy('${k}')">${l} <span class="arr" id="arr-${k}"></span></th>`).join("") + "</tr>";
 $("#fmodel").innerHTML += [...new Set(R.evaluators.map(e=>e.best_model).filter(Boolean))]
   .map(m => `<option>${m}</option>`).join("");
 function sortBy(k) { sortDir = (k===sortKey) ? -sortDir : -1; sortKey = k; renderTable(); }
@@ -533,15 +861,16 @@ if (!MM.ablation) {
   const top = dl.slice(0, 20).reverse();
   if (top.length) {
     $("#mm-abl-panel").style.display = "";
+    $("#loo-ii").innerHTML = ii("loo");
     Plotly.newPlot("mm-abl", [{
       x: top.map(([, v]) => v.delta), y: top.map(([k]) => k), orientation: "h",
-      type: "bar", marker: {color: top.map(([, v]) => v.delta >= 0 ? "#4650dc" : "#c8560f")},
+      type: "bar", marker: {color: top.map(([, v]) => v.delta >= 0 ? PALETTE[0] : PALETTE[3])},
       customdata: top.map(([, v]) => v.auc_without),
       hovertemplate: "<b>%{y}</b><br>ΔAUC %{x:+.4f} · AUC without %{customdata:.4f}<extra></extra>",
     }], PL_LAYOUT(
-      `Top ${top.length} of ${dl.length} evaluators by |contribution|`,
+      claimTitle("mm-abl", `Top ${top.length} of ${dl.length} evaluators by |contribution|`),
       "ΔAUC when removed (baseline − ablated)", "",
-      {margin: {l: 210, r: 14, t: 34, b: 40}}), PL_CFG);
+      {margin: {l: 210, r: 14, b: 40}}), PL_CFG);
   }
 }
 const mmNames = Object.keys(MM.models);
@@ -550,8 +879,9 @@ $("#mm-cards").innerHTML = [
   ["Best stacking model", bestStack, `AUC ${fmt(MM.models[bestStack]?.stacking?.auc)}`],
   ["Best single evaluator", MM.best_single_evaluator, `AUC ${fmt(MM.best_single_auc)}`],
   ["Stacking lift", fmt((MM.models[bestStack]?.stacking?.auc||0) - (MM.best_single_auc||0)), "vs best single"],
-  ["Feature selection", MM.selection, `${MM.n_evaluators} evaluators, ${MM.stacking_shape?.[1]} cols`],
-].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
+  ["Feature selection", (MM.selection ?? "–") + ii(MM.selection === "grootcv" ? "grootcv" : "mrmr"),
+     `${MM.n_evaluators} evaluators, ${MM.stacking_shape?.[1]} cols`],
+].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></div>`).join("");
 
 (function mmCharts() {
   const rows = mmNames.flatMap(m => ["stacking","raw"].filter(sc => MM.models[m][sc])
@@ -561,15 +891,21 @@ $("#mm-cards").innerHTML = [
      error_x: {type:"data", symmetric:false,
        array: rows.map(r => (r.ci?.[1] ?? r.auc) - r.auc),
        arrayminus: rows.map(r => r.auc - (r.ci?.[0] ?? r.auc)), color:"#aab3d0"},
-     marker: {size: 9, color: rows.map(r => r.sc === "stacking" ? "#4650dc" : "#0ea472")},
+     // scope is series identity, so it takes CATEGORICAL hues — the old green here
+     // collided with the status scale's "good".
+     marker: {size: 9, color: rows.map(r => r.sc === "stacking" ? PALETTE[0] : PALETTE[1])},
      customdata: rows.map(r => [r.sens95, r.sens100h, r.vs_best_single]),
      hovertemplate: "<b>%{y}</b><br>AUC %{x:.3f}<br>sens@95 %{customdata[0]:.1%} · " +
        "sens@100h %{customdata[1]:.1%}<br>vs best single %{customdata[2]:+.3f}<extra></extra>",
      showlegend: false},
-  ], PL_LAYOUT(`Stacking vs raw (dot = AUC, bar = 95% CI; dashed = best single ${fmt(MM.best_single_auc)})`,
-       "AUC", "", {margin:{l:150,r:14,t:34,b:40},
+  ], PL_LAYOUT(claimTitle("mm-auc",
+       `Stacking vs raw (dot = AUC, bar = 95% CI; dashed = best single ${fmt(MM.best_single_auc)})`),
+       "AUC", "", {margin:{l:170,r:14,b:40},
+       // one tick per row: plotly thins category labels when the plot is short, which
+       // would leave half of these 12 model x scope rows unlabelled
+       yaxis:{tickmode:"linear", dtick:1, automargin:true, tickfont:{size:10.5}},
        shapes:[{type:"line", x0:MM.best_single_auc, x1:MM.best_single_auc, y0:-0.5, y1:rows.length-0.5,
-                line:{dash:"dash", color:"#c8560f"}}]}), PL_CFG);
+                line:{dash:"dash", color:STATUS.warn}}]}), PL_CFG);
 
   const prTraces = mmNames.filter(m => MM.models[m].stacking?.pr).map((m,i) => ({
     x: MM.models[m].stacking.pr.recall, y: MM.models[m].stacking.pr.precision,
@@ -580,8 +916,9 @@ $("#mm-cards").innerHTML = [
     PL_LAYOUT("Precision–recall (stacking, CV out-of-fold)", "recall", "precision"), PL_CFG);
 })();
 
-$("#mm-tbl").innerHTML = `<tr><th>model</th><th>scope</th><th>AUC</th><th>95% CI</th>
-  <th>sens@95</th><th>sens@100h</th><th>vs best single</th></tr>` +
+$("#mm-tbl").innerHTML = `<tr><th>model${ii("gpumodels")}</th>` +
+  `<th>scope${ii("stacking")}</th><th>AUC</th><th>95% CI</th>` +
+  `<th>sens@95${ii("sens95")}</th><th>sens@100h${ii("sens100h")}</th><th>vs best single</th></tr>` +
   mmNames.flatMap(m => ["stacking","raw"].filter(sc => MM.models[m][sc]).map(sc => { const d = MM.models[m][sc];
     return `<tr><td>${m}</td><td>${sc}</td><td class="num">${fmt(d.auc)}</td>
       <td class="num">${fmt(d.ci?.[0])}–${fmt(d.ci?.[1])}</td><td class="num">${pct(d.sens95)}</td>
