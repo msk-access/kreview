@@ -62,6 +62,21 @@
   .toolbar { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
   .toolbar input, .toolbar select { font:inherit; padding:7px 10px; border:1px solid var(--line);
       border-radius:8px; background:var(--panel); }
+  /* pipeline diagram: the SVG ships pre-laid-out, so the page only scales it */
+  .pd-wrap { overflow-x:auto; }
+  svg.pd-dag { width:100%; min-width:760px; display:block; }
+  svg.pd-dag[hidden] { display:none; }
+  svg.pd-mini { width:100%; max-width:620px; display:block; margin:0 auto 14px; }
+  .pd-node[data-open="1"] { cursor:pointer; }
+  .pd-node[data-open="1"]:hover rect:nth-of-type(2) { stroke-width:2; }
+  .pd-node:focus { outline:none; }
+  .pd-node:focus-visible rect:nth-of-type(2) { stroke:var(--accent); stroke-width:2; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; font-size:12px; padding:6px 12px; border:0; border-right:1px solid var(--line);
+      background:var(--panel); color:var(--muted); cursor:pointer; }
+  .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed="true"] { background:var(--chip); color:var(--accent); font-weight:600; }
+  .pd-tbl td, .pd-tbl th { padding:6px 8px; border-bottom:1px solid var(--line); font-size:12.5px; }
   dialog { border:0; border-radius:14px; padding:0; max-width:960px; width:92vw; max-height:88vh;
            box-shadow:0 24px 70px rgba(20,25,60,.25); }
   dialog::backdrop { background:rgba(15,18,35,.45); }
@@ -209,6 +224,19 @@
 
   <section class="tab" id="tab-methods">
     <div class="panel">
+      <h3>What runs, and in what order</h3>
+      <div class="toolbar">
+        <span class="cap">Detail</span>
+        <div class="seg" id="pd-seg">
+          <button data-level="overview" aria-pressed="true">Overview</button>
+          <button data-level="standard" aria-pressed="false">Every stage</button>
+        </div>
+      </div>
+      <div class="pd-wrap">__PIPELINE_METHODS__</div>
+      <p class="cap">One Nextflow DAG. Work scatters per feature family after extraction and gathers
+      once in fuse; open any node for the processes behind it.</p>
+    </div>
+    <div class="panel">
       <h3>Definitions</h3>
       <p><b>The 5-tier ctDNA label.</b> Each plasma sample is paired with the patient's tumor
       sequencing where available. <b>True ctDNA+</b> — plasma variants confirmed against the
@@ -295,6 +323,15 @@
 
   <section class="tab" id="tab-diagnostics">
     <div class="cards" id="dg-cards"></div>
+    <div class="panel">
+      <h3>Pipeline run map</h3>
+      <div class="note" id="pd-notrace" style="display:none"><b>No execution trace.</b> The trace is
+        written when the workflow finishes, so a report rendered inside the pipeline cannot see it.
+        Every stage below reads <i>no trace</i> — that is unknown, not success.</div>
+      <div class="pd-wrap">__PIPELINE_DIAGNOSTICS__</div>
+      <p class="cap">Each node carries this run's task counts. Nodes covering more than one Nextflow
+      process report how many — open one for its processes, their failures and their slowest task.</p>
+    </div>
     <div class="grid2">
       <div class="panel"><h3>Process outcomes</h3><div style="overflow:auto"><table id="dg-proc"></table></div></div>
       <div class="panel"><h3>Longest tasks</h3><div style="overflow:auto"><table id="dg-long"></table></div></div>
@@ -303,6 +340,7 @@
 </main>
 
 <div id="gloss" role="dialog" aria-label="term definition"></div>
+__PIPELINE_MINIS__
 
 <dialog id="dlg">
   <div class="dlg-head"><h2 id="dlg-t"></h2><button class="x" onclick="dlg.close()">close</button></div>
@@ -715,6 +753,90 @@ $("#ov-cards").innerHTML = [
     `<div class="note"><b>⚠ Patient overlap between splits:</b> ${C.patients_in_both_splits.toLocaleString()} ` +
     `patients have samples in BOTH train and test. Holdout metrics are optimistically biased — ` +
     `the split should be patient-level, not sample-level.</div>`;
+})();
+
+/* ── pipeline diagram ────────────────────────────────────── */
+(function pipeline() {
+  const P = R.pipeline || {}, PROCS = P.nodes || {}, NAMES = P.names || {};
+  const DG = (R.diagnostics || {}).processes || {}, hasTrace = Object.keys(DG).length > 0;
+  const GOOD = "#0a7a50", WARN = STATUS.warn;
+
+  // Status is written into slots the SVG already reserved — nothing is laid out here.
+  document.querySelectorAll("#tab-diagnostics .pd-node").forEach(g => {
+    const procs = PROCS[g.dataset.node] || [];
+    const txt = g.querySelector(".pd-chiptext"), chip = g.querySelector(".pd-chip");
+    if (!txt) return;
+    const rows = procs.map(x => DG[x]).filter(Boolean);
+    if (!hasTrace || !rows.length) {
+      // absent trace row is unknown, never green
+      txt.textContent = "no trace"; txt.setAttribute("fill", "#8a93a8");
+      chip.setAttribute("fill", "rgba(26,34,51,0.04)"); chip.setAttribute("stroke", "rgba(26,34,51,0.15)");
+      return;
+    }
+    const lost = rows.some(r => r.n !== r.completed);
+    // A node covering several processes reports how many, not the sum of their task
+    // counts: "78/79" across three processes is true and unusable.
+    txt.textContent = procs.length > 1 ? `${procs.length} procs`
+                    : (lost ? `${rows[0].completed}/${rows[0].n}` : `${rows[0].completed} ok`);
+    txt.setAttribute("fill", lost ? WARN : GOOD);
+    chip.setAttribute("fill", lost ? "rgba(200,86,15,0.10)" : "rgba(10,122,80,0.08)");
+    chip.setAttribute("stroke", lost ? "rgba(200,86,15,0.40)" : "rgba(10,122,80,0.35)");
+  });
+  $("#pd-notrace").style.display = hasTrace ? "none" : "block";
+
+  // One gesture in both tabs: the panel's content differs, the affordance does not.
+  const openNode = key => {
+    const procs = PROCS[key] || []; if (!procs.length) return;
+    const mini = document.querySelector(`#pd-minis [data-cluster="${key}"]`);
+    let html = mini ? mini.innerHTML : "";
+    if (hasTrace) {
+      html += `<table class="pd-tbl"><thead><tr><th>Process</th><th>Tasks</th><th>Completed</th>` +
+              `<th>Failed</th><th>Attempts</th><th>Slowest</th><th>Peak RSS</th></tr></thead><tbody>` +
+        procs.map(x => {
+          const r = DG[x];
+          if (!r) return `<tr><td>${esc(x)}</td><td colspan="6">not in trace</td></tr>`;
+          const f = r.failed ? ` style="color:${WARN};font-weight:600"` : "";
+          return `<tr><td>${esc(x.replace("KREVIEW_", ""))}</td><td>${r.n}</td><td>${r.completed}</td>` +
+                 `<td${f}>${r.failed}</td><td>${r.max_attempt}</td><td>${esc(r.slowest ?? "–")}</td>` +
+                 `<td>${esc(r.peak_rss ?? "–")}</td></tr>`;
+        }).join("") + `</tbody></table>`;
+    } else {
+      html += `<ul>${procs.map(x => `<li><code>${esc(x)}</code></li>`).join("")}</ul>` +
+              `<p class="cap">No execution trace loaded, so this run's task counts are unavailable.</p>`;
+    }
+    $("#dlg-t").textContent = NAMES[key] || key;
+    $("#dlg-b").innerHTML = html;
+    // the sub-topology carries the same per-process status as the table
+    document.querySelectorAll("#dlg-b .pd-mnode").forEach(g => {
+      const r = DG[g.dataset.proc], t = g.querySelector(".pd-mchip");
+      if (!t) return;
+      if (!r) { t.textContent = hasTrace ? "no trace" : ""; return; }
+      const ok = r.n === r.completed;
+      t.textContent = ok ? `${r.completed} ok` : `${r.completed}/${r.n}`;
+      t.setAttribute("fill", ok ? GOOD : WARN);
+    });
+    $("#dlg").showModal();
+  };
+  document.querySelectorAll(".pd-node").forEach(g => {
+    if (!(PROCS[g.dataset.node] || []).length) return;
+    g.dataset.open = "1"; g.setAttribute("tabindex", "0"); g.setAttribute("role", "button");
+    g.setAttribute("aria-label", `${NAMES[g.dataset.node] || g.dataset.node} — open processes`);
+    g.addEventListener("click", () => openNode(g.dataset.node));
+    g.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openNode(g.dataset.node); }
+    });
+  });
+
+  const seg = $("#pd-seg");
+  if (seg) seg.addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    [...seg.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    // `hidden` is an HTMLElement property; on an SVG element it must be the attribute
+    document.querySelectorAll("#tab-methods svg.pd-dag").forEach(
+      svg => svg.toggleAttribute("hidden", svg.dataset.level !== b.dataset.level));
+  });
+  document.querySelectorAll("#tab-methods svg.pd-dag").forEach(
+    svg => svg.toggleAttribute("hidden", svg.dataset.level !== "overview"));
 })();
 
 /* ── scoreboard ──────────────────────────────────────────── */
