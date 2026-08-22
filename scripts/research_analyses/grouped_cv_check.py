@@ -93,8 +93,11 @@ def paired_bootstrap(y, a, b, patients, tn) -> tuple:
         d_sens.append(
             sens_at_spec(yy, b[idx], tn[idx]) - sens_at_spec(yy, a[idx], tn[idx])
         )
-    q = lambda v: (float(np.nanquantile(v, 0.025)), float(np.nanquantile(v, 0.975)))
-    return q(d_auc), q(d_sens)
+
+    def ci(v):
+        return float(np.nanquantile(v, 0.025)), float(np.nanquantile(v, 0.975))
+
+    return ci(d_auc), ci(d_sens)
 
 
 def run(
