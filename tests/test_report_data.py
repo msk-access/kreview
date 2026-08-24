@@ -32,10 +32,14 @@ def _fake_id(i: int) -> str:
     return "P-" + str(1000000 + i) + "-T01-XS1"
 
 
-@pytest.fixture()
-def mini_outdir(tmp_path):
-    """A minimal but structurally faithful pipeline output directory."""
-    n = 60
+def _write_outdir(tmp_path, n_pos=25, n_neg=25, n_donor=10, oof_labels=None):
+    """Build a structurally faithful output directory at a chosen size.
+
+    Parameterised because the TN-anchored operating point only computes above 200
+    verified negatives — at the 60-sample default the report's *primary endpoint*
+    silently never runs, so nothing exercised it until `anchor_outdir` existed.
+    """
+    n = n_pos + n_neg + n_donor
     ids = [_fake_id(i) for i in range(n)]
     # patient 0 deliberately has samples in BOTH splits -> leakage count of 1
     patients = ["PT" + str(i // 2) for i in range(n)]
@@ -48,11 +52,11 @@ def mini_outdir(tmp_path):
         {
             "SAMPLE_ID": ids,
             "PATIENT_ID": patients,
-            "CANCER_TYPE": ["Lung"] * 30 + ["Breast"] * 30,
+            "CANCER_TYPE": ["Lung"] * (n // 2) + ["Breast"] * (n - n // 2),
             "label": (
-                ["True ctDNA+"] * 25
-                + ["Possible ctDNA−"] * 25
-                + ["Healthy Normal"] * 10
+                ["True ctDNA+"] * n_pos
+                + ["Possible ctDNA−"] * n_neg
+                + ["Healthy Normal"] * n_donor
             ),
             "split": splits,
         }
@@ -68,7 +72,7 @@ def mini_outdir(tmp_path):
     sb.to_parquet(tmp_path / "scoreboard_combined__all.parquet", index=False)
 
     rng = np.random.RandomState(0)
-    y = [1] * 25 + [0] * 35
+    y = [1] * n_pos + [0] * (n_neg + n_donor)
     probs = list(np.clip(rng.rand(n) * 0.5 + np.array(y) * 0.4, 0, 1))
     (tmp_path / "models" / "cpu").mkdir(parents=True)
     mr = {
@@ -82,7 +86,11 @@ def mini_outdir(tmp_path):
         "lr_oof_probs": probs,
         "oof_labels": y,
         "oof_sample_ids": ids,
-        "oof_sample_labels": ["Healthy Normal"] * 10 + ["True ctDNA+"] * 50,
+        "oof_sample_labels": (
+            oof_labels
+            if oof_labels is not None
+            else ["Healthy Normal"] * 10 + ["True ctDNA+"] * 50
+        ),
     }
     (tmp_path / "models" / "cpu" / "EvalA_model_results.json").write_text(
         json.dumps(mr)
@@ -126,6 +134,40 @@ def mini_outdir(tmp_path):
         json.dumps({"auc_stacking_rf": 0.82, "stacking_rf_sensitivity_at_95spec": 0.6})
     )
     return tmp_path
+
+
+@pytest.fixture
+def mini_outdir(tmp_path):
+    """A minimal but structurally faithful pipeline output directory."""
+    return _write_outdir(tmp_path)
+
+
+@pytest.fixture
+def anchor_outdir(tmp_path):
+    """Large enough for the TN-anchored primary endpoint to actually compute.
+
+    Label tiers are internally consistent here (the small fixture's oof_sample_labels
+    deliberately are not — several tests depend on that mismatch), and the negatives
+    clear the 200-sample gate that guards the anchored block.
+    """
+    n_pos, n_neg, n_donor = 300, 300, 40
+    labels = (
+        ["True ctDNA+"] * n_pos
+        + ["Possible ctDNA−"] * n_neg
+        + ["Healthy Normal"] * n_donor
+    )
+    out = _write_outdir(tmp_path, n_pos, n_neg, n_donor, oof_labels=labels)
+    import pandas as pd
+
+    lb = pd.read_parquet(out / "labels" / "labels.parquet")
+    # qualified TN = paired tumour sequencing AND zero confirmed variants in plasma
+    lb["has_paired_impact"] = True
+    lb["n_impact_confirmed"] = 0
+    lb.loc[lb["label"] == "True ctDNA+", "n_impact_confirmed"] = 2
+    lb["max_vaf"] = 0.0
+    lb.loc[lb["label"] == "True ctDNA+", "max_vaf"] = 0.05
+    lb.to_parquet(out / "labels" / "labels.parquet", index=False)
+    return out
 
 
 class TestBuildReportData:
@@ -206,6 +248,87 @@ class TestBuildReportData:
         fs = build_report_data(mini_outdir)["findings"]
         assert any("split intact" in f["text"] and f["kind"] == "good" for f in fs)
         assert not any("BOTH train and test" in f["text"] for f in fs)
+
+    def test_primary_endpoint_carries_a_clustered_interval(self, anchor_outdir):
+        """The headline is an estimate; it ships with an interval, or says why not."""
+        data = build_report_data(anchor_outdir)
+        tn = ((data.get("primary") or {}).get("operating_points") or {}).get(
+            "tn_anchor"
+        )
+        assert tn, "the anchored block must compute on a fixture above the TN gate"
+        assert tn["n_tn"] >= 200 and tn["n_tn_patients"]
+        assert "patient-clustered" in tn["ci_method"]
+        lo, hi = tn["sens_at_98spec_ci"]
+        assert lo <= tn["sens_at_98spec"] <= hi
+        # the width is decomposed, never quoted as one conflated ratio
+        assert tn["sens_at_98spec_deff"] > 0
+        assert tn["sens_at_98spec_threshold_inflation"] > 0
+
+    def test_missing_patient_column_fails_loudly(self, anchor_outdir):
+        """PATIENT_ID is required, so its absence must name itself, not raise a KeyError
+        from three frames down inside pandas."""
+        import pandas as pd
+
+        lb = pd.read_parquet(anchor_outdir / "labels" / "labels.parquet")
+        lb.drop(columns=["PATIENT_ID"]).to_parquet(
+            anchor_outdir / "labels" / "labels.parquet", index=False
+        )
+        with pytest.raises(KeyError, match="PATIENT_ID"):
+            build_report_data(anchor_outdir)
+
+    def test_operating_points_record_why_an_interval_is_absent(self):
+        """The anchored block itself degrades when handed a frame with no patients —
+        it reports the point estimate and records that the interval is unavailable,
+        rather than substituting a narrower one."""
+        from kreview.report_data import _anchored_operating_points
+
+        rng = np.random.default_rng(0)
+        n_pos, n_tn = 400, 400
+        y = np.array([1] * n_pos + [0] * n_tn)
+        p_arr = np.concatenate([rng.normal(1.2, 1, n_pos), rng.normal(0, 1, n_tn)])
+        ids = [f"S{i}" for i in range(n_pos + n_tn)]
+        lab = pd.DataFrame(
+            {
+                "SAMPLE_ID": ids,
+                "label": ["True ctDNA+"] * n_pos + ["Possible ctDNA−"] * n_tn,
+                "has_paired_impact": True,
+                "n_impact_confirmed": [2] * n_pos + [0] * n_tn,
+            }
+        ).set_index("SAMPLE_ID")
+        out = _anchored_operating_points(y, p_arr, ids, lab)
+        tn = out["tn_anchor"]
+        assert "unavailable" in tn["ci_method"]
+        assert "sens_at_98spec_ci" not in tn
+        assert tn["sens_at_98spec"] is not None
+
+    def test_cluster_bootstrap_widens_with_clustering(self):
+        """Repeated timepoints must not be counted as independent observations."""
+        from kreview.report_data import _cluster_bootstrap_sens
+
+        rng = np.random.default_rng(0)
+        # 60 patients x 8 identical-ish timepoints: sample-level resampling sees 480
+        # independent draws, patient-level resampling sees 60 — the interval must widen
+        per_patient = rng.normal(size=60)
+        p_pos = np.repeat(per_patient, 8) + rng.normal(scale=0.05, size=480) + 1.0
+        pat_pos = np.repeat(np.arange(60), 8)
+        p_tn = rng.normal(size=480)
+        pat_tn = np.repeat(np.arange(1000, 1060), 8)
+        lo_c, hi_c = _cluster_bootstrap_sens(p_pos, p_tn, pat_pos, pat_tn, 0.98)
+        lo_i, hi_i = _cluster_bootstrap_sens(
+            p_pos, p_tn, pat_pos, pat_tn, 0.98, cluster=False
+        )
+        assert None not in (lo_c, hi_c, lo_i, hi_i)
+        assert (hi_c - lo_c) > (hi_i - lo_i), (
+            "clustered interval must be wider than the sample-level one when "
+            f"timepoints repeat: {hi_c - lo_c:.4f} vs {hi_i - lo_i:.4f}"
+        )
+
+    def test_cluster_bootstrap_degrades_without_enough_negatives(self):
+        from kreview.report_data import _cluster_bootstrap_sens
+
+        assert _cluster_bootstrap_sens(
+            np.array([0.9, 0.8]), np.array([0.1]), np.array([1, 2]), np.array([3]), 0.98
+        ) == (None, None)
 
     def test_dual_anchor_operating_points(self, mini_outdir):
         """#123: TN-anchored points, one-sided donor bound, verification-bias AUCs."""
