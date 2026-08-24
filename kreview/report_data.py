@@ -51,6 +51,13 @@ LOD_BINS = (
 )
 
 MIN_SUBGROUP = 30
+# Minimum per CLASS, not per group: an AUC needs both classes populated, and a floor on
+# total n lets a group through on its negatives alone.
+MIN_SUBGROUP_CLASS = 30
+# Bootstrap draws for subgroup intervals. Lower than the eval engine's 1,000 because this
+# runs per evaluator per group at report-build time; enough to separate a wide interval
+# from a narrow one, which is what the panel needs to convey.
+SUBGROUP_BOOT = 200
 # Curves are thinned to this many points before embedding (endpoints always kept).
 CURVE_POINTS = 120
 # Number of equal-width probability bins for the calibration (reliability) diagram.
@@ -68,6 +75,8 @@ __all__ = [
     "PRIMARY_MODEL",
     "LOD_BINS",
     "MIN_SUBGROUP",
+    "MIN_SUBGROUP_CLASS",
+    "SUBGROUP_BOOT",
     "CURVE_POINTS",
     "CALIBRATION_BINS",
     "DCA_THRESHOLDS",
@@ -420,7 +429,9 @@ def _anchored_operating_points(
 
 
 # %% ../nbs/06_report_data.ipynb #7eb86ed0
-def _oof_extras(mr: dict, best: str, lab_by_id: pd.DataFrame) -> dict:
+def _oof_extras(
+    mr: dict, best: str, lab_by_id: pd.DataFrame, subgroup_ci: bool = False
+) -> dict:
     """Curves, calibration, decision curve and subgroup AUCs from the OOF arrays.
 
     Sample ids are joined to labels IN MEMORY and discarded — only per-group
@@ -483,19 +494,55 @@ def _oof_extras(mr: dict, best: str, lab_by_id: pd.DataFrame) -> dict:
         )
         sub: dict = defaultdict(dict)
         meta = lab_by_id.reindex(ids)
+        pats = (
+            meta["PATIENT_ID"].fillna(pd.Series(list(ids), index=meta.index)).to_numpy()
+            if "PATIENT_ID" in meta.columns
+            else None
+        )
         for col, key in (("CANCER_TYPE", "cancer_type"), ("split", "split")):
             if col not in meta.columns:
                 continue
             for grp, gidx in meta.groupby(col).groups.items():
                 mask = meta.index.isin(gidx)
                 yy, pp = y_arr[mask], p_arr[mask]
-                if len(yy) < MIN_SUBGROUP or len(set(yy)) < 2:
+                # Gate on POSITIVES, not total n. A group can clear a 30-sample floor
+                # on 874 samples while carrying 72 positives, and an AUC on 72 positives
+                # is not comparable to one on 2,254 — that is the same denominator error
+                # that made a histology odds ratio meaningless in the review.
+                n_pos = int(yy.sum())
+                n_neg = int(len(yy) - n_pos)
+                if min(n_pos, n_neg) < MIN_SUBGROUP_CLASS or len(set(yy)) < 2:
                     continue
-                sub[key][str(grp)] = {
+                entry = {
                     "n": int(len(yy)),
-                    "n_pos": int(yy.sum()),
+                    "n_pos": n_pos,
                     "auc": _r(roc_auc_score(yy, pp)),
                 }
+                # Intervals only for the pre-registered primary evaluator. Every other
+                # evaluator's subgroup table is exploratory, and bootstrapping all 26 x 12
+                # of them costs three minutes of report build for panels that carry no
+                # declared claim — the same multiplicity discipline ANALYSIS_PLAN applies
+                # to the endpoints, applied to what the report spends time computing.
+                if subgroup_ci:
+                    from kreview.eval_engine import _bootstrap_auc
+
+                    lo, hi = _bootstrap_auc(
+                        yy,
+                        pp,
+                        n_boot=SUBGROUP_BOOT,
+                        groups=(pats[mask] if pats is not None else None),
+                    )
+                    if lo is not None:
+                        entry["ci"] = [_r(lo), _r(hi)]
+                # Share of this group's positives that are tumour-confirmed. Reported,
+                # not interpreted: a group whose positives are largely the ambiguous
+                # tier is a different measurement from one whose positives are verified,
+                # and the reader cannot see that from an AUC alone.
+                if "label" in meta.columns and n_pos:
+                    tiers = meta["label"].to_numpy()[mask]
+                    conf = int(np.count_nonzero(tiers == "True ctDNA+"))
+                    entry["pct_true_pos"] = _r(conf / n_pos, 3)
+                sub[key][str(grp)] = entry
         out["breakdowns"] = {
             k: dict(sorted(v.items(), key=lambda kv: -kv[1]["n"])[:12])
             for k, v in sub.items()
@@ -562,7 +609,11 @@ def _build_evaluator(row: pd.Series, outdir: Path, lab_by_id: pd.DataFrame) -> d
             "n_variance_dropped": qc.get("n_variance_dropped"),
         }
 
-    rec.update(_oof_extras(mr, best, lab_by_id))
+    rec.update(
+        _oof_extras(
+            mr, best, lab_by_id, subgroup_ci=row.get("evaluator") == PRIMARY_EVALUATOR
+        )
+    )
 
     # Nested-CV feature-group ablation (ABLATE stage): winner group per outer fold,
     # per model — the selection-stability story. The per-sample fold_assignment array

@@ -374,6 +374,9 @@ const GLOSSARY = {
     "A patient-disjoint 20% of the cohort: the model refits on the remaining 80% and scores it once. No patient appears on both sides, so holdout metrics are on entirely unseen people.", null],
   overfit: ["\u0394 overfit",
     "Cross-validated AUC minus holdout AUC. Near zero means the CV numbers are honest; a large positive gap means CV is optimistic.", null],
+  tiercomp: ["% confirmed positives",
+    "The share of a group's positive samples labelled True ctDNA+ — plasma variants confirmed against the patient's tumour — rather than Possible ctDNA+, where the plasma evidence fell below the confirmation bar. Groups differ: in this cohort it ranges from roughly half to over ninety percent. A lower share does not make a group's AUC wrong, but it does mean the positives being discriminated are a less certain set, and that difference is easy to mistake for biology.",
+    "See the Methods & interpretation tab"],
   clusterci: ["Patient-clustered interval",
     "A bootstrap that resamples whole patients rather than samples, and re-derives the operating threshold inside every resample. It therefore covers two things a binomial interval on sample counts covers neither of: repeated timepoints from one patient are not independent, and the threshold is an estimate from a finite negative set that moves when that set is resampled.",
     "See the Methods & interpretation tab"],
@@ -935,11 +938,23 @@ function openEval(name) {
       <div class="chips">${e.top_features.map(f=>`<span>${esc(f)}</span>`).join("")}</div></div>`;
 
   if (e.breakdowns?.cancer_type) {
-    html += `<div class="panel"><h3>Subgroup AUC by cancer type (n ≥ 30, CV out-of-fold)</h3>
-      <div style="overflow:auto"><table><tr><th>cancer type</th><th>n</th><th>positives</th><th>AUC</th></tr>` +
+    const anyCi = Object.values(e.breakdowns.cancer_type).some(d => d.ci);
+    html += `<div class="panel"><h3>Subgroup AUC by cancer type</h3>
+      <div class="legend" style="margin-bottom:8px">At least 30 <i>per class</i>, CV out-of-fold.
+      <b>% confirmed</b> is the share of this group's positives that are tumour-confirmed
+      (True ctDNA+)${ii("tiercomp")} — a group whose positives are largely the ambiguous tier is a
+      different measurement from one whose positives are verified, so read the AUC against it.
+      ${anyCi ? "Intervals are patient-clustered; they are computed for the pre-registered " +
+        "primary evaluator only, every other subgroup table being exploratory." :
+        "Intervals are shown on the primary evaluator's table."}</div>
+      <div style="overflow:auto"><table><tr><th>cancer type</th><th>n</th><th>positives</th>
+        <th>% confirmed</th><th>AUC</th>${anyCi ? "<th>95% CI</th>" : ""}</tr>` +
       Object.entries(e.breakdowns.cancer_type).map(([g,d]) =>
         `<tr><td>${esc(g)}</td><td class="num">${d.n}</td><td class="num">${d.n_pos}</td>
-         <td class="num">${fmt(d.auc)}</td></tr>`).join("") + `</table></div></div>`;
+         <td class="num">${d.pct_true_pos == null ? "–" : pct(d.pct_true_pos)}</td>
+         <td class="num">${fmt(d.auc)}</td>` +
+        (anyCi ? `<td class="num">${d.ci ? `${fmt(d.ci[0])}–${fmt(d.ci[1])}` : "–"}</td>` : "") +
+        `</tr>`).join("") + `</table></div></div>`;
   }
   if (e.fold_ablation) {
     const fa = e.fold_ablation;
