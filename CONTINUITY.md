@@ -33,24 +33,50 @@ of their objections refuted with data, three of their own objections withdrawn b
 leakage pathway we disclosed before they found it. Their qTN contamination bound (≤4.1%,
 conservative in direction) is sound and worth keeping.
 
-**What today established about local compute.** TabICL will not run this comparison on the M2
-Pro. MPS works and is genuinely faster than CPU, but `n_estimators=8` × quadratic context cost
-puts a single 1,900-row fit past ten minutes, and the full arm is 10 such fits per variant. It
-belongs on the cluster. Related: **all installs go in isolated environments** — a base-env
-install pulled `setuptools` past 81 and removed `pkg_resources`, the exact breakage the
-`setuptools<81` pin exists to prevent (`.agents/memory/feedback-isolated-envs-only.md`).
+**Local compute has a ceiling.** TabICL will not run the leakage comparison on the M2 Pro.
+MPS works and beats CPU, but `n_estimators=8` against quadratic context cost puts a single
+1,900-row fit past ten minutes, and the arm needs twenty of them. It belongs on the cluster.
+Related: **all installs go in isolated environments** — a base-env install pulled `setuptools`
+past 81 and removed `pkg_resources`, the exact breakage the `setuptools<81` pin exists to
+prevent (`.agents/memory/feedback-isolated-envs-only.md`).
+
+## 1a. What the local batch established (24 Aug)
+
+Three results changed what we can claim, and all three came from running our own numbers
+rather than from the reviewer.
+
+**Uncertainty on the headline is about the threshold, not about clustering.** The primary
+endpoint had shipped as a bare point estimate. Under a patient-clustered bootstrap with the
+threshold re-estimated per resample it is **0.483 [0.424, 0.519]**, and decomposing that width
+gives a clustering design effect of **1.26** against a threshold-estimation inflation of
+**11.3×**. Three review rounds argued about the smaller term by an order of magnitude. The
+same clustering effect, measured independently on the stacking AUC through the eval engine,
+is **1.21** — inside the reviewer's predicted 1.14–1.23 both times.
+
+**Every interval in the scoreboard was too narrow.** `_bootstrap_auc` resampled rows, so
+evaluator and holdout CIs treated a patient's repeated timepoints as independent. Fixed; CIs
+widen ~10% on the next run and are not comparable across that boundary.
+
+**The histology gap rests on one stratum.** Matched on confirmed-variant count within True+
+only, NSCLC vs bladder at 4+ variants holds (41.2% vs 20.3%, OR 2.75, p=0.004, non-overlapping
+intervals); NSCLC vs pancreatic at 2–3 is marginal (p=0.049, overlapping) and would not survive
+a correction across the three contrasts. The pooled figure sent to the reviewer overstates it.
+Composition is a real confound but a **band-specific** one: pancreatic is 47.5% True+ inside
+the 1–5% VAF band and 75.1% cohort-wide.
 
 ---
 
 ## 2. The register
 
 Effort: **S** ≤ half a day · **M** 1–3 days · **L** ≥ a week. "Gate" = what must land first.
+**Done** rows stay listed with their PR, because what was tried and what it cost is the part
+that gets lost. 22 items remain, 9 of them on the cluster.
 
 ### Track A — Ship what is already built (code, local)
 
 | # | Item | Why | Gate | Effort |
 |---|---|---|---|---|
-| A1 | **Close #122 and #123** | Both shipped in #125; leaving them open misrepresents the backlog | — | S |
+| A1 | ~~Close #122 and #123~~ **done** | Both shipped in #125 | — | S |
 | A2 | **Cut v0.0.33** | Report visuals, the DAG, dual anchors and depth columns are all unreleased; the campaign is quoting an untagged build | A1 | S |
 | A3 | **Regenerate the v0.0.32 report from the tagged build** | The HTML we have been reading is a local render; the artifact of record should come from a tag | A2 | S |
 
@@ -59,8 +85,9 @@ Effort: **S** ≤ half a day · **M** 1–3 days · **L** ≥ a week. "Gate" = w
 | # | Item | Why | Gate | Effort |
 |---|---|---|---|---|
 | B1 | **Verification-bias ladder as a first-class panel** (0.845 verified qTN / 0.856 pooled / 0.865 unpaired / 0.976 donors) | Anchor choice moves the headline 13.1 points — more than any modeling decision. A reader who sees only one number cannot know that | — | M |
-| B2 | **Effective n and design effect on the TN anchor** (3,508 qTN from 2,406 patients, deff 1.14–1.23, CIs +≤11%) | Conceded to the reviewer; the report still reports raw n | — | S |
-| B3 | **Resolution-floor phrasing in the findings engine** | "No shift detectable at this resolution (0.022)" is honest; "moves by at most 0.02" implies a measurement we cannot make | — | S |
+| B2 | ~~Effective n on the TN anchor~~ **done, #132** | Grew past its estimate: the primary endpoint had no interval at all, and neither did the scoreboard's. Both are patient-clustered now, and the decomposition (§1a) is the finding | — | M |
+| B3 | ~~Resolution-floor phrasing~~ **no-op** | The "at most" phrasing existed only in the reviewer draft, never in the findings engine. Draft corrected | — | — |
+| B6 | ~~Subgroup floor, interval, tier composition~~ **#134** | Not in the original plan; fell out of C2. The panel printed retinoblastoma's AUC on 72 positives at the same weight as NSCLC's on 2,254 — the denominator error we withdrew an odds ratio for, still live in the report | — | M |
 | B4 | **Per-assay threshold calibration at the decision layer** | A 98% global threshold realizes 98.2% / 97.5% per assay version; fixable at the threshold, not the features | — | M |
 | B5 | **Per-variant penumbra annotation as a detection-power prior** | Highest-value item from the three-way paper read: turns a population phenomenon into a per-call confidence modifier. Needs no new data once the BED exists | D7 | M |
 
@@ -69,7 +96,7 @@ Effort: **S** ≤ half a day · **M** 1–3 days · **L** ≥ a week. "Gate" = w
 | # | Item | Why | Gate | Effort |
 |---|---|---|---|---|
 | C1 | **Nuisance battery** — predict depth, input mass, age, site *from* the features; partial them out | The reviewer's own words: the single experiment that would most change the reading of F3 and F8. Evaluation-only, so the metadata firewall permits it | — | M |
-| C2 | **Histology gap within True+ at each variant-count stratum** | Composition is ruled out overall (36.1% vs 20.2%); the per-stratum version closes the objection completely | — | S |
+| C2 | ~~Histology gap per variant-count stratum~~ **done, #133** | Did not close the objection — narrowed our claim to the 4+ stratum (§1a). Everything it needed was already local | — | S |
 | C3 | **Penumbra feature-ablation** — mask the shared 1.4%, re-fit | If 0.856 survives, the signal is not penumbra-driven and we can say so with a citation. If it drops, our discrimination lives in the least transportable regions | D7 | M |
 | C4 | **Within-Cristiano benchmark, Jiang as external validation** | The obvious public-data benchmark is confounded — cancer is Cristiano, healthy is Jiang, so "cancer vs healthy" is "study A vs study B". Cristiano's own 245 healthy controls make it internally valid | — | M |
 
@@ -101,10 +128,11 @@ Effort: **S** ≤ half a day · **M** 1–3 days · **L** ≥ a week. "Gate" = w
 
 | # | Item | Why | Gate | Effort |
 |---|---|---|---|---|
-| F1 | **SLURM wrapper for GPU research jobs** | D1 and several others need a container + `process_gpu`-style resources outside the Nextflow DAG | — | S |
-| F2 | **Reusable isolated-env recipe** (`uv venv`) for local ML experiments | The base-env install that broke `setuptools<81` should not be repeatable | — | S |
-| F3 | **Guard new notebooks at nbformat 4.5 with cell ids** | Without ids, `nbdev-export` never reaches a fixed point and the export-sync gate fails on an unrelated PR | — | S |
-| F4 | **Two latent mypy errors** (`eval_engine.py:4634`, `cli.py:275`) | They reproduce locally under the pinned toolchain but not in CI; a resolution shift surfaces them with no code change behind it | — | S |
+| F1 | ~~SLURM wrapper for GPU research jobs~~ **done, #130** | Ready for D1; mirrors `process_gpu` and fails loudly with no GPU. Not submitted — that spends the allocation | — | S |
+| F2 | ~~Isolated-env recipe~~ **done, #130** | Refuses to install unless `pyvenv.cfg` exists and `sys.prefix != base_prefix` — the check that was missing | — | S |
+| F3 | ~~nbformat 4.5 guard~~ **done, #130** | 118 checks across every notebook | — | S |
+| F4 | ~~Two latent mypy errors~~ **done, #130** | Neither was type noise: the cli one hid a real unpack-the-characters-of-a-column-name bug | — | S |
+| F5 | **Local env carries arfs 2.4 against LightGBM 4.7** | Two GrootCV tests fail on any clean checkout here; the `arfs>=3.0.0` pin exists to prevent exactly this (ERR-20260824-001). CI is unaffected, so it costs developer time rather than correctness | — | S |
 
 ---
 
@@ -120,20 +148,26 @@ Four chains, mostly independent:
 4. **Escaping saturation** → D9 alone. Large, and the only item that could move the headline
    rather than qualify it.
 
-Cheap and immediate, blocking nothing: A1–A3, B2, B3, C2, F1–F4.
+**The free local tail is spent.** A1, B2, B3, C2 and F1–F4 are done; B6 was added and shipped
+on the way. What remains in Tracks B, C and E is real work, and everything in D needs the
+cluster. The only item still costing under a day is A2/A3, and that waits on a decision rather
+than on effort.
 
 ---
 
 ## 4. Decisions needed
 
-1. **Ship v0.0.33 now, or after Track B?** Shipping now tags what exists; waiting means one
-   release that includes the honesty panels.
+1. **Ship v0.0.33 now, or after B1?** Moved: B2 and B6 are in, so "after Track B" now means
+   waiting on B1 (the verification-bias ladder) alone. Shipping now tags 47 commits including
+   the clustered intervals; waiting gives one release that states anchor choice honestly.
 2. **Cluster ordering.** My recommendation: D2 first (cheap, unblocks two chains), then D1 (the
    review gap), then D6. Submitting any of these spends the group allocation, so each needs your
    explicit go.
-3. **Send the reviewer response now, or hold for D1?** Holding buys a complete answer on the
-   headline arm; sending now corrects their record before they build further on our withdrawn
-   F7 result.
+3. **Send the reviewer response now, or hold for D1?** Moved: the draft has gained the
+   measured design effects (1.26 and 1.21 against their predicted 1.14–1.23), the
+   threshold-vs-clustering decomposition they do not have, and a correction narrowing our own
+   histology claim to the 4+ stratum. Holding still buys the headline arm; sending now
+   corrects their record before they build further on our withdrawn F7 result.
 4. **Is D9 (read-level) in scope at all this cycle?** It is the only path past saturation and it
    is a rewrite of the representation layer, not an experiment.
 
@@ -147,6 +181,10 @@ Cheap and immediate, blocking nothing: A1–A3, B2, B3, C2, F1–F4.
   clinical workbooks with identifiers stay on the maintainer's machine.
 - **Outward actions ask first** — shared-branch pushes, releases, image publishes, and any SLURM
   submission that spends the allocation.
-- Pre-#101 holdout numbers are not comparable to grouped-split runs.
+- Pre-#101 holdout numbers are not comparable to grouped-split runs, and **CIs from before
+  #132 are not comparable either** — they were sample-level and are ~10% too narrow.
+- **CI does not run on stacked PRs** (the workflow triggers only on PRs into develop), and
+  merging a base branch with `--delete-branch` auto-closes anything targeting it. Retarget
+  dependents first.
 - CI-only lint failures reproduce in `python:3.12-slim` amd64 installed exactly as CI
   (`.agents/memory/reference-ci-env-repro.md`).
