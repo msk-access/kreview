@@ -270,10 +270,12 @@ def _add_mad_features(
         values=value_cols,
         aggfunc="first",
     )
-    # Flatten MultiIndex: (wps_nuc_mad, TSS) → TSS_wps_nuc_mad
-    pivoted.columns = pd.Index(
-        [f"{rt}_{col}" for col, rt in pivoted.columns]  # type: ignore[has-type]
-    )
+    # Flatten MultiIndex: (wps_nuc_mad, TSS) → TSS_wps_nuc_mad.
+    # Guard the unpack: a list of value columns yields a MultiIndex, but pandas returns
+    # a flat Index when it collapses a single value column, and unpacking that iterates
+    # the characters of a column name instead of a (value, region) pair.
+    if isinstance(pivoted.columns, pd.MultiIndex):
+        pivoted.columns = pd.Index([f"{rt}_{col}" for col, rt in pivoted.columns])
     pivoted = pivoted.reset_index()
 
     # ── Merge into feat_matrix in-place ──
