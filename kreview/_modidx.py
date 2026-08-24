@@ -887,6 +887,10 @@ d = {
                 "report_data.html#_build_multimodal",
                 "kreview/report_data.py",
             ),
+            "kreview.report_data._cluster_bootstrap_sens": (
+                "report_data.html#_cluster_bootstrap_sens",
+                "kreview/report_data.py",
+            ),
             "kreview.report_data._derive_findings": (
                 "report_data.html#_derive_findings",
                 "kreview/report_data.py",
