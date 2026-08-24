@@ -32,7 +32,9 @@ def _fake_id(i: int) -> str:
     return "P-" + str(1000000 + i) + "-T01-XS1"
 
 
-def _write_outdir(tmp_path, n_pos=25, n_neg=25, n_donor=10, oof_labels=None):
+def _write_outdir(
+    tmp_path, n_pos=25, n_neg=25, n_donor=10, oof_labels=None, mixed_cancer_types=False
+):
     """Build a structurally faithful output directory at a chosen size.
 
     Parameterised because the TN-anchored operating point only computes above 200
@@ -52,7 +54,14 @@ def _write_outdir(tmp_path, n_pos=25, n_neg=25, n_donor=10, oof_labels=None):
         {
             "SAMPLE_ID": ids,
             "PATIENT_ID": patients,
-            "CANCER_TYPE": ["Lung"] * (n // 2) + ["Breast"] * (n - n // 2),
+            # halves put every positive in one histology and every negative in the
+            # other, which no per-class floor can pass; interleaving gives subgroups
+            # that look like a real cohort
+            "CANCER_TYPE": (
+                ["Lung", "Breast"] * (n // 2) + ["Lung"] * (n % 2)
+                if mixed_cancer_types
+                else ["Lung"] * (n // 2) + ["Breast"] * (n - n // 2)
+            ),
             "label": (
                 ["True ctDNA+"] * n_pos
                 + ["Possible ctDNA−"] * n_neg
@@ -156,7 +165,9 @@ def anchor_outdir(tmp_path):
         + ["Possible ctDNA−"] * n_neg
         + ["Healthy Normal"] * n_donor
     )
-    out = _write_outdir(tmp_path, n_pos, n_neg, n_donor, oof_labels=labels)
+    out = _write_outdir(
+        tmp_path, n_pos, n_neg, n_donor, oof_labels=labels, mixed_cancer_types=True
+    )
     import pandas as pd
 
     lb = pd.read_parquet(out / "labels" / "labels.parquet")
@@ -453,12 +464,64 @@ class TestBuildReportData:
         deltas = data["multimodal"]["ablation"]["deltas"]
         assert set(deltas) == {"EvalA"}, f"phantoms not filtered: {sorted(deltas)}"
 
-    def test_subgroup_breakdowns_are_aggregates(self, mini_outdir):
-        data = build_report_data(mini_outdir)
+    def test_subgroup_gate_counts_the_scarce_class(self, anchor_outdir):
+        """A floor on total n lets a group through on its negatives alone."""
+        import pandas as pd
+
+        from kreview.report_data import MIN_SUBGROUP_CLASS
+
+        lb = pd.read_parquet(anchor_outdir / "labels" / "labels.parquet")
+        # a histology with plenty of samples but almost no positives — the shape that
+        # produced a meaningless retinoblastoma statistic in review
+        pos_idx = lb.index[lb["label"] == "True ctDNA+"][:5]
+        neg_idx = lb.index[lb["label"] == "Possible ctDNA−"][:200]
+        lb.loc[list(pos_idx) + list(neg_idx), "CANCER_TYPE"] = "Thin Positives"
+        lb.to_parquet(anchor_outdir / "labels" / "labels.parquet", index=False)
+        data = build_report_data(anchor_outdir)
+        groups = data["evaluators"][0].get("breakdowns", {}).get("cancer_type", {})
+        assert (
+            "Thin Positives" not in groups
+        ), f"a group with 5 positives cleared a floor of {MIN_SUBGROUP_CLASS} per class"
+
+    def test_subgroup_rows_carry_tier_composition(self, anchor_outdir):
+        """AUC alone hides that a group's positives may be mostly the ambiguous tier."""
+        data = build_report_data(anchor_outdir)
+        groups = data["evaluators"][0].get("breakdowns", {}).get("cancer_type", {})
+        if not groups:
+            pytest.skip("fixture produced no subgroup above the per-class floor")
+        for name, row in groups.items():
+            assert "pct_true_pos" in row, name
+            assert 0.0 <= row["pct_true_pos"] <= 1.0
+
+    def test_subgroup_intervals_only_on_the_primary_evaluator(self, anchor_outdir):
+        """Every other subgroup table is exploratory; bootstrapping all of them costs
+        minutes of build time for panels that carry no declared claim."""
+        from kreview.report_data import PRIMARY_EVALUATOR
+
+        data = build_report_data(anchor_outdir)
+        for e in data["evaluators"]:
+            rows = (e.get("breakdowns") or {}).get("cancer_type") or {}
+            has_ci = any("ci" in r for r in rows.values())
+            if e["evaluator"] != PRIMARY_EVALUATOR:
+                assert (
+                    not has_ci
+                ), f"{e['evaluator']} should not carry subgroup intervals"
+
+    def test_subgroup_breakdowns_are_aggregates(self, anchor_outdir):
+        """Counts and rates only — never anything that could identify a sample.
+
+        Asserts a subset of an allowed key set rather than exact equality: the point of
+        this test is that no identifier leaks in, and an exact match breaks whenever a
+        legitimate aggregate (an interval, a tier share) is added.
+        """
+        allowed = {"n", "n_pos", "auc", "ci", "pct_true_pos"}
+        data = build_report_data(anchor_outdir)
         bd = data["evaluators"][0].get("breakdowns", {})
-        assert "cancer_type" in bd
-        for grp in bd["cancer_type"].values():
-            assert set(grp) == {"n", "n_pos", "auc"}
+        assert "cancer_type" in bd and bd["cancer_type"]
+        for name, grp in bd["cancer_type"].items():
+            extra = set(grp) - allowed
+            assert not extra, f"{name} carries unexpected keys {extra}"
+            assert isinstance(grp["n"], int) and isinstance(grp["n_pos"], int)
 
     def test_missing_scoreboard_fails_loud(self, tmp_path):
         (tmp_path / "labels").mkdir()
