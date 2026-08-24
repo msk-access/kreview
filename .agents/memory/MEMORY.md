@@ -18,6 +18,8 @@ Keep this file to index lines only; the content lives in the linked files.
 - [project-research-roadmap.md](project-research-roadmap.md) — post-v0.0.32 research
   campaign: settled conclusions (modeling saturated, TN-anchored operating points,
   LOD50 4–5% VAF) + open follow-ups; details on issue #121.
+- [feedback-isolated-envs-only.md](feedback-isolated-envs-only.md) — every install goes in
+  an isolated env (uv/micromamba/mamba/conda); a base-env install broke the `setuptools<81` pin.
 - [feedback-nbdev-source-of-truth.md](feedback-nbdev-source-of-truth.md) — never leave
   `kreview/*.py` edited without a matching notebook change; end with `nbdev-export && black` = zero diff (the `-m` forms are no-ops).
 - [feedback-parallel-paths-one-impl.md](feedback-parallel-paths-one-impl.md) — monolithic
