@@ -116,6 +116,16 @@ def assert_no_phi(blob: str) -> None:
 # %% ../nbs/06_report_data.ipynb #5106658b
 def _build_cohort(labels: pd.DataFrame) -> dict:
     """Aggregate the labels table into the cohort tab (counts only, no identifiers)."""
+    # PATIENT_ID is not optional: the grouped split, the leakage check and the
+    # clustered interval on the primary endpoint all key on it. Missing means a
+    # malformed label table -- a schema error, so say which column and why rather
+    # than letting pandas raise a bare KeyError three frames down.
+    missing = [c for c in ("PATIENT_ID", "label") if c not in labels.columns]
+    if missing:
+        raise KeyError(
+            f"label table is missing required column(s) {missing}; the report cannot "
+            "compute patient counts, split leakage or a clustered interval without them"
+        )
     cohort = {
         "n_samples": int(len(labels)),
         "n_patients": int(labels["PATIENT_ID"].nunique()),
@@ -167,6 +177,62 @@ def _wilson(k: int, n: int) -> tuple[float, float]:
     return ((centre - half) / denom, (centre + half) / denom)
 
 
+def _cluster_bootstrap_sens(
+    p_pos: np.ndarray,
+    p_tn: np.ndarray,
+    pat_pos: np.ndarray,
+    pat_tn: np.ndarray,
+    spec: float,
+    n_boot: int = 400,
+    seed: int = 42,
+    cluster: bool = True,
+) -> tuple[float | None, float | None]:
+    """Patient-clustered bootstrap interval for sensitivity at a TN-anchored specificity.
+
+    Two things a binomial interval on sample counts gets wrong here, and this covers both:
+
+    * **Clustering.** Samples are not independent — patients contribute several timepoints,
+      so a sample-level interval is too narrow by the design effect.
+    * **Threshold uncertainty.** The threshold is *estimated* from the same finite TN set,
+      and it moves on resampling. Holding it fixed treats an estimate as a constant.
+
+    Patients are resampled whole on both sides and the threshold is re-derived inside every
+    resample. Returns (None, None) when the inputs cannot support an interval.
+    """
+    if len(p_pos) == 0 or len(p_tn) < 20:
+        return (None, None)
+    rng = np.random.RandomState(seed)
+    # cluster=False resamples SAMPLES while still re-estimating the threshold, which is
+    # what isolates the clustering contribution: the ratio of the two interval widths is
+    # the design effect, and everything else the two runs share cancels out.
+    if cluster:
+        pos_groups = {q: np.flatnonzero(pat_pos == q) for q in np.unique(pat_pos)}
+        tn_groups = {q: np.flatnonzero(pat_tn == q) for q in np.unique(pat_tn)}
+    else:
+        pos_groups = {i: np.array([i]) for i in range(len(p_pos))}
+        tn_groups = {i: np.array([i]) for i in range(len(p_tn))}
+    pos_by_patient, tn_by_patient = pos_groups, tn_groups
+    pos_keys = np.array(list(pos_by_patient), dtype=object)
+    tn_keys = np.array(list(tn_by_patient), dtype=object)
+    out = []
+    for _ in range(n_boot):
+        tn_idx = np.concatenate(
+            [tn_by_patient[q] for q in rng.choice(tn_keys, len(tn_keys), replace=True)]
+        )
+        pos_idx = np.concatenate(
+            [
+                pos_by_patient[q]
+                for q in rng.choice(pos_keys, len(pos_keys), replace=True)
+            ]
+        )
+        neg_b = np.sort(p_tn[tn_idx])
+        thr_b = neg_b[min(int(np.ceil(spec * len(neg_b))) - 1, len(neg_b) - 1)]
+        out.append(float((p_pos[pos_idx] > thr_b).mean()))
+    if len(out) < 50:
+        return (None, None)
+    return (float(np.percentile(out, 2.5)), float(np.percentile(out, 97.5)))
+
+
 def _anchored_operating_points(
     y_arr: np.ndarray, p_arr: np.ndarray, ids: list, lab_by_id: pd.DataFrame
 ) -> dict:
@@ -207,10 +273,47 @@ def _anchored_operating_points(
     if tn is not None and tn.sum() >= 200 and pos.sum() > 0:
         neg = np.sort(p_arr[tn])
         pts = {}
+        # Patient labels for the clustered interval; without them the primary endpoint
+        # can still be reported, but only as a point estimate — and it says so rather
+        # than falling back to a binomial interval that would understate the spread.
+        pat_all = (
+            meta["PATIENT_ID"].fillna(pd.Series(ids, index=meta.index)).to_numpy()
+            if have("PATIENT_ID")
+            else None
+        )
         for spec in (0.98, 0.99):
             thr = neg[min(int(np.ceil(spec * len(neg))) - 1, len(neg) - 1)]
             sens = float((p_arr[pos] > thr).mean())
-            pts[f"sens_at_{int(spec * 100)}spec"] = _r(sens)
+            key = f"sens_at_{int(spec * 100)}spec"
+            pts[key] = _r(sens)
+            if pat_all is not None:
+                lo, hi = _cluster_bootstrap_sens(
+                    p_arr[pos], p_arr[tn], pat_all[pos], pat_all[tn], spec
+                )
+                if lo is not None and hi is not None:
+                    pts[f"{key}_ci"] = [_r(lo), _r(hi)]
+                    # Decompose the width rather than quoting one conflated ratio.
+                    # iid = same bootstrap, samples instead of patients: the difference
+                    # between the two is clustering alone (the design effect). The gap
+                    # between iid and a plain binomial is threshold uncertainty — the
+                    # threshold is estimated from a finite TN set and moves on resampling.
+                    ilo, ihi = _cluster_bootstrap_sens(
+                        p_arr[pos],
+                        p_arr[tn],
+                        pat_all[pos],
+                        pat_all[tn],
+                        spec,
+                        cluster=False,
+                    )
+                    w_binom = np.diff(
+                        _wilson(int((p_arr[pos] > thr).sum()), int(pos.sum()))
+                    )[0]
+                    if ilo is not None and ihi is not None and ihi > ilo:
+                        pts[f"{key}_deff"] = _r(((hi - lo) / (ihi - ilo)) ** 2, 2)
+                        if w_binom > 0:
+                            pts[f"{key}_threshold_inflation"] = _r(
+                                ((ihi - ilo) / w_binom) ** 2, 2
+                            )
             pts[f"ppv_at_{int(spec * 100)}spec"] = {
                 str(pv): _r(sens * pv / (sens * pv + (1 - spec) * (1 - pv)))
                 for pv in (0.05, 0.10, 0.25)
@@ -218,6 +321,15 @@ def _anchored_operating_points(
         pts["n_tn"] = int(tn.sum())
         pts["n_tn_patients"] = (
             int(meta.loc[tn, "PATIENT_ID"].nunique()) if have("PATIENT_ID") else None
+        )
+        pts["n_pos"] = int(pos.sum())
+        pts["n_pos_patients"] = (
+            int(meta.loc[pos, "PATIENT_ID"].nunique()) if have("PATIENT_ID") else None
+        )
+        pts["ci_method"] = (
+            "patient-clustered bootstrap, threshold re-estimated per resample"
+            if pat_all is not None
+            else "unavailable — no PATIENT_ID in the label table"
         )
         out["tn_anchor"] = pts
         out["auc_vs_verified_tn"] = _r(

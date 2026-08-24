@@ -63,6 +63,8 @@
   .toolbar input, .toolbar select { font:inherit; padding:7px 10px; border:1px solid var(--line);
       border-radius:8px; background:var(--panel); }
   /* pipeline diagram: the SVG ships pre-laid-out, so the page only scales it */
+  .ci { font-size:.42em; font-weight:600; color:var(--muted); margin-left:10px;
+        letter-spacing:0; vertical-align:middle; white-space:nowrap; }
   .pd-wrap { overflow-x:auto; }
   svg.pd-dag { width:100%; min-width:760px; display:block; }
   svg.pd-dag[hidden] { display:none; }
@@ -372,6 +374,9 @@ const GLOSSARY = {
     "A patient-disjoint 20% of the cohort: the model refits on the remaining 80% and scores it once. No patient appears on both sides, so holdout metrics are on entirely unseen people.", null],
   overfit: ["\u0394 overfit",
     "Cross-validated AUC minus holdout AUC. Near zero means the CV numbers are honest; a large positive gap means CV is optimistic.", null],
+  clusterci: ["Patient-clustered interval",
+    "A bootstrap that resamples whole patients rather than samples, and re-derives the operating threshold inside every resample. It therefore covers two things a binomial interval on sample counts covers neither of: repeated timepoints from one patient are not independent, and the threshold is an estimate from a finite negative set that moves when that set is resampled.",
+    "See the Methods & interpretation tab"],
   tn: ["Verified true negative",
     "A plasma sample labelled Possible ctDNA\u2212 whose patient HAD tumour sequencing and in which zero of that tumour's variants were found. We knew what to look for, looked, and found none. Samples without paired tumour sequencing are unlabelled, not negative.", null],
   onesided: ["One-sided lower bound",
@@ -491,14 +496,17 @@ const PL_LAYOUT = (title, xlab, ylab, extra={}) => {
   $("#ov-hero").style.display = "";
 
   if (tn) {
-    $("#hero-sens").textContent = pct(tn.sens_at_98spec);
+    const ci98 = tn.sens_at_98spec_ci, ci99 = tn.sens_at_99spec_ci;
+    $("#hero-sens").innerHTML = pct(tn.sens_at_98spec) +
+      (ci98 ? `<span class="ci">${pct(ci98[0])}–${pct(ci98[1])}</span>` : "");
     $("#hero-sens-q").innerHTML =
       `sensitivity at <b>98% specificity</b> against ${tn.n_tn?.toLocaleString?.() ?? "–"} ` +
       `tumor-informed true negatives${ii("tn")}`;
     $("#hero-sens-sub").innerHTML =
-      `${pct(tn.sens_at_99spec)} at 99% specificity · out-of-fold${ii("oof")} · ` +
-      (tn.n_tn_patients ? `${tn.n_tn_patients.toLocaleString()} patients · ` : "") +
-      `out-of-fold`;
+      `${pct(tn.sens_at_99spec)}${ci99 ? ` [${pct(ci99[0])}–${pct(ci99[1])}]` : ""} ` +
+      `at 99% specificity · out-of-fold${ii("oof")}` +
+      (tn.n_tn_patients ? ` · ${tn.n_tn?.toLocaleString?.()} negatives from ` +
+        `${tn.n_tn_patients.toLocaleString()} patients${ii("clusterci")}` : "");
   }
 
   if (lod?.bins?.length) {
@@ -544,13 +552,15 @@ const P = R.primary || {};
   if (!tn && !don) return;
   $("#ov-ops").style.display = "";
   const ppv = tn?.ppv_at_98spec || {};
+  const ciTxt = c => c ? ` [${pct(c[0])}–${pct(c[1])}]` : "";
   const rows = [];
   if (tn) {
     rows.push(["MRD — within cancer patients", "98% spec vs verified true negatives",
-      pct(tn.sens_at_98spec), `${tn.n_tn?.toLocaleString?.() ?? "–"} negatives` +
+      pct(tn.sens_at_98spec) + ciTxt(tn.sens_at_98spec_ci),
+      `${tn.n_tn?.toLocaleString?.() ?? "–"} negatives` +
       (tn.n_tn_patients ? ` / ${tn.n_tn_patients.toLocaleString()} patients` : "")]);
     rows.push(["MRD — stricter", "99% spec vs verified true negatives",
-      pct(tn.sens_at_99spec), "same anchor"]);
+      pct(tn.sens_at_99spec) + ciTxt(tn.sens_at_99spec_ci), "same anchor"]);
   }
   if (don) {
     rows.push(["Screening — vs healthy donors", "100% spec (one-sided lower bound)" + ii("onesided"),
@@ -586,11 +596,24 @@ const P = R.primary || {};
         {margin: {l: 52, r: 14, b: 44}, xaxis: {tickformat: ".0%", gridcolor: "#eceff5"},
          yaxis: {tickformat: ".0%", gridcolor: "#eceff5"}, showlegend: false}), PL_CFG);
   }
-  $("#ov-ops-note").innerHTML =
-    (Object.keys(ppv).length ? `PPV${ii("ppv")} at 98% spec: ` +
-      Object.entries(ppv).sort().map(([k,v]) => `${pct(v)} at ${pct(+k)} prevalence`).join(" · ") + ". " : "") +
-    (aucs.length ? `AUC by negative class: ` + aucs.map(([k,v]) => `${esc(k)} ${fmt(v)}`).join(" · ") +
-      ` — pooled negatives include unpaired samples that are unlabeled, not verified.` : "");
+  const notes = [];
+  if (Object.keys(ppv).length) notes.push(`PPV${ii("ppv")} at 98% spec: ` +
+    Object.entries(ppv).sort().map(([k,v]) => `${pct(v)} at ${pct(+k)} prevalence`).join(" · ") + ".");
+  if (aucs.length) notes.push(`AUC by negative class: ` +
+    aucs.map(([k,v]) => `${esc(k)} ${fmt(v)}`).join(" · ") +
+    ` — pooled negatives include unpaired samples that are unlabeled, not verified.`);
+  if (tn?.sens_at_98spec_deff != null) {
+    // The counter-intuitive part, so it is stated where the numbers are: the interval is
+    // wide because the THRESHOLD is estimated from a finite negative set, not because
+    // samples cluster within patients. Clustering is the term everyone argues about and
+    // it is the smaller one by an order of magnitude.
+    notes.push(`Intervals are a patient-clustered bootstrap with the threshold ` +
+      `re-estimated in every resample${ii("clusterci")}. Clustering inflates the variance ` +
+      `<b>${fmt(tn.sens_at_98spec_deff, 2)}×</b>; estimating the threshold inflates it ` +
+      `<b>${fmt(tn.sens_at_98spec_threshold_inflation, 1)}×</b> — the second dominates, so a ` +
+      `plain binomial interval would understate the width by roughly that factor.`);
+  }
+  $("#ov-ops-note").innerHTML = notes.join(" ");
 })();
 
 /* Findings tagged with a chart become that chart's title (assertion titles): the

@@ -34,6 +34,10 @@ d = {
                 "cli_eval.html#_load_matrix_and_labels",
                 "kreview/cli_eval.py",
             ),
+            "kreview.cli_eval._patients_of": (
+                "cli_eval.html#_patients_of",
+                "kreview/cli_eval.py",
+            ),
             "kreview.cli_eval._save_fitted_models": (
                 "cli_eval.html#_save_fitted_models",
                 "kreview/cli_eval.py",
@@ -885,6 +889,10 @@ d = {
             ),
             "kreview.report_data._build_multimodal": (
                 "report_data.html#_build_multimodal",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data._cluster_bootstrap_sens": (
+                "report_data.html#_cluster_bootstrap_sens",
                 "kreview/report_data.py",
             ),
             "kreview.report_data._derive_findings": (
