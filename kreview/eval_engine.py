@@ -4631,7 +4631,7 @@ def multimodal_single(
     sample_labels_stack: np.ndarray | None = None
     if "_sample_label" in stacking_full.columns:
         sample_labels_stack = stacking_full["_sample_label"].values
-        n_healthy = int((sample_labels_stack == "Healthy Normal").sum())
+        n_healthy = int(np.count_nonzero(sample_labels_stack == "Healthy Normal"))
         log.info(
             "multimodal_single_sample_labels_loaded",
             model=model_name,
