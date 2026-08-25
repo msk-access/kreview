@@ -2,8 +2,30 @@ name: Lint
 on:
   push:
     branches: [main, develop]
+    # Documentation-only changes do not need the test matrix, two Nextflow stub runs
+    # and two container builds — one of which is an 8-10 GB CUDA image that reaches
+    # out to a third-party PPA and has already failed a release once on a Launchpad
+    # outage. The PHI/secret scan is deliberately NOT filtered; it lives in
+    # security.yml and runs on everything.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.agents/**'
+      - 'CONTINUITY.md'
+      - 'LICENSE'
   pull_request:
     branches: [main, develop]
+    # Documentation-only changes do not need the test matrix, two Nextflow stub runs
+    # and two container builds — one of which is an 8-10 GB CUDA image that reaches
+    # out to a third-party PPA and has already failed a release once on a Launchpad
+    # outage. The PHI/secret scan is deliberately NOT filtered; it lives in
+    # security.yml and runs on everything.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.agents/**'
+      - 'CONTINUITY.md'
+      - 'LICENSE'
 
 jobs:
   lint:

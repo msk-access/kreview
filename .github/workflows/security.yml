@@ -1,0 +1,49 @@
+name: Security
+
+# Deliberately unfiltered: this runs on EVERY change, including documentation-only
+# ones. `.agents/memory/` and `.agents/learnings/` are committed and public, so prose
+# is exactly where a sample identifier is most likely to reach the repository — a
+# path filter that skipped the scan for markdown would skip it where it matters most.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ── Secret + PHI scan ───────────────────────────────────────────────────────
+  # The gitleaks pre-push hook only protects contributors who wired it locally. This job
+  # is the backstop: it scans every push/PR regardless of anyone's local setup. kreview is
+  # PUBLIC and commits an agent memory store, so PHI leaking here is unrecoverable.
+  phi-secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0          # full history — the scan runs in git mode
+
+      - name: Install gitleaks (pinned)
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      # Asserts the rules actually fire. A scanner that silently stops matching would
+      # otherwise pass this job forever while detecting nothing.
+      - name: Verify PHI guard rules (clean tree, rules fire, placeholder allowed)
+        run: bash scripts/check_phi_guard.sh
+
+      - name: Scan repository for secrets and PHI
+        run: gitleaks detect --source . --no-banner --redact --exit-code 1
+
+  # ── Nextflow DAG smoke test ──────────────────────────────────────────────────
+  # Guards the regression class from #80: nextflow.config used constructs (try/catch around
+  # includeConfig, ${manifest.version}, ${HOME}) that modern Nextflow rejects, so the pipeline
+  # would not even parse — and nothing in CI noticed, because CI never ran Nextflow.
+  #
+  # The matrix pins both ends of the supported range (v25 and v26) so a construct that works
+  # on one but not the other cannot land. This is a wiring test only: every process runs its
+  # `stub:` block. A full nf-test harness is out of scope by maintainer decision.
