@@ -14,7 +14,12 @@ scoped to aggregated-feature panel fragmentomics rather than to cfDNA physics.
 
 ## 1. Where we are
 
-**Code (develop, unreleased since v0.0.32).** Dual-anchor operating points and per-sample depth
+**Code — v0.0.33 shipped 25 Aug** (PyPI, GHCR `v0.0.33`/`v0.0.33-gpu`/`latest`, versioned
+docs; back-merged to develop). ⚠️ **Scoreboard intervals in v0.0.33 are not comparable to
+v0.0.32's** — they resample patients rather than rows, so they are ~10% wider with no model
+change behind them.
+
+**What shipped.** Dual-anchor operating points and per-sample depth
 columns (#122/#123, merged in #125); the report's visual rebuild — hero zone, burden-response
 curve, glossary info icons, axis-title and tick fixes (#126); the Nextflow DAG drawn into
 Methods and Run diagnostics with a workflow-drift guard (#127); three review-driven analysis
@@ -77,14 +82,14 @@ that gets lost. 22 items remain, 9 of them on the cluster.
 | # | Item | Why | Gate | Effort |
 |---|---|---|---|---|
 | A1 | ~~Close #122 and #123~~ **done** | Both shipped in #125 | — | S |
-| A2 | **Cut v0.0.33** | Report visuals, the DAG, dual anchors and depth columns are all unreleased; the campaign is quoting an untagged build | A1 | S |
+| A2 | ~~Cut v0.0.33~~ **done, #139** | Tagged on main via `release/v0.0.33` — git-flow, matching history rather than the old guide text, which #138 corrected | A1 | S |
 | A3 | **Regenerate the v0.0.32 report from the tagged build** | The HTML we have been reading is a local render; the artifact of record should come from a tag | A2 | S |
 
 ### Track B — Make the report say what the review forced us to admit (code, local)
 
 | # | Item | Why | Gate | Effort |
 |---|---|---|---|---|
-| B1 | **Verification-bias ladder as a first-class panel** (0.845 verified qTN / 0.856 pooled / 0.865 unpaired / 0.976 donors) | Anchor choice moves the headline 13.1 points — more than any modeling decision. A reader who sees only one number cannot know that | — | M |
+| B1 | ~~Verification-bias ladder as a panel~~ **done, #136** | Four rungs with patient-clustered intervals spanning 13.1 AUC points. Sized M on the assumption it needed new data; the numbers already shipped as a caption clause, so it was a prominence task | — | S |
 | B2 | ~~Effective n on the TN anchor~~ **done, #132** | Grew past its estimate: the primary endpoint had no interval at all, and neither did the scoreboard's. Both are patient-clustered now, and the decomposition (§1a) is the finding | — | M |
 | B3 | ~~Resolution-floor phrasing~~ **no-op** | The "at most" phrasing existed only in the reviewer draft, never in the findings engine. Draft corrected | — | — |
 | B6 | ~~Subgroup floor, interval, tier composition~~ **#134** | Not in the original plan; fell out of C2. The panel printed retinoblastoma's AUC on 72 positives at the same weight as NSCLC's on 2,254 — the denominator error we withdrew an odds ratio for, still live in the report | — | M |
@@ -132,6 +137,8 @@ that gets lost. 22 items remain, 9 of them on the cluster.
 | F2 | ~~Isolated-env recipe~~ **done, #130** | Refuses to install unless `pyvenv.cfg` exists and `sys.prefix != base_prefix` — the check that was missing | — | S |
 | F3 | ~~nbformat 4.5 guard~~ **done, #130** | 118 checks across every notebook | — | S |
 | F4 | ~~Two latent mypy errors~~ **done, #130** | Neither was type noise: the cli one hid a real unpack-the-characters-of-a-column-name bug | — | S |
+| F6 | ~~API reference and release guide~~ **done, #138** | The reference covered 5 of 13 modules — `report_data` and `selection` undocumented while the scoreboard displaying their output had a page. The release guide also described a flow no release has used | — | M |
+| F7 | ~~Taxonomy and report-guide corrections~~ **done, #137** | Eleven files said 5-tier; the rules file and labeling skill said CH-only samples are demoted to `Possible ctDNA−` when the code excludes them as `Undetermined`. `mkdocs build --strict` had been failing before this release and the last | — | M |
 | F5 | **Local env carries arfs 2.4 against LightGBM 4.7** | Two GrootCV tests fail on any clean checkout here; the `arfs>=3.0.0` pin exists to prevent exactly this (ERR-20260824-001). CI is unaffected, so it costs developer time rather than correctness | — | S |
 
 ---
@@ -157,9 +164,8 @@ than on effort.
 
 ## 4. Decisions needed
 
-1. **Ship v0.0.33 now, or after B1?** Moved: B2 and B6 are in, so "after Track B" now means
-   waiting on B1 (the verification-bias ladder) alone. Shipping now tags 47 commits including
-   the clustered intervals; waiting gives one release that states anchor choice honestly.
+1. ~~Ship v0.0.33 now, or after B1?~~ **Resolved** — B1 landed first, and v0.0.33 shipped with
+   it on 25 Aug: 60 commits carrying every interval change and the honest anchor panel.
 2. **Cluster ordering.** My recommendation: D2 first (cheap, unblocks two chains), then D1 (the
    review gap), then D6. Submitting any of these spends the group allocation, so each needs your
    explicit go.
