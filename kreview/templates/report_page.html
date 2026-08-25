@@ -183,6 +183,14 @@
       </div>
       <div class="legend" id="ov-ops-note"></div>
     </div>
+    <div class="panel" id="ov-vbias" style="display:none">
+      <h3>Which negatives you compare against</h3>
+      <div class="grid2 ops">
+        <div><div id="ov-vbias-chart" style="height:230px;width:100%"></div></div>
+        <div><table id="ov-vbias-tbl" class="ops-tbl"></table></div>
+      </div>
+      <div class="legend" id="ov-vbias-note"></div>
+    </div>
     <div class="legend" style="margin-bottom:10px">Findings are derived automatically from this run. <a href="#" onclick="showTab('methods');return false;">Methods &amp; interpretation →</a></div>
     <div class="findings" id="ov-findings"></div>
     <div class="cards" id="ov-cards"></div>
@@ -573,8 +581,6 @@ const P = R.primary || {};
     `<th>sensitivity</th><th>anchor${ii("tn")}</th></tr>` +
     rows.map(r => `<tr><td>${esc(r[0])}</td><td>${r[1]}</td><td class="num">${esc(r[2])}</td>` +
       `<td>${esc(r[3])}</td></tr>`).join("");
-  const aucs = [["all negatives", o.auc_vs_all_negatives], ["verified true negatives", o.auc_vs_verified_tn],
-                ["healthy donors only", o.auc_vs_donors]].filter(a => a[1] != null);
   const c = o.sens_spec_curve;
   if (c?.spec?.length) {
     const marks = [[0.98, tn?.sens_at_98spec], [0.99, tn?.sens_at_99spec]].filter(m => m[1] != null);
@@ -602,9 +608,7 @@ const P = R.primary || {};
   const notes = [];
   if (Object.keys(ppv).length) notes.push(`PPV${ii("ppv")} at 98% spec: ` +
     Object.entries(ppv).sort().map(([k,v]) => `${pct(v)} at ${pct(+k)} prevalence`).join(" · ") + ".");
-  if (aucs.length) notes.push(`AUC by negative class: ` +
-    aucs.map(([k,v]) => `${esc(k)} ${fmt(v)}`).join(" · ") +
-    ` — pooled negatives include unpaired samples that are unlabeled, not verified.`);
+  // the AUC-by-negative-class list used to live here as a clause; it has its own panel now
   if (tn?.sens_at_98spec_deff != null) {
     // The counter-intuitive part, so it is stated where the numbers are: the interval is
     // wide because the THRESHOLD is estimated from a finite negative set, not because
@@ -779,6 +783,53 @@ $("#ov-cards").innerHTML = [
     `<div class="note"><b>⚠ Patient overlap between splits:</b> ${C.patients_in_both_splits.toLocaleString()} ` +
     `patients have samples in BOTH train and test. Holdout metrics are optimistically biased — ` +
     `the split should be patient-level, not sample-level.</div>`;
+})();
+
+/* ── verification-bias ladder ────────────────────────────── */
+(function vbias() {
+  const vb = (P.operating_points || {}).verification_bias;
+  if (!vb?.rungs?.length) return;
+  $("#ov-vbias").style.display = "";
+  // ascending, so the ladder climbs from the defensible number to the flattering one
+  const r = [...vb.rungs].sort((a, b) => a.auc - b.auc);
+  const isDef = x => x.key === vb.defensible;
+  const colour = x => isDef(x) ? STATUS.good : (x.key === "donors" ? STATUS.warn : PALETTE[4]);
+
+  Plotly.newPlot("ov-vbias-chart", [{
+    x: r.map(x => x.auc), y: r.map(x => x.label), mode: "markers", showlegend: false,
+    error_x: {type: "data", symmetric: false,
+      array: r.map(x => (x.ci?.[1] ?? x.auc) - x.auc),
+      arrayminus: r.map(x => x.auc - (x.ci?.[0] ?? x.auc)),
+      color: "#aab3d0", thickness: 1.2, width: 4},
+    marker: {size: r.map(x => isDef(x) ? 13 : 9), color: r.map(colour),
+             line: {color: "#fff", width: r.map(x => isDef(x) ? 2 : 0)}},
+    customdata: r.map(x => [x.n_neg, x.n_neg_patients ?? "–"]),
+    hovertemplate: "<b>%{y}</b><br>AUC %{x:.4f}<br>%{customdata[0]:,} negatives " +
+      "from %{customdata[1]:,} patients<extra></extra>",
+  }], PL_LAYOUT(
+    claimTitle("ov-vbias-chart",
+      `Anchor choice moves the headline ${fmt(vb.span, 3)} AUC — more than any modeling decision`),
+    "AUC", "", {margin: {l: 168, r: 20, b: 40},
+      yaxis: {tickmode: "linear", dtick: 1, automargin: true, tickfont: {size: 10.5}}}), PL_CFG);
+
+  $("#ov-vbias-tbl").innerHTML =
+    `<tr><th>negatives</th><th>n</th><th>AUC</th><th>95% CI${ii("clusterci")}</th></tr>` +
+    r.map(x => `<tr><td>${esc(x.label)}${isDef(x) ? " <b>(defensible)</b>" : ""}` +
+      `<div class="cap">${esc(x.note)}</div></td>` +
+      `<td class="num">${x.n_neg.toLocaleString()}</td>` +
+      `<td class="num">${fmt(x.auc)}</td>` +
+      `<td class="num">${x.ci ? `${fmt(x.ci[0])}–${fmt(x.ci[1])}` : "–"}</td></tr>`).join("");
+
+  const def = r.find(isDef), don = r.find(x => x.key === "donors");
+  $("#ov-vbias-note").innerHTML =
+    `Every rung scores the same model on the same positives — only the negative class changes.` +
+    (def && don
+      ? ` Against verified within-patient negatives it reads <b>${fmt(def.auc)}</b>; against
+         healthy donors, <b>${fmt(don.auc)}</b>. The donor number is not less trustworthy so much
+         as a different question — between people rather than within a patient — and it is the
+         comparison most screening literature reports, which is why a reader who sees only one of
+         these should see this one alongside it.`
+      : "");
 })();
 
 /* ── pipeline diagram ────────────────────────────────────── */
