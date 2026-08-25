@@ -5,7 +5,7 @@
 > tight. Depth lives in `.agents/rules/*.md` and is read on demand, not here.
 
 **What this is:** `kreview` — an evaluation engine for cfDNA fragmentomics features for
-ctDNA detection (MSKCC / MSK-ACCESS). Labels samples on a 5-tier ctDNA taxonomy, extracts
+ctDNA detection (MSKCC / MSK-ACCESS). Labels samples on a 6-tier ctDNA taxonomy, extracts
 26 fragmentomics feature families, runs multi-model CV evaluation (CPU + GPU), multimodal
 stacking, and Quarto dashboards. Ships as a pip package, CPU/GPU Docker images, and a
 Nextflow HPC (SLURM/Singularity) pipeline.
@@ -77,7 +77,7 @@ stage subcommands. Supported Nextflow: **v25–v26**. Full module map:
 ## Rules index (`.agents/rules/`, load on demand)
 
 - `nbdev-conventions.md` — cell directives, export/sync workflow, notebook↔module map.
-- `labeling-hierarchy.md` — the 5-tier ctDNA taxonomy and thresholds.
+- `labeling-hierarchy.md` — the 6-tier ctDNA taxonomy and thresholds.
 - `fragmentomics-domain.md` — feature families and biology.
 - `duckdb-patterns.md` — DuckDB lake, chunked I/O, retry.
 - `parquet-only.md` — I/O format convention.

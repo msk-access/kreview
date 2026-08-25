@@ -10,6 +10,8 @@ from collections.abc import Callable
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import numpy.typing as npt
+from typing import Any
 from scipy import stats
 import structlog
 import traceback
@@ -161,8 +163,8 @@ def parse_array(s) -> list[float]:
 
 
 def univariate_auc(
-    feature_col,
-    y,
+    feature_col: npt.ArrayLike,
+    y: np.ndarray,
     n_folds: int = 5,
     random_state: int = 42,
 ) -> float:
@@ -205,8 +207,8 @@ def univariate_auc(
 
 
 def mutual_info_score(
-    feature_col,
-    y,
+    feature_col: npt.ArrayLike,
+    y: np.ndarray,
     random_state: int = 42,
 ) -> float:
     """Compute mutual information between a single feature and binary target.
@@ -1819,7 +1821,7 @@ def _compute_oof_metrics(
 
 
 def evaluate_model(
-    model,
+    model: Any,
     X: np.ndarray,
     y: np.ndarray,
     cv: StratifiedKFold,
@@ -1996,7 +1998,7 @@ def evaluate_model(
 
 
 def evaluate_holdout(
-    fitted_model,
+    fitted_model: Any,
     X_test: np.ndarray,
     y_test: np.ndarray,
     name: str,

@@ -36,7 +36,7 @@ python3 -m pytest tests/ --co -q
 | `test_core.py` | `kreview.core` | Paths, LabelConfig, constants, DuckDB conn, data loaders |
 | `test_cli.py` | `kreview.cli` | CLI smoke tests (--help, param validation) |
 | `test_eval_engine.py` | `kreview.eval_engine` + `kreview.features.*` | Feature stats, model training, GPU dispatch, WPS extractors |
-| `test_labels.py` | `kreview.labels` | 5-tier labeling, CH filtering, IMPACT tissue rescue |
+| `test_labels.py` | `kreview.labels` | 6-tier labeling, CH filtering, IMPACT tissue rescue |
 | `test_selection.py` | `kreview.selection` | mRMR, hybrid-union, variance guard, AUC scoring |
 | `test_fuse.py` | `kreview.cli` (fuse) | Matrix fusion, column alignment |
 | `test_scoreboard.py` | `kreview.scoreboard` | JSON aggregation, ranking, formatting |

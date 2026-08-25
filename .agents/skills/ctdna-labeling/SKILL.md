@@ -1,6 +1,6 @@
 ---
 name: ctdna-labeling
-description: 5-tier ctDNA labeling hierarchy with IMPACT tissue rescue, CH hotspot filtering, configurable VAF/variant thresholds, and continuous VAF regression stats.
+description: 6-tier ctDNA labeling hierarchy with IMPACT tissue rescue, CH hotspot filtering, configurable VAF/variant thresholds, and continuous VAF regression stats.
 ---
 
 # ctDNA Labeling Logic
@@ -25,7 +25,8 @@ description: 5-tier ctDNA labeling hierarchy with IMPACT tissue rescue, CH hotsp
   - ≥ 1 somatic SV (binary)
   - ≥ 1 non-neutral CNA (value ≠ 0)
 - **CH demotion**: If CH hotspot filtering is enabled, samples with ONLY CH variants
-  (n_non_ch_variants == 0) and no SV/CNA/IMPACT evidence are demoted to Possible ctDNA−
+  (n_non_ch_variants == 0) and no SV/CNA/IMPACT evidence are demoted to Undetermined
+  and excluded from modelling — NOT to Possible ctDNA−
 
 ### 3. Possible ctDNA− (no signal)
 - **Criterion**: Cancer patient, NOT True ctDNA+ or Possible ctDNA+
@@ -51,7 +52,7 @@ description: 5-tier ctDNA labeling hierarchy with IMPACT tissue rescue, CH hotsp
 - Loaded by `load_ch_hotspots()` → `set[tuple]` of (chrom, pos, ref, alt) keys
 - Each somatic variant is tagged `is_ch` based on coordinate match
 - Output columns: `n_ch_variants`, `n_non_ch_variants`
-- **Demotion rule**: Possible ctDNA+ with n_non_ch_variants == 0 AND no SV/CNA/IMPACT → Possible ctDNA−
+- **Demotion rule**: Possible ctDNA+ with n_non_ch_variants == 0 AND no SV/CNA/IMPACT → **Undetermined** (excluded from binary classification, not added to the negative class)
 - Demotion only fires when CH is the **sole evidence**
 
 ## Continuous VAF Statistics

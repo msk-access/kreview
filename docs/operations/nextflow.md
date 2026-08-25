@@ -84,7 +84,7 @@ In multistage mode, all process outputs are published to `params.outdir` via `pu
 ```
 outdir/
 ├── labels/
-│   └── labels.parquet                          # 5-tier ctDNA labels + split column
+│   └── labels.parquet                          # 6-tier ctDNA labels + split column
 ├── matrices/
 │   ├── raw/                                    # Per-evaluator raw feature matrices
 │   │   ├── AtacOnTarget_matrix.parquet

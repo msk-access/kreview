@@ -197,7 +197,7 @@ kreview label \
   --output labels.parquet
 ```
 
-This produces a single Parquet file with sample IDs, clinical metadata, the assigned 5-tier labels, and a `split` column (`train`/`test`/`exclude`) for holdout validation.
+This produces a single Parquet file with sample IDs, clinical metadata, the assigned 6-tier labels, and a `split` column (`train`/`test`/`exclude`) for holdout validation.
 
 ---
 
