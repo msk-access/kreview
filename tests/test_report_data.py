@@ -260,6 +260,40 @@ class TestBuildReportData:
         assert any("split intact" in f["text"] and f["kind"] == "good" for f in fs)
         assert not any("BOTH train and test" in f["text"] for f in fs)
 
+    def test_verification_bias_ladder_reports_every_anchor(self, anchor_outdir):
+        """Anchor choice moves the headline more than any modeling decision, so the
+        report states all of them rather than choosing one."""
+        data = build_report_data(anchor_outdir)
+        vb = ((data.get("primary") or {}).get("operating_points") or {}).get(
+            "verification_bias"
+        )
+        assert vb, "the ladder must compute when a TN anchor and donors both exist"
+        keys = {r["key"] for r in vb["rungs"]}
+        assert {"verified_tn", "all_negatives"} <= keys, keys
+        assert vb["defensible"] == "verified_tn"
+        for r in vb["rungs"]:
+            assert r["n_neg"] >= 20 and 0.0 <= r["auc"] <= 1.0
+            if r.get("ci"):
+                assert r["ci"][0] <= r["auc"] <= r["ci"][1], r["key"]
+        # the span is the claim, and it must match the rungs it is derived from
+        aucs = [r["auc"] for r in vb["rungs"]]
+        assert abs(vb["span"] - (max(aucs) - min(aucs))) < 1e-6
+
+    def test_ladder_omits_anchors_too_thin_to_score(self, anchor_outdir):
+        """A rung under 20 negatives is dropped, not drawn with a fabricated interval."""
+        import pandas as pd
+
+        lb = pd.read_parquet(anchor_outdir / "labels" / "labels.parquet")
+        keep = lb.index[lb["label"] == "Healthy Normal"][:5]
+        drop = [i for i in lb.index[lb["label"] == "Healthy Normal"] if i not in keep]
+        lb.loc[drop, "label"] = "Possible ctDNA−"
+        lb.to_parquet(anchor_outdir / "labels" / "labels.parquet", index=False)
+        data = build_report_data(anchor_outdir)
+        vb = ((data.get("primary") or {}).get("operating_points") or {}).get(
+            "verification_bias"
+        ) or {"rungs": []}
+        assert "donors" not in {r["key"] for r in vb["rungs"]}
+
     def test_primary_endpoint_carries_a_clustered_interval(self, anchor_outdir):
         """The headline is an estimate; it ships with an interval, or says why not."""
         data = build_report_data(anchor_outdir)

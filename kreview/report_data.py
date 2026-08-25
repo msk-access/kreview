@@ -363,6 +363,93 @@ def _anchored_operating_points(
     if len(set(y_arr)) > 1:
         out["auc_vs_all_negatives"] = _r(roc_auc_score(y_arr, p_arr))
 
+    # ── the verification-bias ladder ───────────────────────────────────────
+    # Which negatives you compare against moves this number more than any modeling
+    # decision in the campaign, so the report states all of them rather than picking
+    # one. Each rung carries its own n and a patient-clustered interval: the donor rung
+    # is the flattering one AND the thinnest, and those two facts belong together.
+    from kreview.eval_engine import _bootstrap_auc
+
+    pat_all = (
+        meta["PATIENT_ID"].fillna(pd.Series(list(ids), index=meta.index)).to_numpy()
+        if have("PATIENT_ID")
+        else None
+    )
+    unpaired = (
+        (
+            (meta["label"] == "Possible ctDNA−") & (meta["has_paired_impact"] == False)
+        ).to_numpy()
+        if have("label") and have("has_paired_impact")
+        else None
+    )
+
+    rungs = []
+    for key, neg_mask, label, note in (
+        (
+            "verified_tn",
+            tn,
+            "verified true negatives",
+            "paired tumour sequencing, zero confirmed variants — the within-patient question",
+        ),
+        (
+            "all_negatives",
+            (y_arr == 0),
+            "all negatives",
+            "pooled: includes unpaired samples that are unlabelled, not verified",
+        ),
+        (
+            "unpaired",
+            unpaired,
+            "unpaired negatives only",
+            "no paired tumour, so their negativity is an assumption",
+        ),
+        (
+            "donors",
+            healthy,
+            "healthy donors only",
+            "the between-person question, and the contrast most screening literature reports",
+        ),
+    ):
+        if neg_mask is None or pos.sum() == 0:
+            continue
+        sel = pos | neg_mask
+        n_neg = int(neg_mask.sum())
+        if n_neg < 20 or len(set(y_arr[sel])) < 2:
+            continue
+        rung = {
+            "key": key,
+            "label": label,
+            "note": note,
+            "n_neg": n_neg,
+            "auc": _r(roc_auc_score(y_arr[sel], p_arr[sel])),
+        }
+        if have("PATIENT_ID"):
+            rung["n_neg_patients"] = int(
+                pd.unique(meta["PATIENT_ID"].to_numpy()[neg_mask]).size
+            )
+        lo, hi = _bootstrap_auc(
+            y_arr[sel],
+            p_arr[sel],
+            n_boot=SUBGROUP_BOOT,
+            groups=(pat_all[sel] if pat_all is not None else None),
+        )
+        if lo is not None and hi is not None:
+            rung["ci"] = [_r(lo), _r(hi)]
+        rungs.append(rung)
+    if len(rungs) > 1:
+        aucs = [r["auc"] for r in rungs]
+        out["verification_bias"] = {
+            "rungs": rungs,
+            # the span is the claim: anchor choice is worth this much AUC
+            "span": _r(max(aucs) - min(aucs)),
+            "defensible": "verified_tn",
+            "ci_method": (
+                "patient-clustered bootstrap"
+                if pat_all is not None
+                else "sample-level bootstrap (no PATIENT_ID)"
+            ),
+        }
+
     # ── specificity/sensitivity trade-off on the TN anchor ──
     # Drawn rather than tabulated: the reader sees where the declared operating
     # points sit on a curve, and that the donor point is a boundary (one-sided).
