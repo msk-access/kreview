@@ -1,6 +1,6 @@
 # Labeling API Reference
 
-The `kreview.labels` module implements the 5-tier ctDNA labeling engine.
+The `kreview.labels` module implements the 6-tier ctDNA labeling engine.
 
 For the biological rationale behind each label, see the [ctDNA Labeling](../biology/ctdna-labeling.md) guide.
 

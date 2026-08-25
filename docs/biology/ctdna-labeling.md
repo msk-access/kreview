@@ -20,7 +20,7 @@ If a sample contains somatic Single Nucleotide Variants (SNVs) with a high detec
 
 ---
 
-## 🏷️ The 5-Tier Labeling Hierarchy
+## 🏷️ The 6-Tier Labeling Hierarchy
 
 ```mermaid
 flowchart TD
@@ -126,7 +126,7 @@ During SNV summary computation, each somatic variant is checked against the CH h
 
 #### Step 3: CH-Only Demotion
 
-After the initial label assignment, any sample meeting **all four** of these conditions is demoted from `Possible ctDNA+` back to `Possible ctDNA−`:
+After the initial label assignment, any sample meeting **all four** of these conditions is demoted from `Possible ctDNA+` to `Undetermined` — excluded from modelling rather than moved into the negative class:
 
 ```
 IF label == "Possible ctDNA+"

@@ -34,6 +34,10 @@ d = {
                 "cli_eval.html#_load_matrix_and_labels",
                 "kreview/cli_eval.py",
             ),
+            "kreview.cli_eval._patients_of": (
+                "cli_eval.html#_patients_of",
+                "kreview/cli_eval.py",
+            ),
             "kreview.cli_eval._save_fitted_models": (
                 "cli_eval.html#_save_fitted_models",
                 "kreview/cli_eval.py",
@@ -776,6 +780,84 @@ d = {
                 "kreview/labels.py",
             ),
         },
+        "kreview.pipeline_diagram": {
+            "kreview.pipeline_diagram._bottom_right": (
+                "pipeline_diagram.html#_bottom_right",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._h": (
+                "pipeline_diagram.html#_h",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._label": (
+                "pipeline_diagram.html#_label",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._legend": (
+                "pipeline_diagram.html#_legend",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._level_overview": (
+                "pipeline_diagram.html#_level_overview",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._level_standard": (
+                "pipeline_diagram.html#_level_standard",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._node": (
+                "pipeline_diagram.html#_node",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._path": (
+                "pipeline_diagram.html#_path",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._right_up": (
+                "pipeline_diagram.html#_right_up",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._side_down": (
+                "pipeline_diagram.html#_side_down",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._v": (
+                "pipeline_diagram.html#_v",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._x": (
+                "pipeline_diagram.html#_x",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram._y": (
+                "pipeline_diagram.html#_y",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram.declared_processes": (
+                "pipeline_diagram.html#declared_processes",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram.mini_store": (
+                "pipeline_diagram.html#mini_store",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram.mini_svg": (
+                "pipeline_diagram.html#mini_svg",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram.node_names": (
+                "pipeline_diagram.html#node_names",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram.node_process_map": (
+                "pipeline_diagram.html#node_process_map",
+                "kreview/pipeline_diagram.py",
+            ),
+            "kreview.pipeline_diagram.pipeline_svg": (
+                "pipeline_diagram.html#pipeline_svg",
+                "kreview/pipeline_diagram.py",
+            ),
+        },
         "kreview.registry": {
             "kreview.registry.get_all_evaluators": (
                 "registry.html#get_all_evaluators",
@@ -789,6 +871,10 @@ d = {
             )
         },
         "kreview.report_data": {
+            "kreview.report_data._anchored_operating_points": (
+                "report_data.html#_anchored_operating_points",
+                "kreview/report_data.py",
+            ),
             "kreview.report_data._build_cohort": (
                 "report_data.html#_build_cohort",
                 "kreview/report_data.py",
@@ -805,6 +891,14 @@ d = {
                 "report_data.html#_build_multimodal",
                 "kreview/report_data.py",
             ),
+            "kreview.report_data._cluster_bootstrap_sens": (
+                "report_data.html#_cluster_bootstrap_sens",
+                "kreview/report_data.py",
+            ),
+            "kreview.report_data._derive_findings": (
+                "report_data.html#_derive_findings",
+                "kreview/report_data.py",
+            ),
             "kreview.report_data._downsample": (
                 "report_data.html#_downsample",
                 "kreview/report_data.py",
@@ -814,6 +908,10 @@ d = {
                 "kreview/report_data.py",
             ),
             "kreview.report_data._r": ("report_data.html#_r", "kreview/report_data.py"),
+            "kreview.report_data._wilson": (
+                "report_data.html#_wilson",
+                "kreview/report_data.py",
+            ),
             "kreview.report_data.assert_no_phi": (
                 "report_data.html#assert_no_phi",
                 "kreview/report_data.py",

@@ -99,13 +99,17 @@ workflow NFCORE_KREVIEW {
     def wf = params.workflow ?: 'eval'
 
     if (wf == 'label') {
-        // Label-only: does NOT require krewlyzer_dir
+        // Label-only: krewlyzer_dir stays OPTIONAL here, but when given it supplies
+        // per-sample fragment counts (#122) so total_fragments_pf is populated and
+        // the min_fragments Insufficient-Data rule can fire. Without it the labeler
+        // warns loudly and emits the column as unknown.
         log.info "Running LABEL-ONLY workflow (no feature extraction)"
         KREVIEW_LABEL_WF(
             ch_cancer,
             ch_xs1,
             ch_xs2,
             val_cbioportal_dir,
+            params.krewlyzer_dir ?: 'NO_KREWLYZER_DIR',
         )
     } else if (wf == 'eval') {
         // Full eval pipeline: requires krewlyzer_dir

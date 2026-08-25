@@ -19,11 +19,45 @@ import numpy as np
 import pandas as pd
 import structlog
 
+from kreview.pipeline_diagram import (
+    CLUSTERS,
+    mini_store,
+    node_names,
+    node_process_map,
+    pipeline_svg,
+)
+
 log = structlog.get_logger()
 
 # Subgroup metrics are emitted only when the group has at least this many samples —
 # below it the AUC is noise, and tiny groups edge toward re-identifiability.
+# Declared a priori in ANALYSIS_PLAN.md so the report can show the pre-registered
+# primary next to the run's argmax: best-of-156 selection inflates the winner by
+# ~0.01–0.02 AUC, so the argmax evaluator/model is exploratory, not confirmatory.
+PRIMARY_EVALUATOR = "FSCGenomewide"
+PRIMARY_MODEL = "tabicl_ft"
+
+# Detection-vs-burden bins (plasma max VAF as a fraction). Chosen to bracket the
+# assay's transition zone: flat below 1%, steep 1-10%, saturated above.
+LOD_BINS = (
+    (0.0, 0.001, "<0.1%"),
+    (0.001, 0.005, "0.1-0.5%"),
+    (0.005, 0.01, "0.5-1%"),
+    (0.01, 0.02, "1-2%"),
+    (0.02, 0.05, "2-5%"),
+    (0.05, 0.10, "5-10%"),
+    (0.10, 0.20, "10-20%"),
+    (0.20, 1.01, ">20%"),
+)
+
 MIN_SUBGROUP = 30
+# Minimum per CLASS, not per group: an AUC needs both classes populated, and a floor on
+# total n lets a group through on its negatives alone.
+MIN_SUBGROUP_CLASS = 30
+# Bootstrap draws for subgroup intervals. Lower than the eval engine's 1,000 because this
+# runs per evaluator per group at report-build time; enough to separate a wide interval
+# from a narrow one, which is what the panel needs to convey.
+SUBGROUP_BOOT = 200
 # Curves are thinned to this many points before embedding (endpoints always kept).
 CURVE_POINTS = 120
 # Number of equal-width probability bins for the calibration (reliability) diagram.
@@ -37,7 +71,12 @@ _GPU_MODELS = ("tabpfn", "tabpfn_ft", "tabicl", "tabicl_ft")
 # %% auto #0
 __all__ = [
     "log",
+    "PRIMARY_EVALUATOR",
+    "PRIMARY_MODEL",
+    "LOD_BINS",
     "MIN_SUBGROUP",
+    "MIN_SUBGROUP_CLASS",
+    "SUBGROUP_BOOT",
     "CURVE_POINTS",
     "CALIBRATION_BINS",
     "DCA_THRESHOLDS",
@@ -86,6 +125,16 @@ def assert_no_phi(blob: str) -> None:
 # %% ../nbs/06_report_data.ipynb #5106658b
 def _build_cohort(labels: pd.DataFrame) -> dict:
     """Aggregate the labels table into the cohort tab (counts only, no identifiers)."""
+    # PATIENT_ID is not optional: the grouped split, the leakage check and the
+    # clustered interval on the primary endpoint all key on it. Missing means a
+    # malformed label table -- a schema error, so say which column and why rather
+    # than letting pandas raise a bare KeyError three frames down.
+    missing = [c for c in ("PATIENT_ID", "label") if c not in labels.columns]
+    if missing:
+        raise KeyError(
+            f"label table is missing required column(s) {missing}; the report cannot "
+            "compute patient counts, split leakage or a clustered interval without them"
+        )
     cohort = {
         "n_samples": int(len(labels)),
         "n_patients": int(labels["PATIENT_ID"].nunique()),
@@ -109,8 +158,12 @@ def _build_cohort(labels: pd.DataFrame) -> dict:
         # ML-integrity check surfaced in the report: a sample-level split scatters a
         # patient's timepoints across train AND test, optimistically biasing holdout
         # metrics. Counted here, warned about client-side. See the split-leakage issue.
+        # Only train/test rows count: a patient with an additional EXCLUDED sample
+        # (heme / insufficient data) is not leakage — grouping over every split value
+        # false-flagged 14 such patients on the v0.0.32 iris report.
+        tt = labels[labels["split"].isin(["train", "test"])]
         cohort["patients_in_both_splits"] = int(
-            (labels.groupby("PATIENT_ID")["split"].nunique() > 1).sum()
+            (tt.groupby("PATIENT_ID")["split"].nunique() > 1).sum()
         )
         if cohort["patients_in_both_splits"]:
             log.warning(
@@ -121,8 +174,351 @@ def _build_cohort(labels: pd.DataFrame) -> dict:
     return cohort
 
 
+def _wilson(k: int, n: int) -> tuple[float, float]:
+    """Wilson score interval — correct binomial coverage at small n and extreme p,
+    where the normal approximation produces impossible bounds."""
+    if n == 0:
+        return (float("nan"), float("nan"))
+    p_hat, z = k / n, 1.96
+    denom = 1 + z * z / n
+    centre = p_hat + z * z / (2 * n)
+    half = z * np.sqrt(p_hat * (1 - p_hat) / n + z * z / (4 * n * n))
+    return ((centre - half) / denom, (centre + half) / denom)
+
+
+def _cluster_bootstrap_sens(
+    p_pos: np.ndarray,
+    p_tn: np.ndarray,
+    pat_pos: np.ndarray,
+    pat_tn: np.ndarray,
+    spec: float,
+    n_boot: int = 400,
+    seed: int = 42,
+    cluster: bool = True,
+) -> tuple[float | None, float | None]:
+    """Patient-clustered bootstrap interval for sensitivity at a TN-anchored specificity.
+
+    Two things a binomial interval on sample counts gets wrong here, and this covers both:
+
+    * **Clustering.** Samples are not independent — patients contribute several timepoints,
+      so a sample-level interval is too narrow by the design effect.
+    * **Threshold uncertainty.** The threshold is *estimated* from the same finite TN set,
+      and it moves on resampling. Holding it fixed treats an estimate as a constant.
+
+    Patients are resampled whole on both sides and the threshold is re-derived inside every
+    resample. Returns (None, None) when the inputs cannot support an interval.
+    """
+    if len(p_pos) == 0 or len(p_tn) < 20:
+        return (None, None)
+    rng = np.random.RandomState(seed)
+    # cluster=False resamples SAMPLES while still re-estimating the threshold, which is
+    # what isolates the clustering contribution: the ratio of the two interval widths is
+    # the design effect, and everything else the two runs share cancels out.
+    if cluster:
+        pos_groups = {q: np.flatnonzero(pat_pos == q) for q in np.unique(pat_pos)}
+        tn_groups = {q: np.flatnonzero(pat_tn == q) for q in np.unique(pat_tn)}
+    else:
+        pos_groups = {i: np.array([i]) for i in range(len(p_pos))}
+        tn_groups = {i: np.array([i]) for i in range(len(p_tn))}
+    pos_by_patient, tn_by_patient = pos_groups, tn_groups
+    pos_keys = np.array(list(pos_by_patient), dtype=object)
+    tn_keys = np.array(list(tn_by_patient), dtype=object)
+    out = []
+    for _ in range(n_boot):
+        tn_idx = np.concatenate(
+            [tn_by_patient[q] for q in rng.choice(tn_keys, len(tn_keys), replace=True)]
+        )
+        pos_idx = np.concatenate(
+            [
+                pos_by_patient[q]
+                for q in rng.choice(pos_keys, len(pos_keys), replace=True)
+            ]
+        )
+        neg_b = np.sort(p_tn[tn_idx])
+        thr_b = neg_b[min(int(np.ceil(spec * len(neg_b))) - 1, len(neg_b) - 1)]
+        out.append(float((p_pos[pos_idx] > thr_b).mean()))
+    if len(out) < 50:
+        return (None, None)
+    return (float(np.percentile(out, 2.5)), float(np.percentile(out, 97.5)))
+
+
+def _anchored_operating_points(
+    y_arr: np.ndarray, p_arr: np.ndarray, ids: list, lab_by_id: pd.DataFrame
+) -> dict:
+    """Dual-anchor operating points (#123), computed from OOF scores.
+
+    Two anchors answer two different questions and are never blended:
+      * **tumor-informed true negatives** (label ``Possible ctDNA−`` AND a paired
+        IMPACT tumor AND zero confirmed variants) — the MRD question, "can we tell
+        shedding from non-shedding *within cancer patients*". Thresholds are
+        quantiles of thousands of samples, so 98/99% specificity is estimable.
+      * **healthy donors** — the screening question. Its sens@100spec threshold is
+        the MAX score over a few dozen donors; a symmetric CI for a max-statistic is
+        inconsistent (the argmax donor drops out of resamples, so the threshold can
+        only fall), which is why only a one-sided lower bound is reported.
+
+    Also returns the verification-bias comparison: the same score's AUC against
+    verified negatives vs all negatives vs donors only — pooled negatives include
+    unpaired samples that are *unlabeled*, not verified.
+    """
+    from sklearn.metrics import roc_auc_score
+
+    out: dict = {}
+    if not ids or len(ids) != len(y_arr):
+        return out
+    meta = lab_by_id.reindex(ids)
+    pos = y_arr == 1
+    have = lambda c: c in meta.columns  # noqa: E731
+
+    tn = None
+    if have("label") and have("has_paired_impact") and have("n_impact_confirmed"):
+        tn = (
+            meta["label"].eq("Possible ctDNA−").to_numpy()
+            & meta["has_paired_impact"].eq(True).to_numpy()
+            & meta["n_impact_confirmed"].fillna(-1).eq(0).to_numpy()
+        )
+    healthy = meta["label"].eq("Healthy Normal").to_numpy() if have("label") else None
+
+    if tn is not None and tn.sum() >= 200 and pos.sum() > 0:
+        neg = np.sort(p_arr[tn])
+        pts = {}
+        # Patient labels for the clustered interval; without them the primary endpoint
+        # can still be reported, but only as a point estimate — and it says so rather
+        # than falling back to a binomial interval that would understate the spread.
+        pat_all = (
+            meta["PATIENT_ID"].fillna(pd.Series(ids, index=meta.index)).to_numpy()
+            if have("PATIENT_ID")
+            else None
+        )
+        for spec in (0.98, 0.99):
+            thr = neg[min(int(np.ceil(spec * len(neg))) - 1, len(neg) - 1)]
+            sens = float((p_arr[pos] > thr).mean())
+            key = f"sens_at_{int(spec * 100)}spec"
+            pts[key] = _r(sens)
+            if pat_all is not None:
+                lo, hi = _cluster_bootstrap_sens(
+                    p_arr[pos], p_arr[tn], pat_all[pos], pat_all[tn], spec
+                )
+                if lo is not None and hi is not None:
+                    pts[f"{key}_ci"] = [_r(lo), _r(hi)]
+                    # Decompose the width rather than quoting one conflated ratio.
+                    # iid = same bootstrap, samples instead of patients: the difference
+                    # between the two is clustering alone (the design effect). The gap
+                    # between iid and a plain binomial is threshold uncertainty — the
+                    # threshold is estimated from a finite TN set and moves on resampling.
+                    ilo, ihi = _cluster_bootstrap_sens(
+                        p_arr[pos],
+                        p_arr[tn],
+                        pat_all[pos],
+                        pat_all[tn],
+                        spec,
+                        cluster=False,
+                    )
+                    w_binom = np.diff(
+                        _wilson(int((p_arr[pos] > thr).sum()), int(pos.sum()))
+                    )[0]
+                    if ilo is not None and ihi is not None and ihi > ilo:
+                        pts[f"{key}_deff"] = _r(((hi - lo) / (ihi - ilo)) ** 2, 2)
+                        if w_binom > 0:
+                            pts[f"{key}_threshold_inflation"] = _r(
+                                ((ihi - ilo) / w_binom) ** 2, 2
+                            )
+            pts[f"ppv_at_{int(spec * 100)}spec"] = {
+                str(pv): _r(sens * pv / (sens * pv + (1 - spec) * (1 - pv)))
+                for pv in (0.05, 0.10, 0.25)
+            }
+        pts["n_tn"] = int(tn.sum())
+        pts["n_tn_patients"] = (
+            int(meta.loc[tn, "PATIENT_ID"].nunique()) if have("PATIENT_ID") else None
+        )
+        pts["n_pos"] = int(pos.sum())
+        pts["n_pos_patients"] = (
+            int(meta.loc[pos, "PATIENT_ID"].nunique()) if have("PATIENT_ID") else None
+        )
+        pts["ci_method"] = (
+            "patient-clustered bootstrap, threshold re-estimated per resample"
+            if pat_all is not None
+            else "unavailable — no PATIENT_ID in the label table"
+        )
+        out["tn_anchor"] = pts
+        out["auc_vs_verified_tn"] = _r(
+            roc_auc_score(y_arr[pos | tn], p_arr[pos | tn])
+            if len(set(y_arr[pos | tn])) > 1
+            else np.nan
+        )
+
+    if healthy is not None and healthy.sum() > 0 and pos.sum() > 0:
+        thr = p_arr[healthy].max()
+        out["donor_anchor"] = {
+            # One-sided: the max-statistic threshold can only fall on resampling, so
+            # the observed sensitivity is a LOWER bound, not a point estimate.
+            "sens_at_100spec_lower_bound": _r(float((p_arr[pos] > thr).mean())),
+            "n_donors": int(healthy.sum()),
+        }
+        if len(set(y_arr[pos | healthy])) > 1:
+            out["auc_vs_donors"] = _r(
+                roc_auc_score(y_arr[pos | healthy], p_arr[pos | healthy])
+            )
+
+    if len(set(y_arr)) > 1:
+        out["auc_vs_all_negatives"] = _r(roc_auc_score(y_arr, p_arr))
+
+    # ── the verification-bias ladder ───────────────────────────────────────
+    # Which negatives you compare against moves this number more than any modeling
+    # decision in the campaign, so the report states all of them rather than picking
+    # one. Each rung carries its own n and a patient-clustered interval: the donor rung
+    # is the flattering one AND the thinnest, and those two facts belong together.
+    from kreview.eval_engine import _bootstrap_auc
+
+    pat_all = (
+        meta["PATIENT_ID"].fillna(pd.Series(list(ids), index=meta.index)).to_numpy()
+        if have("PATIENT_ID")
+        else None
+    )
+    unpaired = (
+        (
+            (meta["label"] == "Possible ctDNA−") & (meta["has_paired_impact"] == False)
+        ).to_numpy()
+        if have("label") and have("has_paired_impact")
+        else None
+    )
+
+    rungs = []
+    for key, neg_mask, label, note in (
+        (
+            "verified_tn",
+            tn,
+            "verified true negatives",
+            "paired tumour sequencing, zero confirmed variants — the within-patient question",
+        ),
+        (
+            "all_negatives",
+            (y_arr == 0),
+            "all negatives",
+            "pooled: includes unpaired samples that are unlabelled, not verified",
+        ),
+        (
+            "unpaired",
+            unpaired,
+            "unpaired negatives only",
+            "no paired tumour, so their negativity is an assumption",
+        ),
+        (
+            "donors",
+            healthy,
+            "healthy donors only",
+            "the between-person question, and the contrast most screening literature reports",
+        ),
+    ):
+        if neg_mask is None or pos.sum() == 0:
+            continue
+        sel = pos | neg_mask
+        n_neg = int(neg_mask.sum())
+        if n_neg < 20 or len(set(y_arr[sel])) < 2:
+            continue
+        rung = {
+            "key": key,
+            "label": label,
+            "note": note,
+            "n_neg": n_neg,
+            "auc": _r(roc_auc_score(y_arr[sel], p_arr[sel])),
+        }
+        if have("PATIENT_ID"):
+            rung["n_neg_patients"] = int(
+                pd.unique(meta["PATIENT_ID"].to_numpy()[neg_mask]).size
+            )
+        lo, hi = _bootstrap_auc(
+            y_arr[sel],
+            p_arr[sel],
+            n_boot=SUBGROUP_BOOT,
+            groups=(pat_all[sel] if pat_all is not None else None),
+        )
+        if lo is not None and hi is not None:
+            rung["ci"] = [_r(lo), _r(hi)]
+        rungs.append(rung)
+    if len(rungs) > 1:
+        aucs = [r["auc"] for r in rungs]
+        out["verification_bias"] = {
+            "rungs": rungs,
+            # the span is the claim: anchor choice is worth this much AUC
+            "span": _r(max(aucs) - min(aucs)),
+            "defensible": "verified_tn",
+            "ci_method": (
+                "patient-clustered bootstrap"
+                if pat_all is not None
+                else "sample-level bootstrap (no PATIENT_ID)"
+            ),
+        }
+
+    # ── specificity/sensitivity trade-off on the TN anchor ──
+    # Drawn rather than tabulated: the reader sees where the declared operating
+    # points sit on a curve, and that the donor point is a boundary (one-sided).
+    if tn is not None and tn.sum() >= 200 and pos.sum() > 0:
+        neg = np.sort(p_arr[tn])
+        curve = []
+        for spec in np.round(np.arange(0.90, 0.9991, 0.005), 4):
+            thr = neg[min(int(np.ceil(spec * len(neg))) - 1, len(neg) - 1)]
+            curve.append((float(spec), _r(float((p_arr[pos] > thr).mean()))))
+        out["sens_spec_curve"] = {
+            "spec": [c[0] for c in curve],
+            "sens": [c[1] for c in curve],
+        }
+
+        # ── detection vs tumor burden (the LOD curve) ──
+        # The interpretive key to every other number on the page: sensitivity is a
+        # burden-response, so a single sensitivity figure is meaningless without it.
+        if "max_vaf" in meta.columns:
+            thr98 = neg[min(int(np.ceil(0.98 * len(neg))) - 1, len(neg) - 1)]
+            vaf = pd.to_numeric(meta["max_vaf"], errors="coerce").to_numpy()
+            det = p_arr > thr98
+            bins = []
+            for lo, hi, lab in LOD_BINS:
+                m = pos & (vaf > 0) & (vaf >= lo) & (vaf < hi)
+                n = int(m.sum())
+                if n < 20:
+                    continue
+                k = int(det[m].sum())
+                bins.append(
+                    {
+                        "label": lab,
+                        "n": n,
+                        "detected": _r(k / n),
+                        "ci": [_r(v) for v in _wilson(k, n)],
+                    }
+                )
+            no_vaf = pos & ~(vaf > 0)
+            lod = {"bins": bins, "operating_point": "98% spec vs verified TN"}
+            if no_vaf.sum() >= 20:
+                lod["no_snv_vaf"] = {
+                    "n": int(no_vaf.sum()),
+                    "detected": _r(float(det[no_vaf].mean())),
+                }
+            # LOD50: linear interpolation in log10(VAF) between the bracketing bins.
+            mids = [
+                (np.sqrt(max(lo, 1e-4) * min(hi, 1.0)), b["detected"])
+                for (lo, hi, _), b in zip(
+                    [x for x in LOD_BINS if any(b["label"] == x[2] for b in bins)], bins
+                )
+            ]
+            below = [m for m in mids if m[1] < 0.5]
+            above = [m for m in mids if m[1] >= 0.5]
+            if below and above:
+                x0, y0 = below[-1]
+                x1, y1 = above[0]
+                lx = np.log10(x0) + (0.5 - y0) * (np.log10(x1) - np.log10(x0)) / (
+                    y1 - y0
+                )
+                lod["lod50_vaf"] = _r(float(10**lx))
+                # TF ~ 2 x VAF for a clonal heterozygous variant in a diploid locus
+                lod["lod50_tumor_fraction"] = _r(float(2 * 10**lx))
+            out["lod"] = lod
+    return out
+
+
 # %% ../nbs/06_report_data.ipynb #7eb86ed0
-def _oof_extras(mr: dict, best: str, lab_by_id: pd.DataFrame) -> dict:
+def _oof_extras(
+    mr: dict, best: str, lab_by_id: pd.DataFrame, subgroup_ci: bool = False
+) -> dict:
     """Curves, calibration, decision curve and subgroup AUCs from the OOF arrays.
 
     Sample ids are joined to labels IN MEMORY and discarded — only per-group
@@ -180,21 +576,60 @@ def _oof_extras(mr: dict, best: str, lab_by_id: pd.DataFrame) -> dict:
 
     ids = mr.get("oof_sample_ids")
     if ids and len(ids) == len(y):
+        out["operating_points"] = _anchored_operating_points(
+            y_arr, p_arr, list(ids), lab_by_id
+        )
         sub: dict = defaultdict(dict)
         meta = lab_by_id.reindex(ids)
+        pats = (
+            meta["PATIENT_ID"].fillna(pd.Series(list(ids), index=meta.index)).to_numpy()
+            if "PATIENT_ID" in meta.columns
+            else None
+        )
         for col, key in (("CANCER_TYPE", "cancer_type"), ("split", "split")):
             if col not in meta.columns:
                 continue
             for grp, gidx in meta.groupby(col).groups.items():
                 mask = meta.index.isin(gidx)
                 yy, pp = y_arr[mask], p_arr[mask]
-                if len(yy) < MIN_SUBGROUP or len(set(yy)) < 2:
+                # Gate on POSITIVES, not total n. A group can clear a 30-sample floor
+                # on 874 samples while carrying 72 positives, and an AUC on 72 positives
+                # is not comparable to one on 2,254 — that is the same denominator error
+                # that made a histology odds ratio meaningless in the review.
+                n_pos = int(yy.sum())
+                n_neg = int(len(yy) - n_pos)
+                if min(n_pos, n_neg) < MIN_SUBGROUP_CLASS or len(set(yy)) < 2:
                     continue
-                sub[key][str(grp)] = {
+                entry = {
                     "n": int(len(yy)),
-                    "n_pos": int(yy.sum()),
+                    "n_pos": n_pos,
                     "auc": _r(roc_auc_score(yy, pp)),
                 }
+                # Intervals only for the pre-registered primary evaluator. Every other
+                # evaluator's subgroup table is exploratory, and bootstrapping all 26 x 12
+                # of them costs three minutes of report build for panels that carry no
+                # declared claim — the same multiplicity discipline ANALYSIS_PLAN applies
+                # to the endpoints, applied to what the report spends time computing.
+                if subgroup_ci:
+                    from kreview.eval_engine import _bootstrap_auc
+
+                    lo, hi = _bootstrap_auc(
+                        yy,
+                        pp,
+                        n_boot=SUBGROUP_BOOT,
+                        groups=(pats[mask] if pats is not None else None),
+                    )
+                    if lo is not None:
+                        entry["ci"] = [_r(lo), _r(hi)]
+                # Share of this group's positives that are tumour-confirmed. Reported,
+                # not interpreted: a group whose positives are largely the ambiguous
+                # tier is a different measurement from one whose positives are verified,
+                # and the reader cannot see that from an AUC alone.
+                if "label" in meta.columns and n_pos:
+                    tiers = meta["label"].to_numpy()[mask]
+                    conf = int(np.count_nonzero(tiers == "True ctDNA+"))
+                    entry["pct_true_pos"] = _r(conf / n_pos, 3)
+                sub[key][str(grp)] = entry
         out["breakdowns"] = {
             k: dict(sorted(v.items(), key=lambda kv: -kv[1]["n"])[:12])
             for k, v in sub.items()
@@ -261,7 +696,11 @@ def _build_evaluator(row: pd.Series, outdir: Path, lab_by_id: pd.DataFrame) -> d
             "n_variance_dropped": qc.get("n_variance_dropped"),
         }
 
-    rec.update(_oof_extras(mr, best, lab_by_id))
+    rec.update(
+        _oof_extras(
+            mr, best, lab_by_id, subgroup_ci=row.get("evaluator") == PRIMARY_EVALUATOR
+        )
+    )
 
     # Nested-CV feature-group ablation (ABLATE stage): winner group per outer fold,
     # per model — the selection-stability story. The per-sample fold_assignment array
@@ -340,13 +779,28 @@ def _build_multimodal(mm_dir: Path) -> dict:
             "model": abl.get("ablation_model"),
             "baseline_auc": _r(abl.get("ablation_baseline_auc")),
             "fallback": abl.get("ablation_model_fallback"),
+            # Pre-fix ablation files (< v0.0.33) carry phantom "evaluators" minted by
+            # rsplit on two-part model suffixes ("X_tabicl" from the X_tabicl_ft
+            # column) — drop them so old runs render clean; new runs never emit them.
             "deltas": {
                 k: {
                     "delta": _r(v.get("delta")),
                     "auc_without": _r(v.get("auc_without")),
                 }
                 for k, v in (abl.get("ablation") or {}).items()
-                if isinstance(v, dict) and "delta" in v
+                if isinstance(v, dict)
+                and "delta" in v
+                and not k.endswith(
+                    (
+                        "_lr",
+                        "_rf",
+                        "_xgb",
+                        "_tabpfn",
+                        "_tabpfn_ft",
+                        "_tabicl",
+                        "_tabicl_ft",
+                    )
+                )
             },
         }
 
@@ -378,11 +832,16 @@ def _build_diagnostics(trace_path: Path | None) -> dict:
     tr = pd.read_csv(trace_path, sep="\t")
     tr["proc"] = tr["process"].str.split(":").str[-1]
     for proc, grp in tr.groupby("proc"):
+        ok = grp[grp["status"] == "COMPLETED"].sort_values("realtime", ascending=False)
         diag["processes"][proc] = {
             "n": int(len(grp)),
             "completed": int((grp["status"] == "COMPLETED").sum()),
             "failed": int((grp["status"] == "FAILED").sum()),
             "max_attempt": int(grp["attempt"].max()),
+            # per-process worst case: the pipeline diagram's node panel reports these,
+            # and the global "longest tasks" table cannot answer "which stage was slow".
+            "slowest": (str(ok["duration"].iloc[0]) if len(ok) else None),
+            "peak_rss": (str(ok["peak_rss"].iloc[0]) if len(ok) else None),
         }
     done = tr[tr["status"] == "COMPLETED"]
     diag["longest"] = [
@@ -395,6 +854,265 @@ def _build_diagnostics(trace_path: Path | None) -> dict:
         "retries": int((tr["attempt"] > 1).sum()),
     }
     return diag
+
+
+def _derive_findings(data: dict) -> list[dict]:
+    """Rules-based automatic inferences from the run's own numbers.
+
+    Deterministic, threshold-based, aggregates-only. Each finding is
+    ``{"kind": "good"|"info"|"warn", "tab": <tab id>, "text": str}`` and states
+    the numbers it is derived from, so a reader can check every claim against
+    the tables. Lives in the data layer (not the template) so the rules are
+    testable and PHI-guarded like everything else.
+    """
+    F: list[dict] = []
+
+    def add(kind: str, tab: str, text: str, chart: str | None = None) -> None:
+        # `chart` names the element whose title this sentence should become — the
+        # claim then sits on its own evidence instead of in a separate wall of text
+        # (charted findings render as titles and drop out of the findings list).
+        entry: dict = {"kind": kind, "tab": tab, "text": text}
+        if chart:
+            entry["chart"] = chart
+        F.append(entry)
+
+    evs = data.get("evaluators") or []
+    coh = data.get("cohort") or {}
+    mm = data.get("multimodal") or {}
+
+    # ── split integrity ──
+    leaked = coh.get("patients_in_both_splits")
+    if leaked == 0:
+        add(
+            "good",
+            "overview",
+            "Patient-grouped split intact: no patient has samples in both train "
+            "and test, so holdout metrics are on fully unseen patients.",
+        )
+    elif leaked:
+        add(
+            "warn",
+            "overview",
+            f"{leaked} patients have samples in BOTH train and test — holdout "
+            "metrics are optimistically biased (split-leakage).",
+        )
+
+    # ── evaluator health ──
+    n_ok = sum(1 for e in evs if e.get("status") == "OK")
+    if evs and n_ok == len(evs):
+        add("good", "scoreboard", f"All {len(evs)} evaluators completed (status OK).")
+    elif evs:
+        bad = [e["evaluator"] for e in evs if e.get("status") != "OK"]
+        add(
+            "warn",
+            "scoreboard",
+            f"{len(bad)} of {len(evs)} evaluators degraded/failed: {', '.join(bad[:6])}.",
+        )
+
+    # ── best single evaluator + holdout agreement ──
+    ranked = [e for e in evs if e.get("best_auc") is not None]
+    ranked.sort(key=lambda e: e["best_auc"], reverse=True)
+    if ranked:
+        b = ranked[0]
+        txt = (
+            f"Strongest single signal: {b['evaluator']} "
+            f"(best model {b.get('best_model')}, CV AUC {b['best_auc']:.3f}"
+        )
+        if b.get("holdout_auc") is not None:
+            txt += f", holdout {b['holdout_auc']:.3f}"
+        add("info", "scoreboard", txt + ").", chart="ov-aucbars")
+
+        drops = [e["auc_drop"] for e in evs if e.get("auc_drop") is not None]
+        if drops:
+            med = float(np.median(drops))
+            if abs(med) <= 0.01:
+                add(
+                    "good",
+                    "scoreboard",
+                    f"No systematic overfitting: median CV−holdout gap is "
+                    f"{med:+.3f} across {len(drops)} evaluators.",
+                )
+            else:
+                add(
+                    "warn",
+                    "scoreboard",
+                    f"Median CV−holdout gap is {med:+.3f} across {len(drops)} "
+                    "evaluators — CV numbers are optimistic; trust the holdout column.",
+                )
+
+        weak = [e["evaluator"] for e in ranked if e["best_auc"] < 0.6]
+        if weak:
+            add(
+                "info",
+                "scoreboard",
+                f"{len(weak)} evaluators carry little signal (best AUC < 0.60): "
+                f"{', '.join(weak[:6])}{'…' if len(weak) > 6 else ''}.",
+            )
+
+        gpu_best = sum(1 for e in ranked if str(e.get("best_model")) in _GPU_MODELS)
+        add(
+            "info",
+            "scoreboard",
+            f"GPU foundation models (TabPFN/TabICL) are the best model for "
+            f"{gpu_best} of {len(ranked)} evaluators; classical models win the rest.",
+        )
+
+    # ── dual-anchor operating points (#123) ──
+    ops = (data.get("primary") or {}).get("operating_points") or {}
+    tn = ops.get("tn_anchor") or {}
+    if tn.get("sens_at_98spec") is not None:
+        pat = tn.get("n_tn_patients")
+        add(
+            "info",
+            "scoreboard",
+            f"MRD operating point (tumor-informed anchor): {tn['sens_at_98spec']:.1%} "
+            f"sensitivity at 98% specificity against {tn['n_tn']:,} verified true "
+            f"negatives"
+            + (f" from {pat:,} patients" if pat else "")
+            + f"; {tn.get('sens_at_99spec', float('nan')):.1%} at 99%. This is the "
+            "clinical headline — thresholds are quantiles of thousands of samples.",
+        )
+        ppv = tn.get("ppv_at_98spec") or {}
+        if ppv:
+            add(
+                "info",
+                "scoreboard",
+                "At that operating point, a positive call means PPV "
+                + ", ".join(
+                    f"{float(v):.0%} at {float(k):.0%} prevalence"
+                    for k, v in sorted(ppv.items())
+                )
+                + ".",
+            )
+    don = ops.get("donor_anchor") or {}
+    if don.get("sens_at_100spec_lower_bound") is not None:
+        add(
+            "warn",
+            "scoreboard",
+            f"Donor-anchored sens@100spec is a ONE-SIDED LOWER BOUND "
+            f"(≥{don['sens_at_100spec_lower_bound']:.1%}, {don['n_donors']} donors): the "
+            "threshold is the maximum score over those donors, so a symmetric "
+            "confidence interval for it is inconsistent by construction.",
+        )
+    a_all, a_tn, a_don = (
+        ops.get("auc_vs_all_negatives"),
+        ops.get("auc_vs_verified_tn"),
+        ops.get("auc_vs_donors"),
+    )
+    if a_all is not None and a_tn is not None:
+        add(
+            "info",
+            "scoreboard",
+            f"Verification bias: AUC {a_all:.3f} against all negatives vs "
+            f"{a_tn:.3f} against verified true negatives"
+            + (
+                f" (and {a_don:.3f} against healthy donors — the contrast most of the "
+                "literature reports, which flatters this assay)"
+                if a_don
+                else ""
+            )
+            + ". Pooled negatives include unpaired samples that are unlabeled, not verified.",
+        )
+
+    # ── healthy-anchor caveat ──
+    n_healthy = (coh.get("label_counts") or {}).get("Healthy Normal")
+    if n_healthy is not None and n_healthy < 100:
+        add(
+            "warn",
+            "overview",
+            f"sens@100spec-healthy thresholds on only {n_healthy} healthy donors — "
+            "treat that operating point as high-variance (a single atypical donor "
+            "moves it).",
+        )
+
+    # ── multimodal ──
+    models = mm.get("models") or {}
+    stacks = {
+        m: d["stacking"]["auc"]
+        for m, d in models.items()
+        if d.get("stacking") and d["stacking"].get("auc") is not None
+    }
+    best_single_auc = mm.get("best_single_auc")
+    if stacks and best_single_auc is not None:
+        bm = max(stacks, key=stacks.get)
+        lift = stacks[bm] - best_single_auc
+        ci = (models[bm].get("stacking") or {}).get("ci") or [None, None]
+        beyond = ci[0] is not None and ci[0] > best_single_auc
+        add(
+            "good" if lift > 0.02 else "info",
+            "multimodal",
+            f"Stacking helps: best meta-learner {bm} reaches AUC {stacks[bm]:.3f} "
+            f"vs {best_single_auc:.3f} for the best single evaluator "
+            f"({lift:+.3f}{', beyond its 95% CI' if beyond else ''}) — the feature "
+            "families are partially complementary, not redundant.",
+            chart="mm-auc",
+        )
+        spread = max(stacks.values()) - min(stacks.values())
+        if spread <= 0.015:
+            add(
+                "info",
+                "multimodal",
+                f"The choice of meta-learner barely matters: all {len(stacks)} "
+                f"stacking models land within {spread:.3f} AUC of each other — the "
+                "signal is in the combined inputs, not the combiner.",
+            )
+
+    abl = mm.get("ablation") or {}
+    deltas = {
+        k: v.get("delta")
+        for k, v in (abl.get("deltas") or {}).items()
+        if v.get("delta") is not None
+    }
+    if deltas:
+        pos = {k: d for k, d in deltas.items() if d > 0}
+        top = sorted(deltas, key=lambda k: deltas[k], reverse=True)[:3]
+        tot = sum(pos.values()) or 1.0
+        share = sum(deltas[k] for k in top if deltas[k] > 0) / tot
+        add(
+            "info",
+            "multimodal",
+            f"Unique contribution concentrates in {', '.join(top)} "
+            f"({share:.0%} of the total leave-one-out AUC drop across "
+            f"{len(deltas)} evaluators).",
+            chart="mm-abl",
+        )
+        redundant = sum(1 for d in deltas.values() if d <= 0.001)
+        if redundant:
+            add(
+                "info",
+                "multimodal",
+                f"{redundant} of {len(deltas)} evaluators are individually "
+                "redundant given the rest (LOO drop ≤ 0.001) — they overlap with "
+                "stronger families rather than adding unique signal.",
+            )
+    if abl.get("fallback"):
+        add(
+            "warn",
+            "multimodal",
+            "The LOO ablation could not build the requested stacking model and "
+            "loudly fell back — deltas are re-baselined against the fallback model.",
+        )
+
+    # ── diagnostics ──
+    wf = (data.get("diagnostics") or {}).get("workflow") or {}
+    if wf.get("total_tasks"):
+        failed = wf.get("failed_tasks") or 0
+        retries = wf.get("retries") or 0
+        if failed and failed == retries:
+            add(
+                "good",
+                "diagnostics",
+                f"All {failed} task failures were transient and recovered by the "
+                f"retry ladder ({wf['total_tasks']} tasks total).",
+            )
+        elif failed:
+            add(
+                "warn",
+                "diagnostics",
+                f"{failed} task failures with {retries} retries — check the "
+                "process table for terminal failures.",
+            )
+    return F
 
 
 # %% ../nbs/06_report_data.ipynb #3cfb5b5a
@@ -445,7 +1163,77 @@ def build_report_data(
         "evaluators": evaluators,
         "multimodal": _build_multimodal(outdir / "models" / "multimodal"),
         "diagnostics": _build_diagnostics(trace_path),
+        # The diagram's geometry is markup injected by render_page; only the join keys
+        # and display names are data, so the blob stays PHI-checkable and layout-free.
+        "pipeline": {
+            "nodes": node_process_map(),
+            "names": node_names(),
+            "clusters": sorted(CLUSTERS),
+        },
     }
+    # Operating points come from the PRE-REGISTERED score (multimodal stacking,
+    # PRIMARY_MODEL) when the stacking matrix is available to supply sample ids —
+    # that is the published-outdir case. In-pipeline the matrix is not staged, so
+    # the report falls back to the primary evaluator's own score and says which
+    # score produced the numbers (never silently mixing the two).
+    stack_ops, ops_source = {}, None
+    stack_path = outdir / "models" / "multimodal" / "stacking_matrix.parquet"
+    stack_res = (
+        outdir / "models" / "multimodal" / f"stacking_{PRIMARY_MODEL}_results.json"
+    )
+    if stack_path.exists() and stack_res.exists():
+        try:
+            smx = pd.read_parquet(stack_path, columns=["_sample_id", "_label"])
+            probs = json.loads(stack_res.read_text()).get(
+                f"stacking_{PRIMARY_MODEL}_oof_probs"
+            )
+            if probs and len(probs) == len(smx):
+                stack_ops = _anchored_operating_points(
+                    smx["_label"].to_numpy(dtype=int),
+                    np.asarray(probs, dtype=float),
+                    list(smx["_sample_id"]),
+                    lab_by_id,
+                )
+                ops_source = f"multimodal stacking ({PRIMARY_MODEL}), OOF"
+        except (OSError, ValueError, KeyError) as exc:
+            log.warning("report_stacking_ops_unavailable", error=str(exc))
+
+    # Pre-registered primary (ANALYSIS_PLAN.md) alongside the run's argmax, plus the
+    # verification-bias triple — pooled negatives contain UNPAIRED samples that are
+    # unlabeled rather than verified, so the honest number is the verified-TN one.
+    primary = next(
+        (e for e in evaluators if e.get("evaluator") == PRIMARY_EVALUATOR), None
+    )
+    ranked = [e for e in evaluators if e.get("best_auc") is not None]
+    argmax = max(ranked, key=lambda e: e["best_auc"]) if ranked else None
+    if stack_ops:
+        ops = stack_ops
+    else:
+        # Fall back to the a-priori evaluator's own score; if that evaluator is not
+        # in this run, fall back to the argmax — always naming the score the numbers
+        # came from, never silently mixing scores or going blank.
+        fallback = primary or argmax
+        ops = (fallback or {}).get("operating_points") or {}
+        if ops:
+            which = (fallback or {}).get("evaluator")
+            extra = (
+                ""
+                if which == PRIMARY_EVALUATOR
+                else f"; a-priori {PRIMARY_EVALUATOR} absent from this run"
+            )
+            ops_source = f"single evaluator {which} (stacking scores not staged{extra})"
+    data["primary"] = {
+        "evaluator": PRIMARY_EVALUATOR,
+        "model": PRIMARY_MODEL,
+        "operating_points_source": ops_source,
+        "declared_in": "ANALYSIS_PLAN.md",
+        "auc": (primary or {}).get("best_auc"),
+        "holdout_auc": (primary or {}).get("holdout_auc"),
+        "argmax_evaluator": (argmax or {}).get("evaluator"),
+        "argmax_auc": (argmax or {}).get("best_auc"),
+        "operating_points": ops,
+    }
+    data["findings"] = _derive_findings(data)
     log.info(
         "report_data_built",
         n_evaluators=len(evaluators),
@@ -483,6 +1271,15 @@ def render_page(data: dict, out_html: str | Path) -> Path:
     template = files("kreview.templates").joinpath("report_page.html").read_text()
     page = template.replace("__PLOTLY_JS__", _po.get_plotlyjs(), 1)
     page = page.replace("__REPORT_DATA__", blob, 1)
+    # Both layouts are computed here, not in the browser: the page shows or hides a
+    # finished SVG, so the geometry that ships is the geometry that was verified.
+    page = page.replace(
+        "__PIPELINE_METHODS__",
+        pipeline_svg("overview", chips=False) + pipeline_svg("standard", chips=False),
+        1,
+    )
+    page = page.replace("__PIPELINE_DIAGNOSTICS__", pipeline_svg("standard"), 1)
+    page = page.replace("__PIPELINE_MINIS__", mini_store(), 1)
     assert_no_phi(page)
 
     out_html = Path(out_html)

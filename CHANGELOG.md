@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Report: GPU models missing from the deep-dive modal** (found on the v0.0.32 iris
+  report). The Nextflow report staging dumped every model-results JSON into
+  `models/cpu/`, but `build_report_data` reads GPU results from the exact path
+  `models/gpu/<eval>_gpu_model_results.json` — the modal silently showed only
+  lr/rf/xgb. Staging now routes by filename; guarded by a structural check in the
+  stub test and a fixture test.
+- **Report: the LOO ablation panel now actually renders.** The multimodal tab embedded
+  the leave-one-evaluator-out results but had no rendering code for the success case —
+  only the "absent" note. Added the contribution bar chart (ΔAUC when an evaluator is
+  removed, loud-fallback annotation when #97 substitution occurred).
+- **Multimodal LOO ablation no longer mints phantom evaluators** from two-part model
+  suffixes: `rsplit("_", 1)` parsed `X_tabicl_ft` into a phantom "X_tabicl", and the
+  v0.0.32 run ablated 52 "evaluators" instead of 26 — half the LOO stage's GPU compute
+  spent re-training the stacking model to drop single `_ft` columns. Discovery now
+  strips known model suffixes; the report filters phantom entries out of pre-fix files.
+- **Report: excluded samples no longer false-flag the patient-leakage banner.** The
+  counter grouped over every split value, so a patient with one modelable sample plus
+  one *excluded* sample (heme / insufficient data) counted as "in both splits" — the
+  v0.0.32 report showed a leakage banner for 14 such patients despite zero true
+  train/test leakage. The counter now considers train/test rows only.
+### Changed
+- **`multimodal_selection` default flipped `mi` → `grootcv`** (#96 closeout). The
+  confirmation criterion was met on the v0.0.32 iris run: stacking AUC within ±0.002 of
+  the boruta_shap baseline across all six models (tabicl 0.8556), raw-feature models
+  *better* for the in-context learners (tabicl_ft +0.010), grootcv+sanitization+GPU
+  ablation routing all verified in production — with the standing stability advantage
+  (Nogueira 0.85 vs 0.65) as the reason to switch. Applies to the Nextflow param, the
+  CLI options, and `multimodal_prep`/`multimodal_eval`; the low-level
+  `_select_multimodal_features` primitive keeps `mi`. **Behavior note:** the default
+  path now needs the `arfs` extra outside the shipped containers
+  (`pip install kreview[arfs]`); pass `--multimodal-selection mi` to keep the old
+  dependency-free behavior.
+
+## [Unreleased]
+
+### Fixed
+- **`kreview label` never accepted `--krewlyzer-dir`, so the `--min-fragments`
+  Insufficient-Data rule has never fired in production** (#122, found while implementing
+  the depth-covariate work). The label stage constructed `Paths(..., [])`, so metadata
+  never loaded, `total_fragments_pf` was never computed, and a labeling rule that is
+  configured, printed and documented silently did nothing — the "looks protected,
+  isn't" class from invariant #4. The option now exists, `label.nf`/both workflows/
+  `main.nf` pass it, and a missing depth source is **loud** (`depth_metadata_unavailable`
+  warning naming the impact). **Behaviour change**: runs that supply the krewlyzer dir
+  will now label low-depth, evidence-free samples `Undetermined` as designed, so label
+  counts shift slightly versus ≤ v0.0.32.
+
+### Added
+- **The report leads with a hero zone that answers the three questions a reader
+  arrives with**: *how good* (the pre-registered primary endpoint, large, with its
+  anchor and 99%-spec companion), *at what burden* (the **detection-vs-tumor-burden
+  curve** — Wilson CIs per VAF bin, with the interpolated LOD50 reported in both VAF
+  and tumor fraction), and *does combining help* (stacking lift over the best single
+  evaluator, with the meta-learner spread). The burden curve is the interpretive key
+  to every other number on the page and was previously computable only offline.
+- **The specificity/sensitivity trade-off is drawn, not tabulated**: the curve against
+  the tumor-informed anchor with the declared operating points marked, and the
+  donor-anchored value plotted as a one-sided arrow at 100% specificity — so the
+  max-statistic caveat is visible rather than a footnote.
+
+### Added
+- **Per-sample sequencing depth is a first-class label column** (#122):
+  `total_fragments_pf` is always emitted (NaN when unavailable — explicit unknown, never
+  a fabricated 0) and registered in `LABEL_META_COLS`, so it is available to every
+  downstream depth-confounding analysis and, per `ANALYSIS_PLAN.md`'s metadata firewall,
+  **never enters a model as a feature**.
+- **Dual-anchor operating points in the report** (#123). The report now leads with the
+  clinically meaningful pair: sensitivity at 98%/99% specificity against **tumor-informed
+  true negatives** (the MRD question, thresholds = quantiles of thousands of samples) and
+  the donor-anchored number demoted to an explicit **one-sided lower bound** (its
+  threshold is a max-statistic over ~55 donors, for which a symmetric bootstrap CI is
+  inconsistent by construction — the argmax donor drops out of resamples, so the
+  threshold can only fall). Operating points are computed from the **pre-registered**
+  score (multimodal stacking, `PRIMARY_MODEL`) when the stacking matrix is available and
+  the source is always named; otherwise they fall back to the a-priori evaluator (or the
+  run's argmax) and say so. Also added: the **verification-bias triple** (AUC against all
+  negatives vs verified true negatives vs healthy donors — pooled negatives include
+  unpaired samples that are *unlabeled*, not verified), **PPV at stated prevalences**, and
+  a **winner's-curse annotation** showing the a-priori primary evaluator beside the run's
+  argmax. All of it flows into the findings engine.
+
 ## [0.0.32] - 2026-08-18
 
 Scoreboard-contract release (#108, closing #107): the scoreboard stops fabricating values

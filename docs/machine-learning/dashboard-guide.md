@@ -11,12 +11,31 @@ files (`missing_detail`). A partial report is always loud, never silently incomp
 
 ---
 
-## The four tabs
+## The five tabs
 
 ### 1. Cohort & labels
 
-Sample counts, the 5-tier ctDNA label taxonomy (n and % per tier), cancer-type
-composition, and the **train/test split composition** by label tier.
+Opens on the **pre-registered primary endpoint** — sensitivity at 98% specificity against
+verified true negatives — with its patient-clustered interval, the burden-response curve
+behind it, and the stacking lift over the best single evaluator.
+
+Then sample counts, the 6-tier ctDNA label taxonomy (n and % per tier; four modelled, with
+`Undetermined` and `Insufficient Data` excluded), cancer-type composition, and the
+**train/test split composition** by label tier.
+
+!!! important "Which negatives the headline was scored against"
+    The **verification-bias ladder** shows the same model on the same positives against four
+    different negative classes: verified within-patient negatives, all negatives pooled,
+    unpaired negatives, and healthy donors. On the v0.0.32 cohort those span **13.1 AUC
+    points** — more than any modelling decision in the campaign. The verified-TN rung is the
+    defensible one; the donor rung is not less trustworthy so much as a different question
+    (between people rather than within a patient), and it is the comparison most screening
+    literature reports.
+
+The operating-points panel states both anchors, and its intervals come from a patient-clustered
+bootstrap with the threshold re-estimated inside every resample. Two things inflate that width
+and they are reported separately, because they are not the same size: clustering contributes a
+design effect of ~1.26, estimating the threshold from a finite negative set contributes ~11×.
 
 !!! warning "Patient-overlap warning"
     If any patient has samples in **both** train and test, a warning banner reports the
@@ -34,6 +53,14 @@ Sortable/filterable table of every evaluator: status badge (`OK` / `PARTIAL` / `
 operating-point sensitivities, and selection metadata.
 
 **Click any row** for the deep-dive modal:
+
+Subgroup AUCs in the modal carry a **per-class floor** — at least 30 positives *and* 30
+negatives, so a group cannot qualify on its negatives alone — a patient-clustered interval
+(computed for the pre-registered primary evaluator; every other subgroup table is
+exploratory), and the share of each group's positives that are tumour-confirmed, which
+ranges from about half to over ninety percent across histologies. Read the AUC against that
+share: a group whose positives are largely the ambiguous tier is discriminating a less
+certain set.
 
 | Section | What it tells you |
 |---|---|
@@ -60,8 +87,13 @@ says so explicitly instead of rendering blank.
 
 ### 4. Run diagnostics
 
-Process outcomes (tasks, failures, retry counts) and the longest tasks, from the Nextflow
-execution trace. The trace only exists after the workflow ends, so this tab is empty for
+Opens on the **pipeline run map** — the Nextflow DAG drawn with this run's task counts on
+each node. A node standing for several processes reports how many it covers rather than
+summing their task counts, and clicking it opens those processes with their failures,
+slowest task and peak RSS. A stage with no trace row reads *no trace*, never green.
+
+Below it, process outcomes (tasks, failures, retry counts) and the longest tasks, from the
+Nextflow execution trace. The trace only exists after the workflow ends, so this tab is empty for
 the in-pipeline render — re-run `kreview report` on the published output directory to
 fill it in:
 
@@ -69,6 +101,12 @@ fill it in:
 kreview report --outdir /path/to/outdir --out-dir reports \
   --trace /path/to/outdir/pipeline_info/execution_trace.txt
 ```
+
+### 5. Methods & interpretation
+
+The same DAG in structure form (two densities, no run status), the label definitions, how
+each operating point is derived, and the glossary terms behind the info icons that appear
+throughout the other tabs.
 
 ---
 

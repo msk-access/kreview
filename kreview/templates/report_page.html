@@ -17,7 +17,8 @@
   header { background:var(--panel); border-bottom:1px solid var(--line); padding:18px 28px; }
   header h1 { margin:0; font-size:20px; font-weight:650; }
   header .sub { color:var(--muted); font-size:12.5px; margin-top:3px; }
-  nav { display:flex; gap:4px; padding:0 20px; background:var(--panel); border-bottom:1px solid var(--line); }
+  nav { display:flex; flex-wrap:wrap; gap:4px; padding:0 20px; background:var(--panel);
+        border-bottom:1px solid var(--line); }
   nav button { border:0; background:none; padding:12px 14px; font:inherit; font-weight:550;
                color:var(--muted); cursor:pointer; border-bottom:2.5px solid transparent; }
   nav button.on { color:var(--accent); border-bottom-color:var(--accent); }
@@ -31,7 +32,21 @@
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:18px; }
   .panel h3 { margin:0 0 10px; font-size:14.5px; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-  @media (max-width:900px){ .grid2 { grid-template-columns:1fr; } }
+  /* Grid items default to min-width:auto, so a nowrap table's min-content width
+     forces its column wider than the panel and pushes the neighbouring chart past
+     the panel edge. min-width:0 lets columns shrink; the table scrolls instead. */
+  .grid2 > * { min-width:0; }
+  /* Column sizing lives in a class, never inline: an inline grid-template-columns
+     outranks the stacking media query below, so the row would stay side-by-side on
+     narrow viewports and push its own panel past the screen edge. */
+  .grid2.ops { grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); }
+  /* Cells are globally nowrap (right for dense numeric tables), but the operating-
+     points rows carry prose — let them wrap so the anchor column stays visible
+     instead of scrolling out of sight. */
+  .ops-tbl th, .ops-tbl td { white-space:normal; vertical-align:top; }
+  .ops-tbl td:first-child { font-weight:550; }
+  .grid2 .js-plotly-plot { width:100%; }
+  @media (max-width:900px){ .grid2, .grid2.ops { grid-template-columns:1fr; } }
   table { border-collapse:collapse; width:100%; font-size:13px; }
   th, td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
   th { color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em;
@@ -47,6 +62,23 @@
   .toolbar { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
   .toolbar input, .toolbar select { font:inherit; padding:7px 10px; border:1px solid var(--line);
       border-radius:8px; background:var(--panel); }
+  /* pipeline diagram: the SVG ships pre-laid-out, so the page only scales it */
+  .ci { font-size:.42em; font-weight:600; color:var(--muted); margin-left:10px;
+        letter-spacing:0; vertical-align:middle; white-space:nowrap; }
+  .pd-wrap { overflow-x:auto; }
+  svg.pd-dag { width:100%; min-width:760px; display:block; }
+  svg.pd-dag[hidden] { display:none; }
+  svg.pd-mini { width:100%; max-width:620px; display:block; margin:0 auto 14px; }
+  .pd-node[data-open="1"] { cursor:pointer; }
+  .pd-node[data-open="1"]:hover rect:nth-of-type(2) { stroke-width:2; }
+  .pd-node:focus { outline:none; }
+  .pd-node:focus-visible rect:nth-of-type(2) { stroke:var(--accent); stroke-width:2; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; font-size:12px; padding:6px 12px; border:0; border-right:1px solid var(--line);
+      background:var(--panel); color:var(--muted); cursor:pointer; }
+  .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed="true"] { background:var(--chip); color:var(--accent); font-weight:600; }
+  .pd-tbl td, .pd-tbl th { padding:6px 8px; border-bottom:1px solid var(--line); font-size:12.5px; }
   dialog { border:0; border-radius:14px; padding:0; max-width:960px; width:92vw; max-height:88vh;
            box-shadow:0 24px 70px rgba(20,25,60,.25); }
   dialog::backdrop { background:rgba(15,18,35,.45); }
@@ -60,9 +92,58 @@
   .dot { display:inline-block; width:9px; height:9px; border-radius:99px; margin-right:5px; }
   .note { background:#fff8ec; border:1px solid #f2dfb6; color:#7a5a13; border-radius:8px;
           padding:10px 14px; font-size:13px; margin-bottom:14px; }
+  details.how { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+                padding:10px 16px; margin-bottom:14px; font-size:13px; color:var(--muted); }
+  details.how summary { cursor:pointer; font-weight:600; color:var(--ink); font-size:13px; }
+  details.how p { margin:8px 0 2px; max-width:95ch; }
+  details.how b { color:var(--ink); }
+  .findings { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+  .finding { display:flex; gap:10px; align-items:baseline; background:var(--panel);
+             border:1px solid var(--line); border-left-width:4px; border-radius:8px;
+             padding:9px 14px; font-size:13px; }
+  .finding.good { border-left-color:var(--accent2); }
+  .finding.info { border-left-color:var(--accent); }
+  .finding.warn { border-left-color:var(--warn); background:#fff8ec; }
+  .finding .tag { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+                  color:var(--muted); white-space:nowrap; font-family:var(--mono); }
+  /* Status is never colour alone — the glyph carries it in greyscale too. */
+  .finding .glyph { font-weight:700; width:14px; text-align:center; flex:none; }
+  .finding.good .glyph { color:var(--accent2); }
+  .finding.info .glyph { color:var(--accent); }
+  .finding.warn .glyph { color:var(--warn); }
   .chips span { display:inline-block; background:var(--chip); color:var(--accent);
                 border-radius:7px; padding:2px 9px; margin:2px 4px 2px 0; font-size:12px; font-family:var(--mono); }
   .hbars .row { display:grid; grid-template-columns:210px 1fr 64px; gap:10px; align-items:center; margin:4px 0; }
+  .mono { font-family:var(--mono); font-size:12.5px; }
+  .infoi { display:inline-flex; align-items:center; justify-content:center; width:14px;
+           height:14px; border-radius:50%; border:1px solid var(--line); background:var(--chip);
+           color:var(--accent); font-size:9.5px; font-weight:700; font-style:normal;
+           cursor:pointer; margin-left:5px; vertical-align:middle; user-select:none;
+           line-height:1; font-family:var(--mono); }
+  .infoi:hover, .infoi:focus { border-color:var(--accent); outline:none;
+                               box-shadow:0 0 0 2px rgba(70,80,220,.18); }
+  #gloss { position:absolute; z-index:50; max-width:340px; background:var(--panel);
+           border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+           box-shadow:0 12px 34px rgba(20,25,60,.18); font-size:12.5px; line-height:1.5;
+           color:var(--ink); display:none; }
+  #gloss b { display:block; margin-bottom:4px; }
+  #gloss .ref { display:block; margin-top:7px; color:var(--muted); font-size:11.5px; }
+  #gloss a { color:var(--accent); }
+  .hero { display:grid; grid-template-columns:minmax(260px,1fr) minmax(0,1.35fr) minmax(0,1fr);
+          gap:16px; margin:16px 0 22px; }
+  .hero > * { min-width:0; }
+  .hero .js-plotly-plot { width:100%; }
+  @media (max-width:1000px){ .hero { grid-template-columns:1fr; } }
+  .hero .panel { margin:0; display:flex; flex-direction:column; }
+  .hero .eyebrow { color:var(--muted); font-size:11px; text-transform:uppercase;
+                   letter-spacing:.06em; font-weight:600; }
+  .hero .big { font-size:44px; font-weight:680; line-height:1.05; margin:6px 0 2px;
+               font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .hero .qual { color:var(--muted); font-size:13px; }
+  .hero .sub { margin-top:auto; padding-top:12px; color:var(--muted); font-size:12.5px;
+               border-top:1px solid var(--line); }
+  .hero .kv { display:flex; justify-content:space-between; gap:10px; padding:3px 0; font-size:13px; }
+  .hero .kv b { font-variant-numeric:tabular-nums; }
   .hbars .lbl { font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 </head>
@@ -74,6 +155,44 @@
 <nav id="nav"></nav>
 <main>
   <section class="tab" id="tab-overview">
+    <div class="hero" id="ov-hero" style="display:none">
+      <div class="panel">
+        <div class="eyebrow">Primary endpoint</div>
+        <div class="big" id="hero-sens">–</div>
+        <div class="qual" id="hero-sens-q"></div>
+        <div class="sub" id="hero-sens-sub"></div>
+      </div>
+      <div class="panel">
+        <div class="eyebrow">Detection depends on tumor burden</div>
+        <div id="hero-lod" style="height:212px"></div>
+        <div class="sub" id="hero-lod-sub"></div>
+      </div>
+      <div class="panel">
+        <div class="eyebrow">Does combining families help?</div>
+        <div class="big" id="hero-lift">–</div>
+        <div class="qual" id="hero-lift-q"></div>
+        <div class="sub" id="hero-lift-sub"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="ov-ops" style="display:none">
+      <h3>Operating points — two anchors, two questions</h3>
+      <div class="grid2 ops">
+        <div><table id="ov-ops-tbl" class="ops-tbl"></table></div>
+        <div><div id="ov-tradeoff" style="height:260px;width:100%"></div></div>
+      </div>
+      <div class="legend" id="ov-ops-note"></div>
+    </div>
+    <div class="panel" id="ov-vbias" style="display:none">
+      <h3>Which negatives you compare against</h3>
+      <div class="grid2 ops">
+        <div><div id="ov-vbias-chart" style="height:230px;width:100%"></div></div>
+        <div><table id="ov-vbias-tbl" class="ops-tbl"></table></div>
+      </div>
+      <div class="legend" id="ov-vbias-note"></div>
+    </div>
+    <div class="legend" style="margin-bottom:10px">Findings are derived automatically from this run. <a href="#" onclick="showTab('methods');return false;">Methods &amp; interpretation →</a></div>
+    <div class="findings" id="ov-findings"></div>
     <div class="cards" id="ov-cards"></div>
     <div id="ov-leak"></div>
     <div class="grid2">
@@ -82,7 +201,7 @@
     </div>
     <div class="grid2">
       <div class="panel"><div id="ov-cancers" style="height:340px"></div></div>
-      <div class="panel"><div id="ov-aucbars" style="height:340px"></div></div>
+      <div class="panel"><div id="ov-aucbars" style="height:620px"></div></div>
     </div>
   </section>
 
@@ -102,20 +221,136 @@
     <div id="mm-note"></div>
     <div class="cards" id="mm-cards"></div>
     <div class="grid2">
-      <div class="panel"><div id="mm-auc" style="height:280px"></div></div>
-      <div class="panel"><div id="mm-pr" style="height:280px"></div></div>
+      <div class="panel"><div id="mm-auc" style="height:380px"></div></div>
+      <div class="panel"><div id="mm-pr" style="height:380px"></div></div>
     </div>
     <div class="panel"><h3>Per-model detail</h3><div style="overflow:auto"><table id="mm-tbl"></table></div></div>
+    <div class="panel" id="mm-abl-panel" style="display:none">
+      <h3>Leave-one-evaluator-out ablation<span id="loo-ii"></span> — stacking-AUC drop when removed</h3>
+      <div id="mm-abl" style="height:420px"></div>
+    </div>
+  </section>
+
+
+  <section class="tab" id="tab-methods">
+    <div class="panel">
+      <h3>What runs, and in what order</h3>
+      <div class="toolbar">
+        <span class="cap">Detail</span>
+        <div class="seg" id="pd-seg">
+          <button data-level="overview" aria-pressed="true">Overview</button>
+          <button data-level="standard" aria-pressed="false">Every stage</button>
+        </div>
+      </div>
+      <div class="pd-wrap">__PIPELINE_METHODS__</div>
+      <p class="cap">One Nextflow DAG. Work scatters per feature family after extraction and gathers
+      once in fuse; open any node for the processes behind it.</p>
+    </div>
+    <div class="panel">
+      <h3>Definitions</h3>
+      <p><b>The 5-tier ctDNA label.</b> Each plasma sample is paired with the patient's tumor
+      sequencing where available. <b>True ctDNA+</b> — plasma variants confirmed against the
+      tumor. <b>Possible ctDNA+</b> — plasma evidence below the confirmation bar.
+      <b>Possible ctDNA−</b> — no qualifying plasma evidence. <b>Healthy Normal</b> — donors.
+      <b>Undetermined</b> — insufficient evidence, excluded from modeling. The binary target
+      is <b>True + Possible ctDNA+ vs the rest</b>.</p>
+      <p><b>Qualified true negative</b> (the MRD anchor) — a sample meeting all three:
+      label is <b>Possible ctDNA−</b>, the patient's tumor <b>was sequenced</b>
+      (<span class="mono">has_paired_impact</span>), and <b>zero</b> of that tumor's variants
+      were found in plasma (<span class="mono">n_impact_confirmed == 0</span>). We knew exactly
+      which mutations to hunt for, looked, and found none — a <i>verified</i> negative.
+      Samples in the same tier <b>without</b> paired tumor sequencing are <b>unlabeled, not
+      negative</b>: nobody looked, because nobody knew what to look for. Pooling the two
+      inflates performance (the report shows both numbers).</p>
+      <p><b>Two anchors, two questions.</b> Specificity against <b>qualified true negatives</b>
+      answers the MRD question — can we tell shedding from non-shedding <i>within cancer
+      patients</i>, who carry inflammation, treatment effects and comorbidity. Specificity
+      against <b>healthy donors</b> answers the screening question, and is a much easier
+      contrast. They are never blended.</p>
+      <p><b>Why the donor number is a one-sided bound.</b> Its threshold is the <i>maximum</i>
+      score among a few dozen donors. Resample those donors and the maximum can only fall, so
+      sensitivity can only rise — a symmetric confidence interval for it is inconsistent by
+      construction. The observed value is reported as a lower bound.</p>
+      <p><b>Out-of-fold (OOF).</b> Every curve, subgroup metric and operating point comes from
+      predictions made on samples the model did not train on. <b>Holdout</b> refits on all of
+      train and scores a patient-disjoint 20% — no patient contributes to both sides.</p>
+      <p><b>Winner's curse.</b> Picking the best of many evaluator×model cells inflates the
+      winner by roughly 0.01–0.02 AUC. The report shows the <i>pre-registered</i> primary
+      (declared in ANALYSIS_PLAN.md) beside the run's argmax for that reason.</p>
+    </div>
+    <div class="panel">
+      <h3>What each tab computes</h3>
+      <h3>Cohort &amp; labels</h3>
+<p>Every plasma sample is labeled on the <b>5-tier ctDNA taxonomy</b> by pairing it
+      with the patient's tumor sequencing (cBioPortal): <b>True ctDNA+</b> (variant-confirmed),
+      <b>Possible ctDNA+/−</b> (evidence-weighted), <b>Healthy Normal</b> (donors), and
+      <b>Undetermined</b> (insufficient data — excluded from modeling). The binary target for
+      every model is <b>True&nbsp;+&nbsp;Possible ctDNA+ vs the rest</b>.</p>
+      <p>The 80/20 train/test split is <b>grouped by patient</b> (StratifiedGroupKFold on
+      PATIENT_ID): all of a patient's timepoints land on one side, so holdout metrics are on
+      fully unseen patients. Healthy donors carry one sample each. The evaluator-AUC overview
+      ranks each feature family by its best model's cross-validated AUC.</p>
+      <h3>Scoreboard (single evaluators)</h3>
+<p>One row per <b>evaluator</b> — a fragmentomics feature family (fragment sizes,
+      TFBS/WPS nucleosome protection, end motifs, ATAC accessibility, …). Per evaluator:
+      features are selected by <b>mRMR</b> (top 10%, relevance − redundancy), then up to 7
+      models (LR/RF/XGB on CPU; TabPFN/TabICL ± fine-tuning on GPU) are trained with
+      stratified cross-validation. <b>Every metric comes from out-of-fold predictions</b> —
+      never refit-on-everything scores.</p>
+      <p><b>AUC (holdout)</b> refits on all of train and scores the patient-disjoint 20%;
+      <b>Δ overfit</b> = CV − holdout (≈0 means the CV numbers are honest).
+      <b>sens@100h</b> = sensitivity at the threshold set by the highest-scoring healthy
+      donor — the screening operating point. A “–” means that value's source artifact was
+      absent (recorded in the scoreboard's missing_fields, never silently defaulted). Click
+      any row for per-model detail, ROC/PR, calibration, decision curves and subgroups.</p>
+      <h3>Multimodal</h3>
+<p><b>Stacking</b>: each (evaluator, model) pair's out-of-fold probabilities become one
+      column of the stacking matrix (26 evaluators × up to 6 models). A <b>meta-learner</b>
+      (each row of the table is one) is then cross-validated on those columns — it learns to
+      weigh the evaluators' opinions, including where they disagree. <b>Raw</b> rows are the
+      same meta-learners trained directly on GrootCV-selected raw features from the fused
+      super-matrix — the no-stacking baseline.</p>
+      <p>The <b>leave-one-evaluator-out ablation</b> removes one evaluator's columns at a
+      time and retrains the best stacking model: the AUC drop is that family's <b>unique</b>
+      contribution (a small drop means its signal is covered by the others, not that it is
+      weak alone).</p>
+      <h3>Run diagnostics</h3>
+<p>Parsed from the Nextflow <b>execution trace</b>: one row per pipeline process with
+      task counts, failures and the maximum attempt number. Failures that equal the retry
+      count were <b>transient</b> (wall-time/memory) and recovered by the resource ladder;
+      the trace only exists after the workflow ends, so an in-pipeline render leaves this tab
+      empty until <code>kreview report</code> is re-run on the published output.</p>
+    </div>
+    <div class="panel">
+      <h3>Reading the numbers honestly</h3>
+      <p>Operating points before the tumor-informed anchor, and holdout numbers before the
+      patient-grouped split, are <b>not comparable</b> to later runs. Subgroup cells have an
+      n ≥ 30 floor. Absent values render as “–”: the source artifact was missing, and the
+      scoreboard's <span class="mono">missing_fields</span> column names which. The page
+      carries aggregates only — no sample identifiers, by construction.</p>
+    </div>
   </section>
 
   <section class="tab" id="tab-diagnostics">
     <div class="cards" id="dg-cards"></div>
+    <div class="panel">
+      <h3>Pipeline run map</h3>
+      <div class="note" id="pd-notrace" style="display:none"><b>No execution trace.</b> The trace is
+        written when the workflow finishes, so a report rendered inside the pipeline cannot see it.
+        Every stage below reads <i>no trace</i> — that is unknown, not success.</div>
+      <div class="pd-wrap">__PIPELINE_DIAGNOSTICS__</div>
+      <p class="cap">Each node carries this run's task counts. Nodes covering more than one Nextflow
+      process report how many — open one for its processes, their failures and their slowest task.</p>
+    </div>
     <div class="grid2">
       <div class="panel"><h3>Process outcomes</h3><div style="overflow:auto"><table id="dg-proc"></table></div></div>
       <div class="panel"><h3>Longest tasks</h3><div style="overflow:auto"><table id="dg-long"></table></div></div>
     </div>
   </section>
 </main>
+
+<div id="gloss" role="dialog" aria-label="term definition"></div>
+__PIPELINE_MINIS__
 
 <dialog id="dlg">
   <div class="dlg-head"><h2 id="dlg-t"></h2><button class="x" onclick="dlg.close()">close</button></div>
@@ -131,6 +366,82 @@ const fmt = (v, d=3) => v == null ? "–" : (+v).toFixed(d);
 const pct = v => v == null ? "–" : (100*v).toFixed(1) + "%";
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
+/* ── glossary: every term of art carries an info icon with a definition and, where
+   one exists, a pointer to the tool or to the Methods tab. Self-contained: the
+   popover is plain DOM, no external assets. */
+const GLOSSARY = {
+  grootcv: ["GrootCV (all-relevant selection)",
+    "Cross-validated LightGBM importances (SHAP) tested against shuffled shadow copies of every feature; a feature is kept only if it consistently beats its own shadow. Chosen as the multimodal default because its selections were the most reproducible across patient-grouped resamples.",
+    "arfs package · github.com/ThomasBury/arfs"],
+  mrmr: ["mRMR (per-evaluator selection)",
+    "Minimum Redundancy Maximum Relevance: greedily picks features with high relevance to the label (F-statistic) and low redundancy (Pearson correlation) with what is already selected.",
+    "github.com/smazzanti/mrmr"],
+  oof: ["Out-of-fold (OOF)",
+    "Every metric and curve here is computed from predictions made on samples the model did not train on, so nothing is scored by a model that has seen it.", null],
+  holdout: ["Holdout",
+    "A patient-disjoint 20% of the cohort: the model refits on the remaining 80% and scores it once. No patient appears on both sides, so holdout metrics are on entirely unseen people.", null],
+  overfit: ["\u0394 overfit",
+    "Cross-validated AUC minus holdout AUC. Near zero means the CV numbers are honest; a large positive gap means CV is optimistic.", null],
+  tiercomp: ["% confirmed positives",
+    "The share of a group's positive samples labelled True ctDNA+ — plasma variants confirmed against the patient's tumour — rather than Possible ctDNA+, where the plasma evidence fell below the confirmation bar. Groups differ: in this cohort it ranges from roughly half to over ninety percent. A lower share does not make a group's AUC wrong, but it does mean the positives being discriminated are a less certain set, and that difference is easy to mistake for biology.",
+    "See the Methods & interpretation tab"],
+  clusterci: ["Patient-clustered interval",
+    "A bootstrap that resamples whole patients rather than samples, and re-derives the operating threshold inside every resample. It therefore covers two things a binomial interval on sample counts covers neither of: repeated timepoints from one patient are not independent, and the threshold is an estimate from a finite negative set that moves when that set is resampled.",
+    "See the Methods & interpretation tab"],
+  tn: ["Verified true negative",
+    "A plasma sample labelled Possible ctDNA\u2212 whose patient HAD tumour sequencing and in which zero of that tumour's variants were found. We knew what to look for, looked, and found none. Samples without paired tumour sequencing are unlabelled, not negative.", null],
+  onesided: ["One-sided lower bound",
+    "The donor-anchored threshold is the maximum score among a few dozen healthy donors. Resampling can only remove the top donor, so the threshold can only fall and sensitivity only rise: the observed value is a floor, and a symmetric confidence interval for it is not valid.", null],
+  ppv: ["PPV at prevalence",
+    "Of samples the model flags, the share that are truly positive. It depends on how common ctDNA positivity is in the population being tested, so it is quoted at several plausible prevalences rather than at the cohort rate.", null],
+  tf: ["Tumour fraction (TF)",
+    "The share of plasma cfDNA originating from tumour. For a clonal heterozygous variant in a copy-neutral locus, TF \u2248 2 \u00d7 VAF, so a 5% max-VAF sample carries roughly 10% tumour fraction.", null],
+  lod: ["LOD50",
+    "The tumour burden at which half of positive samples are detected, read off the burden-response curve at the declared operating point.", null],
+  stacking: ["Stacking",
+    "Each evaluator\u00d7model pair contributes one column of out-of-fold probabilities; a meta-learner is then cross-validated on those columns, learning how to weigh the evaluators\u2014including where they disagree.", null],
+  rawscope: ["Raw",
+    "The same meta-learners trained directly on selected raw fragmentomics features instead of on evaluator predictions \u2014 the no-stacking baseline.", null],
+  loo: ["Leave-one-evaluator-out ablation",
+    "Remove one evaluator's columns, retrain the best stacking model, and record the AUC drop. That drop is the family's UNIQUE contribution: a small drop means its signal is covered by other families, not that it is weak alone.", null],
+  sens95: ["sens@95",
+    "Sensitivity when the threshold is set so that 95% of negatives are correctly called negative.", null],
+  sens100h: ["sens@100spec-healthy",
+    "Sensitivity at a threshold set by the highest-scoring healthy donor. High-variance with few donors \u2014 a single atypical donor moves it \u2014 and answers the screening question, not the MRD one.", null],
+  gpumodels: ["TabPFN / TabICL",
+    "Tabular foundation models that predict in-context rather than by fitting parameters per dataset; run on GPU alongside the classical LR/RF/XGB models.", "priorlabs.ai (TabPFN) · github.com/soda-inria/tabicl"],
+};
+const ii = key => GLOSSARY[key]
+  ? `<i class="infoi" role="button" tabindex="0" data-gloss="${key}" aria-label="What is ${esc(GLOSSARY[key][0])}?">i</i>`
+  : "";
+(function glossary() {
+  const box = $("#gloss");
+  const close = () => { box.style.display = "none"; };
+  document.addEventListener("click", ev => {
+    const icon = ev.target.closest?.(".infoi");
+    if (!icon) { if (!ev.target.closest?.("#gloss")) close(); return; }
+    const g = GLOSSARY[icon.dataset.gloss];
+    if (!g) return;
+    box.innerHTML = `<b>${esc(g[0])}</b>${esc(g[1])}` +
+      (g[2] ? `<span class="ref">${esc(g[2])}</span>` : `<span class="ref">See the Methods &amp; interpretation tab.</span>`);
+    const r = icon.getBoundingClientRect();
+    box.style.display = "block";
+    const w = box.offsetWidth;
+    box.style.left = Math.max(8, Math.min(window.scrollX + r.left - w / 2 + 7,
+                     window.scrollX + document.documentElement.clientWidth - w - 8)) + "px";
+    box.style.top = (window.scrollY + r.bottom + 8) + "px";
+    ev.stopPropagation();
+  });
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Escape") close();
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target.classList?.contains("infoi")) {
+      ev.preventDefault(); ev.target.click();
+    }
+  });
+  window.addEventListener("scroll", close, {passive: true});
+})();
+
+
 function hbars(el, obj, denom, color) {
   const max = Math.max(...Object.values(obj));
   el.innerHTML = Object.entries(obj).map(([k,v]) => `
@@ -139,34 +450,260 @@ function hbars(el, obj, denom, color) {
       <div class="num">${denom ? (100*v/denom).toFixed(1)+"%" : fmt(v,3)}</div></div>`).join("");
 }
 
-const PALETTE = ["#4650dc","#0ea472","#c8560f","#8636c9","#b8236e","#1272b8","#67707e"];
+/* Three colour scales, deliberately disjoint (a hue means exactly one thing):
+   CATEGORICAL — model/series identity. Excludes every STATUS hue so a series can
+                 never be mistaken for a verdict.
+   STATUS      — good / warning / bad only, always paired with a glyph so the
+                 meaning survives greyscale printing and colour-blind vision.
+   BURDEN      — sequential ramp, reserved for tumour-burden and depth encodings. */
+const PALETTE = ["#4650dc","#7a4fd6","#1272b8","#b0459b","#5a6b8c","#0f8f8f","#8a6d3b"];
+const STATUS  = {good:"#0a7a50", warn:"#c8560f", bad:"#c02942", info:"#4650dc"};
+const GLYPH   = {good:"✓", warn:"!", bad:"✕", info:"i"};
+const BURDEN  = ["#dfe3f7","#b9c0ee","#8f99e2","#6a74d8","#4650dc","#343cae","#252a80"];
+/* Wrap an assertion sentence so plotly renders it as a readable multi-line title. */
+const wrapTitle = (t, n=78) => {
+  const words = String(t).split(" "); const out = []; let line = "";
+  for (const w of words) {
+    if ((line + " " + w).trim().length > n) { out.push(line.trim()); line = w; }
+    else line += " " + w;
+  }
+  if (line.trim()) out.push(line.trim());
+  return out.join("<br>");
+};
 const PL_CFG = {displayModeBar: "hover", displaylogo: false, responsive: true,
   modeBarButtonsToRemove: ["lasso2d","select2d","autoScale2d"]};
-const PL_LAYOUT = (title, xlab, ylab, extra={}) => Object.assign({
+const PL_LAYOUT = (title, xlab, ylab, extra={}) => {
+  // Assertion titles wrap to several lines; a fixed top margin lets them sit on top
+  // of the plotting area, so the margin is derived from the line count.
+  const lines = title ? String(title).split("<br>").length : 0;
+  const base = Object.assign({
   title: {text: title, font: {size: 13.5}, x: 0.02, xanchor: "left"},
-  margin: {l: 52, r: 14, t: title ? 34 : 10, b: 40},
+  margin: {l: 52, r: 14, t: lines ? 12 + 23 * lines : 10, b: 40},
   xaxis: {title: {text: xlab, font: {size: 11.5}}, gridcolor: "#eceff5", zeroline: false},
   yaxis: {title: {text: ylab, font: {size: 11.5}}, gridcolor: "#eceff5", zeroline: false},
   font: {family: "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif", size: 11.5, color: "#66708a"},
   paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
   legend: {orientation: "h", y: -0.25, font: {size: 11}},
   hovermode: "closest",
-}, extra);
+  });
+  // Object.assign is shallow, so a caller passing {xaxis:{range:...}} used to replace
+  // the whole axis object and silently drop its title and gridcolor — that is why the
+  // evaluator chart lost its "AUC" label. Merge the nested objects one level deep so a
+  // partial override composes with the defaults instead of erasing them.
+  const NESTED = ["title", "xaxis", "yaxis", "legend", "font", "margin"];
+  Object.keys(extra).forEach(k => {
+    base[k] = NESTED.includes(k) && extra[k] && typeof extra[k] === "object" && !Array.isArray(extra[k])
+      ? Object.assign({}, base[k], extra[k])
+      : extra[k];
+  });
+  return base;
+};
+
+/* ── hero: how good · at what burden · does combining help ── */
+(function hero() {
+  const o = (R.primary || {}).operating_points || {};
+  const tn = o.tn_anchor, lod = o.lod, MM = R.multimodal || {};
+  if (!tn && !lod) return;
+  $("#ov-hero").style.display = "";
+
+  if (tn) {
+    const ci98 = tn.sens_at_98spec_ci, ci99 = tn.sens_at_99spec_ci;
+    $("#hero-sens").innerHTML = pct(tn.sens_at_98spec) +
+      (ci98 ? `<span class="ci">${pct(ci98[0])}–${pct(ci98[1])}</span>` : "");
+    $("#hero-sens-q").innerHTML =
+      `sensitivity at <b>98% specificity</b> against ${tn.n_tn?.toLocaleString?.() ?? "–"} ` +
+      `tumor-informed true negatives${ii("tn")}`;
+    $("#hero-sens-sub").innerHTML =
+      `${pct(tn.sens_at_99spec)}${ci99 ? ` [${pct(ci99[0])}–${pct(ci99[1])}]` : ""} ` +
+      `at 99% specificity · out-of-fold${ii("oof")}` +
+      (tn.n_tn_patients ? ` · ${tn.n_tn?.toLocaleString?.()} negatives from ` +
+        `${tn.n_tn_patients.toLocaleString()} patients${ii("clusterci")}` : "");
+  }
+
+  if (lod?.bins?.length) {
+    const b = lod.bins;
+    Plotly.newPlot("hero-lod", [
+      {x: b.map(r => r.label), y: b.map(r => r.detected), type: "scatter", mode: "lines+markers",
+       line: {color: PALETTE[0], width: 2.5, shape: "spline"},
+       marker: {size: 8, color: b.map((_, i) => BURDEN[Math.min(i, BURDEN.length - 1)]),
+                line: {color: PALETTE[0], width: 1}},
+       error_y: {type: "data", symmetric: false,
+                 array: b.map(r => r.ci[1] - r.detected), arrayminus: b.map(r => r.detected - r.ci[0]),
+                 color: "#aab3d0", thickness: 1.2, width: 3},
+       customdata: b.map(r => r.n),
+       hovertemplate: "max VAF %{x}<br><b>%{y:.1%}</b> detected · n=%{customdata}<extra></extra>"},
+    ], PL_LAYOUT("", "plasma max VAF", "detected",
+        {margin: {l: 48, r: 10, t: 6, b: 46}, yaxis: {tickformat: ".0%", range: [0, 1],
+         gridcolor: "#eceff5"}, xaxis: {tickangle: -35}}), PL_CFG);
+    $("#hero-lod-sub").innerHTML = lod.lod50_vaf
+      ? `50% detection${ii("lod")} at <b>${pct(lod.lod50_vaf)}</b> max VAF ` +
+        `(~${pct(lod.lod50_tumor_fraction)} tumor fraction${ii("tf")}) · at ${esc(lod.operating_point)}`
+      : `at ${esc(lod.operating_point)}`;
+  }
+
+  const stacks = Object.entries(MM.models || {})
+    .map(([m, d]) => [m, d.stacking?.auc]).filter(e => e[1] != null);
+  if (stacks.length && MM.best_single_auc != null) {
+    const best = stacks.reduce((a, b) => b[1] > a[1] ? b : a);
+    $("#hero-lift").textContent = "+" + fmt(best[1] - MM.best_single_auc);
+    $("#hero-lift-q").innerHTML =
+      `AUC over the best single evaluator — ${fmt(best[1])} stacking (${esc(best[0])}) ` +
+      `vs ${fmt(MM.best_single_auc)} for ${esc(MM.best_single_evaluator ?? "–")}`;
+    $("#hero-lift-sub").innerHTML =
+      `${stacks.length} meta-learners, spread ${fmt(Math.max(...stacks.map(s => s[1])) - Math.min(...stacks.map(s => s[1])))} AUC ` +
+      `· ${MM.n_evaluators ?? "–"} evaluators combined`;
+  }
+})();
+
+/* ── operating points (dual anchor, #123) ─────────────────── */
+const P = R.primary || {};
+(function ops() {
+  const o = P.operating_points || {};
+  const tn = o.tn_anchor, don = o.donor_anchor;
+  if (!tn && !don) return;
+  $("#ov-ops").style.display = "";
+  const ppv = tn?.ppv_at_98spec || {};
+  const ciTxt = c => c ? ` [${pct(c[0])}–${pct(c[1])}]` : "";
+  const rows = [];
+  if (tn) {
+    rows.push(["MRD — within cancer patients", "98% spec vs verified true negatives",
+      pct(tn.sens_at_98spec) + ciTxt(tn.sens_at_98spec_ci),
+      `${tn.n_tn?.toLocaleString?.() ?? "–"} negatives` +
+      (tn.n_tn_patients ? ` / ${tn.n_tn_patients.toLocaleString()} patients` : "")]);
+    rows.push(["MRD — stricter", "99% spec vs verified true negatives",
+      pct(tn.sens_at_99spec) + ciTxt(tn.sens_at_99spec_ci), "same anchor"]);
+  }
+  if (don) {
+    rows.push(["Screening — vs healthy donors", "100% spec (one-sided lower bound)" + ii("onesided"),
+      "≥ " + pct(don.sens_at_100spec_lower_bound), `${don.n_donors} donors — max-statistic threshold`]);
+  }
+  $("#ov-ops-tbl").innerHTML = `<tr><th>question</th><th>operating point</th>` +
+    `<th>sensitivity</th><th>anchor${ii("tn")}</th></tr>` +
+    rows.map(r => `<tr><td>${esc(r[0])}</td><td>${r[1]}</td><td class="num">${esc(r[2])}</td>` +
+      `<td>${esc(r[3])}</td></tr>`).join("");
+  const c = o.sens_spec_curve;
+  if (c?.spec?.length) {
+    const marks = [[0.98, tn?.sens_at_98spec], [0.99, tn?.sens_at_99spec]].filter(m => m[1] != null);
+    Plotly.newPlot("ov-tradeoff", [
+      {x: c.spec, y: c.sens, mode: "lines", line: {color: PALETTE[0], width: 2.5},
+       name: "vs verified TN",
+       hovertemplate: "spec %{x:.1%} → sens %{y:.1%}<extra></extra>"},
+      {x: marks.map(m => m[0]), y: marks.map(m => m[1]), mode: "markers+text", showlegend: false,
+       marker: {size: 11, color: PALETTE[0], line: {color: "#fff", width: 2}},
+       text: marks.map(m => pct(m[1])), textposition: "top right", textfont: {size: 11},
+       hovertemplate: "declared operating point<br>spec %{x:.0%} → sens %{y:.1%}<extra></extra>"},
+    ].concat(don?.sens_at_100spec_lower_bound != null ? [{
+       // STATUS.warn is deliberate here: this mark is a caveat annotation (the value
+       // is a one-sided bound), not a data series — and it carries a text label so
+       // the meaning does not depend on colour.
+       x: [1.0], y: [don.sens_at_100spec_lower_bound], mode: "markers+text", showlegend: false,
+       marker: {size: 12, symbol: "arrow-up", color: STATUS.warn},
+       text: ["≥ one-sided"], textposition: "middle left",
+       textfont: {size: 10.5, color: STATUS.warn},
+       hovertemplate: `donor anchor: ≥%{y:.1%} (one-sided bound, ${don.n_donors} donors)<extra></extra>`}] : []),
+      PL_LAYOUT("Sensitivity vs specificity on the tumor-informed anchor", "specificity", "sensitivity",
+        {margin: {l: 52, r: 14, b: 44}, xaxis: {tickformat: ".0%", gridcolor: "#eceff5"},
+         yaxis: {tickformat: ".0%", gridcolor: "#eceff5"}, showlegend: false}), PL_CFG);
+  }
+  const notes = [];
+  if (Object.keys(ppv).length) notes.push(`PPV${ii("ppv")} at 98% spec: ` +
+    Object.entries(ppv).sort().map(([k,v]) => `${pct(v)} at ${pct(+k)} prevalence`).join(" · ") + ".");
+  // the AUC-by-negative-class list used to live here as a clause; it has its own panel now
+  if (tn?.sens_at_98spec_deff != null) {
+    // The counter-intuitive part, so it is stated where the numbers are: the interval is
+    // wide because the THRESHOLD is estimated from a finite negative set, not because
+    // samples cluster within patients. Clustering is the term everyone argues about and
+    // it is the smaller one by an order of magnitude.
+    notes.push(`Intervals are a patient-clustered bootstrap with the threshold ` +
+      `re-estimated in every resample${ii("clusterci")}. Clustering inflates the variance ` +
+      `<b>${fmt(tn.sens_at_98spec_deff, 2)}×</b>; estimating the threshold inflates it ` +
+      `<b>${fmt(tn.sens_at_98spec_threshold_inflation, 1)}×</b> — the second dominates, so a ` +
+      `plain binomial interval would understate the width by roughly that factor.`);
+  }
+  $("#ov-ops-note").innerHTML = notes.join(" ");
+})();
+
+/* Findings tagged with a chart become that chart's title (assertion titles): the
+   claim sits on its own evidence, and the findings list keeps only what has no
+   chart home. */
+const CHART_CLAIM = Object.fromEntries(
+  (R.findings || []).filter(f => f.chart).map(f => [f.chart, f]));
+const claimTitle = (id, fallback) =>
+  CHART_CLAIM[id] ? wrapTitle(CHART_CLAIM[id].text) : fallback;
+
+/* ── automatic findings (derived in the data layer, aggregates only) ── */
+const TAB_LABEL = {overview:"cohort", scoreboard:"single-evaluator", multimodal:"multimodal", diagnostics:"pipeline"};
+$("#ov-findings").innerHTML = (R.findings || []).filter(f => !f.chart).map(f =>
+  `<div class="finding ${esc(f.kind)}"><span class="glyph" aria-hidden="true">${GLYPH[f.kind] || "i"}</span>` +
+  `<span class="tag">${esc(TAB_LABEL[f.tab] || f.tab)}</span>` +
+  `<span>${esc(f.text)}</span></div>`).join("") ||
+  `<div class="finding info"><span>No automatic findings for this run.</span></div>`;
 
 /* ── header + nav ────────────────────────────────────────── */
 $("#ttl").textContent = R.meta.title + " — v" + R.meta.version;
 $("#sub").textContent = `${R.meta.run} · ${R.cohort.n_samples.toLocaleString()} samples · ` +
-  `${R.evaluators.length} evaluators · ${R.meta.generated_note}`;
+  `${R.evaluators.length} evaluators · aggregates only, no sample identifiers`;
 const TABS = [["overview","Cohort & labels"],["scoreboard","Scoreboard"],
-              ["multimodal","Multimodal"],["diagnostics","Run diagnostics"]];
+              ["multimodal","Multimodal"],["diagnostics","Run diagnostics"],
+              ["methods","Methods & interpretation"]];
 $("#nav").innerHTML = TABS.map(([id,l],i) =>
   `<button class="${i?'':'on'}" onclick="showTab('${id}',this)">${l}</button>`).join("");
 function showTab(id, btn) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("on"));
-  document.querySelectorAll("nav button").forEach(b => b.classList.remove("on"));
-  $("#tab-"+id).classList.add("on"); btn.classList.add("on");
+  const buttons = [...document.querySelectorAll("nav button")];
+  buttons.forEach(b => b.classList.remove("on"));
+  $("#tab-"+id).classList.add("on");
+  // btn is absent when called from an in-page link — find the matching nav button
+  // so the highlight always follows the visible tab.
+  const target = btn || buttons[TABS.findIndex(t => t[0] === id)];
+  if (target) target.classList.add("on");
+  // Plots created while their tab was hidden have no measurable container width, and
+  // switching tabs fires no resize event — so size them on reveal.
+  $("#tab-"+id).querySelectorAll(".js-plotly-plot").forEach(el => {
+    fitPlot(el);
+    plotObserver.observe(el);
+  });
+  window.scrollTo({top: 0, behavior: "instant"});
 }
 $("#tab-overview").classList.add("on");
+
+// Plotly sizes a chart to its container at draw time and only listens for WINDOW
+// resizes. A chart drawn in a narrow/hidden container (grid cell, hidden tab,
+// dialog) therefore keeps a stale width and can spill outside its panel. Observing
+// each container makes every chart track its own box, whenever it changes.
+// Plotly.Plots.resize() is unreliable here: on charts whose container was narrower
+// than plotly's 700px default at draw time it returns without error and leaves
+// _fullLayout.width untouched, so the SVG keeps overflowing its panel. Measuring the
+// container and relayouting explicitly always works.
+const fitPlot = el => {
+  const w = el.clientWidth, h = el.clientHeight;
+  if (w > 0 && h > 0 && el._fullLayout &&
+      (Math.abs(el._fullLayout.width - w) > 1 || Math.abs(el._fullLayout.height - h) > 1)) {
+    Plotly.relayout(el, {width: w, height: h});
+  }
+};
+const plotObserver = new ResizeObserver(entries => {
+  for (const e of entries) {
+    if (e.contentRect.width > 0 && e.target.classList.contains("js-plotly-plot")) {
+      fitPlot(e.target);
+    }
+  }
+});
+const observePlots = () =>
+  document.querySelectorAll(".js-plotly-plot").forEach(el => {
+    // Fit once on registration too: a chart drawn before layout settled keeps
+    // plotly's default 700px SVG inside a narrower container, and the observer
+    // alone never fires because the container itself never changes size.
+    fitPlot(el);
+    plotObserver.observe(el);
+  });
+// Charts are created below. Plotly finishes drawing some of them asynchronously,
+// so a single pass can run before the last chart exists and leave it at plotly's
+// default 700px SVG inside a narrower panel. Register after the current task, then
+// again after paint and on load — resizing is idempotent, so extra passes are free.
+setTimeout(observePlots, 0);
+requestAnimationFrame(() => requestAnimationFrame(observePlots));
+window.addEventListener("load", observePlots);
 
 /* ── overview ────────────────────────────────────────────── */
 const C = R.cohort;
@@ -174,8 +711,11 @@ const bestEv = [...R.evaluators].sort((a,b) => (b.best_auc||0)-(a.best_auc||0))[
 $("#ov-cards").innerHTML = [
   ["Samples", C.n_samples.toLocaleString(), `${C.n_patients.toLocaleString()} patients`],
   ["True ctDNA+", (C.label_counts["True ctDNA+"]||0).toLocaleString(), "tier-1 positives"],
-  ["Healthy normals", (C.label_counts["Healthy Normal"]||0).toLocaleString(), "spec@100 anchor"],
-  ["Best evaluator", bestEv ? bestEv.evaluator : "–", bestEv ? `AUC ${fmt(bestEv.best_auc)} (${bestEv.best_model})` : ""],
+  ["Healthy normals", (C.label_counts["Healthy Normal"]||0).toLocaleString(), "screening anchor (one-sided)"],
+  ["Verified true negatives", (P.operating_points?.tn_anchor?.n_tn ?? "–").toLocaleString?.() ?? "–",
+     P.operating_points?.tn_anchor?.n_tn_patients ? `${P.operating_points.tn_anchor.n_tn_patients.toLocaleString()} patients · MRD anchor` : "MRD anchor"],
+  ["Primary evaluator", P.evaluator ?? "–",
+     `a priori · AUC ${fmt(P.auc)}${P.argmax_evaluator && P.argmax_evaluator !== P.evaluator ? ` · run argmax ${esc(P.argmax_evaluator)} ${fmt(P.argmax_auc)}` : ""}`],
   ["Best stacking AUC", fmt(Math.max(...Object.values(R.multimodal.models).map(m => m.stacking?.auc||0))),
      `vs best single ${fmt(R.multimodal.best_single_auc)}`],
 ].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
@@ -211,21 +751,169 @@ $("#ov-cards").innerHTML = [
   }], PL_LAYOUT(`Cancer types (top ${ct.length}; +${C.cancer_types_other.toLocaleString()} other)`,
        "samples", "", {margin:{l:190,r:14,t:34,b:40}}), PL_CFG);
 
+  // AUC is drawn the same way everywhere in this report: a dot with its 95% CI on a
+  // shared axis (see the multimodal chart). Bars imply a meaningful zero and hide
+  // uncertainty; for a discrimination measure both are wrong.
   const evs = [...R.evaluators].sort((a,b) => (a.best_auc||0)-(b.best_auc||0));
-  Plotly.newPlot("ov-aucbars", [{
-    type: "bar", orientation: "h",
-    y: evs.map(e=>e.evaluator), x: evs.map(e=>e.best_auc||0),
-    marker: {color: "#4650dc"},
-    hovertemplate: "<b>%{y}</b><br>CV AUC %{x:.3f} (%{customdata[0]})" +
-      "<br>holdout %{customdata[1]:.3f} · sens@95 %{customdata[2]:.1%}<extra></extra>",
-    customdata: evs.map(e => [e.best_model, e.holdout_auc, e.sens_at_95spec]),
-  }], PL_LAYOUT("Evaluator AUC (best model, CV) — hover for holdout & sens@95", "AUC", "",
-       {margin:{l:190,r:14,t:34,b:40}, xaxis:{range:[0.5,0.9], gridcolor:"#eceff5"}}), PL_CFG);
+  const ci = e => (e.model_metrics && e.best_model && e.model_metrics[e.best_model]
+                   && e.model_metrics[e.best_model].ci) || [null, null];
+  Plotly.newPlot("ov-aucbars", [
+    {x: evs.map(e => e.holdout_auc), y: evs.map(e => e.evaluator), mode: "markers",
+     name: "holdout", marker: {size: 7, symbol: "diamond-open", color: PALETTE[4]},
+     hovertemplate: "<b>%{y}</b><br>holdout AUC %{x:.3f}<extra></extra>"},
+    {x: evs.map(e => e.best_auc || 0), y: evs.map(e => e.evaluator), mode: "markers",
+     name: "CV (best model)",
+     error_x: {type: "data", symmetric: false,
+       array: evs.map(e => (ci(e)[1] ?? e.best_auc ?? 0) - (e.best_auc ?? 0)),
+       arrayminus: evs.map(e => (e.best_auc ?? 0) - (ci(e)[0] ?? e.best_auc ?? 0)),
+       color: "#aab3d0", thickness: 1.2, width: 3},
+     marker: {size: 8, color: PALETTE[0]},
+     customdata: evs.map(e => [e.best_model, e.sens_at_95spec]),
+     hovertemplate: "<b>%{y}</b><br>CV AUC %{x:.3f} (%{customdata[0]})" +
+       "<br>sens@95 %{customdata[1]:.1%}<extra></extra>"},
+  ], PL_LAYOUT(claimTitle("ov-aucbars", "Evaluator AUC — dot = CV (best model), bar = 95% CI, diamond = holdout"),
+       "AUC", "", {margin:{l:190,r:14,b:78}, xaxis:{range:[0.5,0.95], gridcolor:"#eceff5"},
+       // every evaluator gets its own tick: plotly thins category labels on a short
+       // plot, and the row it dropped first was the best evaluator at the top
+       yaxis:{tickmode:"linear", dtick:1, automargin:true, tickfont:{size:10.5}},
+       // the legend clears the restored "AUC" axis title, which sits ~30px below the axis
+       showlegend:true, legend:{orientation:"h", y:-0.105, font:{size:10.5}}}), PL_CFG);
 
   if (C.patients_in_both_splits > 0) $("#ov-leak").innerHTML =
     `<div class="note"><b>⚠ Patient overlap between splits:</b> ${C.patients_in_both_splits.toLocaleString()} ` +
     `patients have samples in BOTH train and test. Holdout metrics are optimistically biased — ` +
     `the split should be patient-level, not sample-level.</div>`;
+})();
+
+/* ── verification-bias ladder ────────────────────────────── */
+(function vbias() {
+  const vb = (P.operating_points || {}).verification_bias;
+  if (!vb?.rungs?.length) return;
+  $("#ov-vbias").style.display = "";
+  // ascending, so the ladder climbs from the defensible number to the flattering one
+  const r = [...vb.rungs].sort((a, b) => a.auc - b.auc);
+  const isDef = x => x.key === vb.defensible;
+  const colour = x => isDef(x) ? STATUS.good : (x.key === "donors" ? STATUS.warn : PALETTE[4]);
+
+  Plotly.newPlot("ov-vbias-chart", [{
+    x: r.map(x => x.auc), y: r.map(x => x.label), mode: "markers", showlegend: false,
+    error_x: {type: "data", symmetric: false,
+      array: r.map(x => (x.ci?.[1] ?? x.auc) - x.auc),
+      arrayminus: r.map(x => x.auc - (x.ci?.[0] ?? x.auc)),
+      color: "#aab3d0", thickness: 1.2, width: 4},
+    marker: {size: r.map(x => isDef(x) ? 13 : 9), color: r.map(colour),
+             line: {color: "#fff", width: r.map(x => isDef(x) ? 2 : 0)}},
+    customdata: r.map(x => [x.n_neg, x.n_neg_patients ?? "–"]),
+    hovertemplate: "<b>%{y}</b><br>AUC %{x:.4f}<br>%{customdata[0]:,} negatives " +
+      "from %{customdata[1]:,} patients<extra></extra>",
+  }], PL_LAYOUT(
+    claimTitle("ov-vbias-chart",
+      `Anchor choice moves the headline ${fmt(vb.span, 3)} AUC — more than any modeling decision`),
+    "AUC", "", {margin: {l: 168, r: 20, b: 40},
+      yaxis: {tickmode: "linear", dtick: 1, automargin: true, tickfont: {size: 10.5}}}), PL_CFG);
+
+  $("#ov-vbias-tbl").innerHTML =
+    `<tr><th>negatives</th><th>n</th><th>AUC</th><th>95% CI${ii("clusterci")}</th></tr>` +
+    r.map(x => `<tr><td>${esc(x.label)}${isDef(x) ? " <b>(defensible)</b>" : ""}` +
+      `<div class="cap">${esc(x.note)}</div></td>` +
+      `<td class="num">${x.n_neg.toLocaleString()}</td>` +
+      `<td class="num">${fmt(x.auc)}</td>` +
+      `<td class="num">${x.ci ? `${fmt(x.ci[0])}–${fmt(x.ci[1])}` : "–"}</td></tr>`).join("");
+
+  const def = r.find(isDef), don = r.find(x => x.key === "donors");
+  $("#ov-vbias-note").innerHTML =
+    `Every rung scores the same model on the same positives — only the negative class changes.` +
+    (def && don
+      ? ` Against verified within-patient negatives it reads <b>${fmt(def.auc)}</b>; against
+         healthy donors, <b>${fmt(don.auc)}</b>. The donor number is not less trustworthy so much
+         as a different question — between people rather than within a patient — and it is the
+         comparison most screening literature reports, which is why a reader who sees only one of
+         these should see this one alongside it.`
+      : "");
+})();
+
+/* ── pipeline diagram ────────────────────────────────────── */
+(function pipeline() {
+  const P = R.pipeline || {}, PROCS = P.nodes || {}, NAMES = P.names || {};
+  const DG = (R.diagnostics || {}).processes || {}, hasTrace = Object.keys(DG).length > 0;
+  const GOOD = "#0a7a50", WARN = STATUS.warn;
+
+  // Status is written into slots the SVG already reserved — nothing is laid out here.
+  document.querySelectorAll("#tab-diagnostics .pd-node").forEach(g => {
+    const procs = PROCS[g.dataset.node] || [];
+    const txt = g.querySelector(".pd-chiptext"), chip = g.querySelector(".pd-chip");
+    if (!txt) return;
+    const rows = procs.map(x => DG[x]).filter(Boolean);
+    if (!hasTrace || !rows.length) {
+      // absent trace row is unknown, never green
+      txt.textContent = "no trace"; txt.setAttribute("fill", "#8a93a8");
+      chip.setAttribute("fill", "rgba(26,34,51,0.04)"); chip.setAttribute("stroke", "rgba(26,34,51,0.15)");
+      return;
+    }
+    const lost = rows.some(r => r.n !== r.completed);
+    // A node covering several processes reports how many, not the sum of their task
+    // counts: "78/79" across three processes is true and unusable.
+    txt.textContent = procs.length > 1 ? `${procs.length} procs`
+                    : (lost ? `${rows[0].completed}/${rows[0].n}` : `${rows[0].completed} ok`);
+    txt.setAttribute("fill", lost ? WARN : GOOD);
+    chip.setAttribute("fill", lost ? "rgba(200,86,15,0.10)" : "rgba(10,122,80,0.08)");
+    chip.setAttribute("stroke", lost ? "rgba(200,86,15,0.40)" : "rgba(10,122,80,0.35)");
+  });
+  $("#pd-notrace").style.display = hasTrace ? "none" : "block";
+
+  // One gesture in both tabs: the panel's content differs, the affordance does not.
+  const openNode = key => {
+    const procs = PROCS[key] || []; if (!procs.length) return;
+    const mini = document.querySelector(`#pd-minis [data-cluster="${key}"]`);
+    let html = mini ? mini.innerHTML : "";
+    if (hasTrace) {
+      html += `<table class="pd-tbl"><thead><tr><th>Process</th><th>Tasks</th><th>Completed</th>` +
+              `<th>Failed</th><th>Attempts</th><th>Slowest</th><th>Peak RSS</th></tr></thead><tbody>` +
+        procs.map(x => {
+          const r = DG[x];
+          if (!r) return `<tr><td>${esc(x)}</td><td colspan="6">not in trace</td></tr>`;
+          const f = r.failed ? ` style="color:${WARN};font-weight:600"` : "";
+          return `<tr><td>${esc(x.replace("KREVIEW_", ""))}</td><td>${r.n}</td><td>${r.completed}</td>` +
+                 `<td${f}>${r.failed}</td><td>${r.max_attempt}</td><td>${esc(r.slowest ?? "–")}</td>` +
+                 `<td>${esc(r.peak_rss ?? "–")}</td></tr>`;
+        }).join("") + `</tbody></table>`;
+    } else {
+      html += `<ul>${procs.map(x => `<li><code>${esc(x)}</code></li>`).join("")}</ul>` +
+              `<p class="cap">No execution trace loaded, so this run's task counts are unavailable.</p>`;
+    }
+    $("#dlg-t").textContent = NAMES[key] || key;
+    $("#dlg-b").innerHTML = html;
+    // the sub-topology carries the same per-process status as the table
+    document.querySelectorAll("#dlg-b .pd-mnode").forEach(g => {
+      const r = DG[g.dataset.proc], t = g.querySelector(".pd-mchip");
+      if (!t) return;
+      if (!r) { t.textContent = hasTrace ? "no trace" : ""; return; }
+      const ok = r.n === r.completed;
+      t.textContent = ok ? `${r.completed} ok` : `${r.completed}/${r.n}`;
+      t.setAttribute("fill", ok ? GOOD : WARN);
+    });
+    $("#dlg").showModal();
+  };
+  document.querySelectorAll(".pd-node").forEach(g => {
+    if (!(PROCS[g.dataset.node] || []).length) return;
+    g.dataset.open = "1"; g.setAttribute("tabindex", "0"); g.setAttribute("role", "button");
+    g.setAttribute("aria-label", `${NAMES[g.dataset.node] || g.dataset.node} — open processes`);
+    g.addEventListener("click", () => openNode(g.dataset.node));
+    g.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openNode(g.dataset.node); }
+    });
+  });
+
+  const seg = $("#pd-seg");
+  if (seg) seg.addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    [...seg.querySelectorAll("button")].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    // `hidden` is an HTMLElement property; on an SVG element it must be the attribute
+    document.querySelectorAll("#tab-methods svg.pd-dag").forEach(
+      svg => svg.toggleAttribute("hidden", svg.dataset.level !== b.dataset.level));
+  });
+  document.querySelectorAll("#tab-methods svg.pd-dag").forEach(
+    svg => svg.toggleAttribute("hidden", svg.dataset.level !== "overview"));
 })();
 
 /* ── scoreboard ──────────────────────────────────────────── */
@@ -234,16 +922,16 @@ const COLS = [
   ["status","Status", v=>`<span class="badge ${v==='OK'?'b-ok':v==='PARTIAL'?'b-warn':'b-bad'}">${v||'–'}</span>`],
   ["best_model","Best", v=>`<span class="badge b-mut">${v||'–'}</span>`],
   ["best_auc","AUC (CV)", v=>`<span class="num">${fmt(v)}</span>`],
-  ["holdout_auc","AUC (holdout)", v=>`<span class="num">${fmt(v)}</span>`],
-  ["auc_drop","Δ overfit", v=>`<span class="num">${fmt(v)}</span>`],
-  ["sens_at_95spec","Sens@95", v=>`<span class="num">${pct(v)}</span>`],
-  ["best_sens_100spec_healthy","Sens@100h", v=>`<span class="num">${pct(v)}</span>`],
+  ["holdout_auc","AUC (holdout)" + ii("holdout"), v=>`<span class="num">${fmt(v)}</span>`],
+  ["auc_drop","Δ overfit" + ii("overfit"), v=>`<span class="num">${fmt(v)}</span>`],
+  ["sens_at_95spec","Sens@95" + ii("sens95"), v=>`<span class="num">${pct(v)}</span>`],
+  ["best_sens_100spec_healthy","Sens@100h" + ii("sens100h"), v=>`<span class="num">${pct(v)}</span>`],
   ["n_selected_features","#feat", v=>`<span class="num">${v??'–'}</span>`],
-  ["selection_method","Selection", v=>esc(v||'–')],
+  ["selection_method","Selection" + ii("mrmr"), v=>esc(v||'–')],
 ];
 let sortKey = "best_auc", sortDir = -1;
 $("#tbl thead").innerHTML = "<tr>" + COLS.map(([k,l]) =>
-  `<th onclick="sortBy('${k}')">${l} <span class="arr" id="arr-${k}"></span></th>`).join("") + "</tr>";
+  `<th onclick="if(!event.target.closest('.infoi'))sortBy('${k}')">${l} <span class="arr" id="arr-${k}"></span></th>`).join("") + "</tr>";
 $("#fmodel").innerHTML += [...new Set(R.evaluators.map(e=>e.best_model).filter(Boolean))]
   .map(m => `<option>${m}</option>`).join("");
 function sortBy(k) { sortDir = (k===sortKey) ? -sortDir : -1; sortKey = k; renderTable(); }
@@ -301,11 +989,23 @@ function openEval(name) {
       <div class="chips">${e.top_features.map(f=>`<span>${esc(f)}</span>`).join("")}</div></div>`;
 
   if (e.breakdowns?.cancer_type) {
-    html += `<div class="panel"><h3>Subgroup AUC by cancer type (n ≥ 30, CV out-of-fold)</h3>
-      <div style="overflow:auto"><table><tr><th>cancer type</th><th>n</th><th>positives</th><th>AUC</th></tr>` +
+    const anyCi = Object.values(e.breakdowns.cancer_type).some(d => d.ci);
+    html += `<div class="panel"><h3>Subgroup AUC by cancer type</h3>
+      <div class="legend" style="margin-bottom:8px">At least 30 <i>per class</i>, CV out-of-fold.
+      <b>% confirmed</b> is the share of this group's positives that are tumour-confirmed
+      (True ctDNA+)${ii("tiercomp")} — a group whose positives are largely the ambiguous tier is a
+      different measurement from one whose positives are verified, so read the AUC against it.
+      ${anyCi ? "Intervals are patient-clustered; they are computed for the pre-registered " +
+        "primary evaluator only, every other subgroup table being exploratory." :
+        "Intervals are shown on the primary evaluator's table."}</div>
+      <div style="overflow:auto"><table><tr><th>cancer type</th><th>n</th><th>positives</th>
+        <th>% confirmed</th><th>AUC</th>${anyCi ? "<th>95% CI</th>" : ""}</tr>` +
       Object.entries(e.breakdowns.cancer_type).map(([g,d]) =>
         `<tr><td>${esc(g)}</td><td class="num">${d.n}</td><td class="num">${d.n_pos}</td>
-         <td class="num">${fmt(d.auc)}</td></tr>`).join("") + `</table></div></div>`;
+         <td class="num">${d.pct_true_pos == null ? "–" : pct(d.pct_true_pos)}</td>
+         <td class="num">${fmt(d.auc)}</td>` +
+        (anyCi ? `<td class="num">${d.ci ? `${fmt(d.ci[0])}–${fmt(d.ci[1])}` : "–"}</td>` : "") +
+        `</tr>`).join("") + `</table></div></div>`;
   }
   if (e.fold_ablation) {
     const fa = e.fold_ablation;
@@ -357,16 +1057,42 @@ function openEval(name) {
 
 /* ── multimodal ──────────────────────────────────────────── */
 const MM = R.multimodal;
-if (!MM.ablation) $("#mm-note").innerHTML =
-  `<div class="note">LOO ablation results are absent from this run (the ablation stage failed — fixed in #97); the section will populate on the next run.</div>`;
+if (!MM.ablation) {
+  $("#mm-note").innerHTML =
+    `<div class="note">LOO ablation results are absent from this run (the ablation stage did not produce output); the section will populate on a run with a successful ablation stage.</div>`;
+} else {
+  const A = MM.ablation;
+  $("#mm-note").innerHTML =
+    `<div class="note">LOO ablation model: <b>${esc(A.model ?? "–")}</b>, full-matrix baseline AUC ${fmt(A.baseline_auc)}` +
+    (A.fallback ? ` · <b>loud fallback:</b> requested ${esc(A.fallback.requested ?? "?")}, used ${esc(A.fallback.used ?? "?")}` : "") +
+    `. Positive bar = stacking AUC drops when that evaluator's columns are removed (its unique contribution).</div>`;
+  const dl = Object.entries(A.deltas || {})
+    .filter(([, v]) => v.delta != null)
+    .sort((a, b) => b[1].delta - a[1].delta);
+  const top = dl.slice(0, 20).reverse();
+  if (top.length) {
+    $("#mm-abl-panel").style.display = "";
+    $("#loo-ii").innerHTML = ii("loo");
+    Plotly.newPlot("mm-abl", [{
+      x: top.map(([, v]) => v.delta), y: top.map(([k]) => k), orientation: "h",
+      type: "bar", marker: {color: top.map(([, v]) => v.delta >= 0 ? PALETTE[0] : PALETTE[3])},
+      customdata: top.map(([, v]) => v.auc_without),
+      hovertemplate: "<b>%{y}</b><br>ΔAUC %{x:+.4f} · AUC without %{customdata:.4f}<extra></extra>",
+    }], PL_LAYOUT(
+      claimTitle("mm-abl", `Top ${top.length} of ${dl.length} evaluators by |contribution|`),
+      "ΔAUC when removed (baseline − ablated)", "",
+      {margin: {l: 210, r: 14, b: 40}}), PL_CFG);
+  }
+}
 const mmNames = Object.keys(MM.models);
 const bestStack = mmNames.reduce((a,b) => (MM.models[b].stacking?.auc||0) > (MM.models[a]?.stacking?.auc||0) ? b : a, mmNames[0]);
 $("#mm-cards").innerHTML = [
   ["Best stacking model", bestStack, `AUC ${fmt(MM.models[bestStack]?.stacking?.auc)}`],
   ["Best single evaluator", MM.best_single_evaluator, `AUC ${fmt(MM.best_single_auc)}`],
   ["Stacking lift", fmt((MM.models[bestStack]?.stacking?.auc||0) - (MM.best_single_auc||0)), "vs best single"],
-  ["Feature selection", MM.selection, `${MM.n_evaluators} evaluators, ${MM.stacking_shape?.[1]} cols`],
-].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
+  ["Feature selection", (MM.selection ?? "–") + ii(MM.selection === "grootcv" ? "grootcv" : "mrmr"),
+     `${MM.n_evaluators} evaluators, ${MM.stacking_shape?.[1]} cols`],
+].map(([k,v,s]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></div>`).join("");
 
 (function mmCharts() {
   const rows = mmNames.flatMap(m => ["stacking","raw"].filter(sc => MM.models[m][sc])
@@ -376,15 +1102,21 @@ $("#mm-cards").innerHTML = [
      error_x: {type:"data", symmetric:false,
        array: rows.map(r => (r.ci?.[1] ?? r.auc) - r.auc),
        arrayminus: rows.map(r => r.auc - (r.ci?.[0] ?? r.auc)), color:"#aab3d0"},
-     marker: {size: 9, color: rows.map(r => r.sc === "stacking" ? "#4650dc" : "#0ea472")},
+     // scope is series identity, so it takes CATEGORICAL hues — the old green here
+     // collided with the status scale's "good".
+     marker: {size: 9, color: rows.map(r => r.sc === "stacking" ? PALETTE[0] : PALETTE[1])},
      customdata: rows.map(r => [r.sens95, r.sens100h, r.vs_best_single]),
      hovertemplate: "<b>%{y}</b><br>AUC %{x:.3f}<br>sens@95 %{customdata[0]:.1%} · " +
        "sens@100h %{customdata[1]:.1%}<br>vs best single %{customdata[2]:+.3f}<extra></extra>",
      showlegend: false},
-  ], PL_LAYOUT(`Stacking vs raw (dot = AUC, bar = 95% CI; dashed = best single ${fmt(MM.best_single_auc)})`,
-       "AUC", "", {margin:{l:150,r:14,t:34,b:40},
+  ], PL_LAYOUT(claimTitle("mm-auc",
+       `Stacking vs raw (dot = AUC, bar = 95% CI; dashed = best single ${fmt(MM.best_single_auc)})`),
+       "AUC", "", {margin:{l:170,r:14,b:40},
+       // one tick per row: plotly thins category labels when the plot is short, which
+       // would leave half of these 12 model x scope rows unlabelled
+       yaxis:{tickmode:"linear", dtick:1, automargin:true, tickfont:{size:10.5}},
        shapes:[{type:"line", x0:MM.best_single_auc, x1:MM.best_single_auc, y0:-0.5, y1:rows.length-0.5,
-                line:{dash:"dash", color:"#c8560f"}}]}), PL_CFG);
+                line:{dash:"dash", color:STATUS.warn}}]}), PL_CFG);
 
   const prTraces = mmNames.filter(m => MM.models[m].stacking?.pr).map((m,i) => ({
     x: MM.models[m].stacking.pr.recall, y: MM.models[m].stacking.pr.precision,
@@ -395,8 +1127,9 @@ $("#mm-cards").innerHTML = [
     PL_LAYOUT("Precision–recall (stacking, CV out-of-fold)", "recall", "precision"), PL_CFG);
 })();
 
-$("#mm-tbl").innerHTML = `<tr><th>model</th><th>scope</th><th>AUC</th><th>95% CI</th>
-  <th>sens@95</th><th>sens@100h</th><th>vs best single</th></tr>` +
+$("#mm-tbl").innerHTML = `<tr><th>model${ii("gpumodels")}</th>` +
+  `<th>scope${ii("stacking")}</th><th>AUC</th><th>95% CI</th>` +
+  `<th>sens@95${ii("sens95")}</th><th>sens@100h${ii("sens100h")}</th><th>vs best single</th></tr>` +
   mmNames.flatMap(m => ["stacking","raw"].filter(sc => MM.models[m][sc]).map(sc => { const d = MM.models[m][sc];
     return `<tr><td>${m}</td><td>${sc}</td><td class="num">${fmt(d.auc)}</td>
       <td class="num">${fmt(d.ci?.[0])}–${fmt(d.ci?.[1])}</td><td class="num">${pct(d.sens95)}</td>

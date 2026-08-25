@@ -30,7 +30,7 @@ flowchart TD
     
     subgraph K-Review Engine
         A["DuckDB Engine\nChunked I/O with Retry"]:::extract
-        B["5-Tier ctDNA Labeling\nAssigns Ground Truth"]:::label
+        B["6-Tier ctDNA Labeling\nAssigns Ground Truth"]:::label
         C["26 Feature Evaluators\n(FSC, EndMotifs, WPS, MDS)"]:::extract
         D["ML Pipeline\n(RF, XGB, LR + GPU Foundation Models)"]:::ml
     end
@@ -55,7 +55,7 @@ flowchart TD
 ### What happens in a run?
 
 1. **Ingest & Chunking:** `kreview` loads parquet outputs from the upstream Krewlyzer pipeline. It uses throttled DuckDB queries with exponential backoff retry to parse millions of rows reliably without overwhelming memory or socket limits.
-2. **Gold Standard Labeling:** It accesses clinical MSK-IMPACT files to generate 5-tier truth labels (e.g., verifying if a somatic variant in cfDNA was also detected in the patient's matched solid tissue).
+2. **Gold Standard Labeling:** It accesses clinical MSK-IMPACT files to generate 6-tier truth labels (e.g., verifying if a somatic variant in cfDNA was also detected in the patient's matched solid tissue).
 3. **Feature Selection & Ablation:** Features are scored and selected via mRMR (Minimum Redundancy Maximum Relevance). When feature group ablation is enabled (v0.0.20+), nested inner cross-validation identifies the optimal feature group subset per model, eliminating non-informative groups before final evaluation.
 4. **Statistical Modeling:** It loads fragmentomics features dynamically, evaluating them against the ground truth using non-parametric group testing and ensemble ML evaluation (Random Forest, XGBoost, Logistic Regression) plus optional GPU foundation models (TabPFN, TabICL and their fine-tuned variants).
 5. **Interactive Insight:** It renders one self-contained, plotly-interactive HTML report — sortable evaluator scoreboard with deep-dive modals (ROC/PR, calibration, decision curves, subgroup AUCs, ablation stability), multimodal stacking, cohort composition and run diagnostics — PHI-free by construction. See the [Report Guide](machine-learning/dashboard-guide.md) for details.

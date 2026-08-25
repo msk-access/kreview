@@ -23,6 +23,7 @@ workflow KREVIEW_LABEL_WF {
     ch_xs1          // Channel<Path>: healthy XS1 samplesheet CSV
     ch_xs2          // Channel<Path>: healthy XS2 samplesheet CSV
     val_cbio_dir    // String:        cBioPortal directory path
+    val_krewlyzer   // String:        krewlyzer results dir (#122: fragment counts)
 
     main:
     KREVIEW_LABEL(
@@ -30,6 +31,7 @@ workflow KREVIEW_LABEL_WF {
         ch_xs1,
         ch_xs2,
         val_cbio_dir,
+        val_krewlyzer,
     )
 
     emit:

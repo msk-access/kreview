@@ -83,6 +83,7 @@ workflow KREVIEW_EVAL {
         ch_healthy_xs1_samplesheet,
         ch_healthy_xs2_samplesheet,
         val_cbioportal_dir,
+        val_krewlyzer_results,   // #122: supplies per-sample fragment counts
     )
     ch_labels = KREVIEW_LABEL.out.labels
 

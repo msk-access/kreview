@@ -7,6 +7,7 @@ from pathlib import Path
 from functools import lru_cache
 import math
 import pandas as pd
+from collections.abc import Iterator
 import duckdb
 import structlog
 from datetime import datetime
@@ -587,7 +588,7 @@ def iter_feature_chunks(
     chunk_size: int | str = "auto",
     columns: list[str] | None = None,
     target_rows: int = 15_000_000,
-):
+) -> Iterator[tuple[pd.DataFrame, int, int]]:
     """Stream feature data as chunks without accumulating in memory.
 
     This is the memory-safe alternative to `load_feature_cohort`. Each chunk
@@ -914,6 +915,11 @@ LABEL_META_COLS = {
     "GENE_PANEL",
     "label",
     "split",  # train/test/exclude — assigned by label pipeline (v0.0.16+)
+    # #122: per-sample sequencing depth. METADATA, never a feature — it is the
+    # covariate every depth-confounding analysis needs (fragmentomics features and
+    # sub-threshold VAF are both depth-sensitive), and ANALYSIS_PLAN.md's metadata
+    # firewall keeps it out of the models.
+    "total_fragments_pf",
     "has_impact_match",
     "has_snv",
     "has_sv",

@@ -253,6 +253,23 @@ def _validate_gpu_models(models: tuple[str, ...], flag_name: str = "--models") -
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
 
+def _patients_of(model_df: pd.DataFrame) -> np.ndarray | None:
+    """Patient ids for clustered AUC intervals, or None with a loud warning.
+
+    Without them `_bootstrap_auc` falls back to resampling samples, which treats a
+    patient's repeated timepoints as independent observations and returns an interval
+    narrower than the data supports (~12% on the v0.0.32 cohort). That is a quiet
+    wrong answer, so its absence is logged rather than assumed harmless.
+    """
+    if "PATIENT_ID" not in model_df.columns:
+        log.warning(
+            "patient_column_missing",
+            impact="AUC intervals fall back to sample-level bootstrap and will be too narrow",
+        )
+        return None
+    return model_df["PATIENT_ID"].to_numpy()
+
+
 def _load_matrix_and_labels(
     matrix_path: Path,
     label_col: str = "label",
@@ -534,6 +551,7 @@ def eval_cpu(
 
         try:
             model_df, y, feature_cols, c_types, a_types = _load_matrix_and_labels(mf)
+            patients = _patients_of(model_df)
 
             # ── Train/test split (v0.0.16+: persisted in labels.parquet) ──
             has_split = "split" in model_df.columns
@@ -621,6 +639,11 @@ def eval_cpu(
                 n_folds=cv_folds,
                 random_state=seed,
                 sample_labels=train_labels,
+                patients=(
+                    patients[train_mask.values]  # type: ignore[index]
+                    if has_split and patients is not None
+                    else patients
+                ),
                 per_fold_features=per_fold_data,
                 fold_assignment=fold_assign,
             )
@@ -848,6 +871,7 @@ def eval_gpu(
 
         try:
             model_df, y, feature_cols, c_types, a_types = _load_matrix_and_labels(mf)
+            patients = _patients_of(model_df)
 
             # ── Train/test split (v0.0.16+) ──
             has_split = "split" in model_df.columns
@@ -952,6 +976,11 @@ def eval_gpu(
                 compute_shap=compute_shap,
                 shap_samples=shap_samples,
                 sample_labels=train_labels,
+                patients=(
+                    patients[train_mask.values]  # type: ignore[index]
+                    if has_split and patients is not None
+                    else patients
+                ),
                 max_gpu_features=gpu_cap,
                 eval_stats=_eval_stats,
                 per_fold_features=per_fold_data,
@@ -1127,12 +1156,12 @@ def eval_multimodal(
         help="Top N%% features for MI selection (matches per-evaluator pipeline)",
     ),
     multimodal_selection: str = typer.Option(
-        "mi",
+        "grootcv",
         "--multimodal-selection",
-        help="Multimodal feature selection: mi (default), grootcv (recommended "
-        "all-relevant, #96), leshy, or boruta_shap (DEPRECATED — needs "
-        "kreview[legacy-boruta], conflicts with the arfs extra). "
-        "grootcv/leshy require: pip install kreview[arfs]",
+        help="Multimodal feature selection: grootcv (default since #96 — most "
+        "stable all-relevant selector, measured), mi (fast exploration), leshy, "
+        "or boruta_shap (DEPRECATED — needs kreview[legacy-boruta], conflicts "
+        "with the arfs extra). grootcv/leshy require: pip install kreview[arfs]",
     ),
     selection_cutoff: float = typer.Option(
         3.0,
@@ -1342,12 +1371,12 @@ def eval_multimodal_prep(
         help="Optional path to super_matrix.parquet for raw-feature strategy",
     ),
     multimodal_selection: str = typer.Option(
-        "mi",
+        "grootcv",
         "--multimodal-selection",
-        help="Feature selection for raw features: mi (default), grootcv "
-        "(recommended all-relevant, #96), leshy, or boruta_shap (DEPRECATED — "
-        "needs kreview[legacy-boruta], conflicts with the arfs extra). "
-        "grootcv/leshy require: pip install kreview[arfs]",
+        help="Feature selection for raw features: grootcv (default since #96 — "
+        "most stable all-relevant selector, measured), mi (fast exploration), "
+        "leshy, or boruta_shap (DEPRECATED — needs kreview[legacy-boruta], "
+        "conflicts with the arfs extra). grootcv/leshy require: pip install kreview[arfs]",
     ),
     top_percentile: float = typer.Option(
         10.0,

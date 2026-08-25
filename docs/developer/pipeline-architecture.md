@@ -111,7 +111,7 @@ When editing these shared functions, always edit the **source notebook** (`nbs/*
 Each stage communicates through **parquet files** on disk:
 
 ```
-Label:    → labels.parquet  (5-tier ctDNA labels + train/test split column)
+Label:    → labels.parquet  (6-tier ctDNA labels + train/test split column)
 Extract:  → {evaluator}_matrix.parquet  (full features)
 Select:   → {evaluator}_matrix.parquet  (selected features, overwrites)
           → {evaluator}_eval_stats.parquet  (per-feature scores for ALL features)

@@ -80,7 +80,7 @@ In addition to statistical tests, `evaluate_feature()` computes three data quali
 | Missing percentage | `pct_missing` | Percentage of samples with NaN (0–100) |
 | Zero variance | `is_zero_variance` | Whether `std == 0` after dropping NaN (constant feature) |
 
-These metrics are saved to `*_eval_stats.parquet` and surfaced in the dashboard's [Cohort & QC page](../machine-learning/dashboard-guide.md#page-5-cohort-qc).
+These metrics are saved to `*_eval_stats.parquet` and surfaced in the report's [Cohort & labels tab](dashboard-guide.md#1-cohort-labels) — the anchor this used to point at belonged to the retired multi-page Quarto dashboard.
 
 ## Feature Selection Scoring (v0.0.9+)
 
@@ -184,7 +184,7 @@ where $X$ is controlled by `--top-percentile` (default: 10%). The **union** ensu
 
 When aggregating multiple feature sets in `kreview eval multimodal`, the pipeline offers several higher-order selection strategies via `--multimodal-selection` (`mi`, `grootcv`, `leshy`, and the deprecated `boruta_shap`). These operate on the **super-matrix** (all evaluators fused), which can contain hundreds of features.
 
-### Mutual Information (`mi`) [Default]
+### Mutual Information (`mi`) [Fast exploration]
 
 Rapidly selects the top $K$ features using sklearn's `mutual_info_classif` ranking across all concatenated features in the super-matrix.
 
@@ -193,7 +193,7 @@ $$\text{Selected} = \text{Top}_K\bigl(\text{MI}(f, y)\bigr) \quad \forall f \in 
 - **Strengths**: Fast ($O(N)$), captures non-linear dependencies, no model training required.
 - **Weakness**: Does not consider feature-feature interactions or redundancy.
 
-### GrootCV (`grootcv`) [Recommended]
+### GrootCV (`grootcv`) [Default]
 
 An interaction-aware, **cross-validated** all-relevant selector from the maintained
 [arfs](https://github.com/ThomasBury/arfs) library (`pip install kreview[arfs]`). Like the
@@ -259,7 +259,7 @@ flowchart TB
 
 #### When to Choose Each Strategy
 
-| Criterion | `mi` (Default) | `grootcv` (Recommended) | `boruta_shap` (Deprecated) |
+| Criterion | `mi` | `grootcv` (Default) | `boruta_shap` (Deprecated) |
 |-----------|----------------|-------------------------|----------------------------|
 | **Speed** | ~1 second | ~40s on the production super-matrix (n_iter=10) | ~2-5 minutes (50 XGBoost fits) |
 | **Feature interactions** | ❌ Ignores | ✅ Captures via SHAP | ✅ Captures via SHAP |
@@ -269,8 +269,8 @@ flowchart TB
 | **Best for** | Quick exploration | Production runs | Reproducing pre-#96 runs only |
 
 !!! tip "Recommendation"
-    Use `--multimodal-selection mi` for rapid iteration during development. Use
-    `--multimodal-selection grootcv` for production runs — its selections are the most
-    reproducible of the three (measured on the real cohort, #96), which is the property
-    that matters most for high-dimensional, correlated cfDNA features.
+    `grootcv` is the default since #96 (confirmed on the v0.0.32 production run:
+    stacking AUC equivalent to boruta_shap within ±0.002, raw-feature models better,
+    at the highest measured selection stability). Use `--multimodal-selection mi` only
+    for rapid iteration during development — it is fastest but redundancy-blind.
 

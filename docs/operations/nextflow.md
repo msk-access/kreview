@@ -25,7 +25,7 @@ All Nextflow pipeline logic resides within the `nextflow/` directory:
     - `merge_ablation.nf` — Merge CPU + GPU ablation → `best_subset.json` (v0.0.20+)
     - `fuse.nf` — Super-matrix construction (all evaluators merged)
     - `scoreboard.nf` — Cross-evaluator scoreboard aggregation (v0.0.15)
-    - `multimodal_prep.nf` — Stacking matrix + raw-feature selection (v0.0.18+; GrootCV recommended, #96)
+    - `multimodal_prep.nf` — Stacking matrix + raw-feature selection (v0.0.18+; GrootCV default since #96)
     - `multimodal_single.nf` — Per-model stacking CV, CPU + GPU variants (v0.0.18+)
     - `multimodal_ablation.nf` — Leave-one-evaluator-out ablation (v0.0.18+)
     - `multimodal_merge.nf` — Final results aggregation (v0.0.18+)
@@ -84,7 +84,7 @@ In multistage mode, all process outputs are published to `params.outdir` via `pu
 ```
 outdir/
 ├── labels/
-│   └── labels.parquet                          # 5-tier ctDNA labels + split column
+│   └── labels.parquet                          # 6-tier ctDNA labels + split column
 ├── matrices/
 │   ├── raw/                                    # Per-evaluator raw feature matrices
 │   │   ├── AtacOnTarget_matrix.parquet
@@ -159,7 +159,7 @@ nextflow run /path/to/kreview/nextflow/main.nf \
 ```
 
 !!! note "GrootCV selection tunables"
-    `--multimodal_selection grootcv` (recommended, #96) accepts two evidence-based
+    `grootcv` is the multimodal-selection default since #96 (confirmed on the v0.0.32 production run) and accepts two evidence-based
     knobs whose defaults were measured on the real v0.0.29 cohort:
     `--multimodal_selection_cutoff` (default 3.0 — shadow-importance divisor, higher
     admits more features) and `--multimodal_selection_n_iter` (default 10 — shadow-test

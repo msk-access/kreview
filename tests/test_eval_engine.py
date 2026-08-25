@@ -2070,3 +2070,68 @@ class TestFailLoudEvalEngine:
         out = capsys.readouterr().out
         assert "non_numeric_feature_columns_dropped" in out
         assert "f_bad" in out
+
+
+class TestClusteredAucIntervals:
+    """A patient's repeated timepoints are not independent observations."""
+
+    def test_cluster_bootstrap_widens_the_interval(self):
+        from kreview.eval_engine import _bootstrap_auc
+
+        rng = np.random.default_rng(0)
+        # 50 patients x 6 near-identical timepoints: sample-level resampling sees 300
+        # independent draws where there are really 50. The label is drawn against the
+        # latent value rather than thresholded on it, so the AUC lands short of 1 and
+        # both intervals are non-degenerate.
+        latent = rng.normal(size=50)
+        p_pos = 1 / (1 + np.exp(-latent))
+        y = np.repeat((rng.random(50) < p_pos).astype(int), 6)
+        score = np.repeat(latent, 6) + rng.normal(scale=0.05, size=300)
+        groups = np.repeat(np.arange(50), 6)
+        lo_s, hi_s = _bootstrap_auc(y, score, n_boot=300, groups=None)
+        lo_c, hi_c = _bootstrap_auc(y, score, n_boot=300, groups=groups)
+        assert None not in (lo_s, hi_s, lo_c, hi_c)
+        assert (hi_c - lo_c) > (
+            hi_s - lo_s
+        ), f"clustered interval must be wider: {hi_c - lo_c:.4f} vs {hi_s - lo_s:.4f}"
+
+    def test_singleton_patients_leave_the_interval_alone(self):
+        """One sample per patient means clustering has nothing to do."""
+        from kreview.eval_engine import _bootstrap_auc
+
+        rng = np.random.default_rng(1)
+        score = rng.normal(size=300)
+        y = (score + rng.normal(scale=0.5, size=300) > 0).astype(int)
+        groups = np.arange(300)
+        w_s = np.subtract(*reversed(_bootstrap_auc(y, score, n_boot=300, groups=None)))
+        w_c = np.subtract(
+            *reversed(_bootstrap_auc(y, score, n_boot=300, groups=groups))
+        )
+        assert abs(w_c - w_s) < 0.02, f"widths should agree: {w_c:.4f} vs {w_s:.4f}"
+
+    def test_method_is_recorded_so_a_narrow_interval_is_never_silent(self):
+        from kreview.eval_engine import _compute_oof_metrics
+
+        rng = np.random.default_rng(2)
+        y = np.array([1] * 60 + [0] * 60)
+        probs = np.clip(rng.random(120) * 0.5 + y * 0.4, 0, 1)
+        groups = np.repeat(np.arange(60), 2)
+        with_groups = _compute_oof_metrics(y, probs, "lr", groups=groups)
+        without = _compute_oof_metrics(y, probs, "lr")
+        assert with_groups["auc_lr_ci_method"] == "patient-clustered bootstrap"
+        assert without["auc_lr_ci_method"] == "sample-level bootstrap"
+
+    def test_cpu_models_accepts_and_forwards_patients(self):
+        from kreview.eval_engine import cpu_models
+
+        rng = np.random.default_rng(3)
+        n = 120
+        X = rng.normal(size=(n, 4))
+        y = (X[:, 0] + rng.normal(scale=0.5, size=n) > 0).astype(int)
+        patients = np.repeat(np.arange(n // 2), 2)
+        res, *_ = cpu_models(X, y, feature_names=list("abcd"), patients=patients)
+        methods = {k: v for k, v in res.items() if k.endswith("_ci_method")}
+        assert methods, "no CI method recorded"
+        assert all(
+            v == "patient-clustered bootstrap" for v in methods.values()
+        ), methods
