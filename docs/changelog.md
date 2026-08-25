@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.33] - 2026-08-25
+
+Honest-uncertainty release. Every headline number the report shows now carries an interval
+that accounts for how the cohort is actually structured, and the report states which negatives
+it was scored against — the choice that moves the headline more than any modeling decision.
+Also ships the pipeline DAG as a drawn object and the report's visual rebuild.
+
+### Added
+- **The verification-bias ladder as a panel** (#136). Anchor choice moves the headline
+  **13.1 AUC points** and the report stated it in the third clause of a caption. Four rungs
+  now, scored on the same model and the same positives with only the negative class changing:
+  verified within-patient negatives **0.845**, all negatives pooled 0.856, unpaired negatives
+  0.865, healthy donors 0.976 — each with its n, patient count and a patient-clustered
+  interval. The unpaired rung existed in the campaign record but never in the report. The
+  donor rung is labelled as a *different question* (between people rather than within a
+  patient), not as an unreliable one: at 55 negatives its interval is only ~1.7× wider than
+  the verified rung's, checked against a stratified two-sample bootstrap and Hanley–McNeil
+  before the claim was drawn.
+- **The Nextflow DAG drawn into the report** (#127), in Methods (two densities, structure
+  only) and Run diagnostics (this run's task counts above the tables they summarise). Layouts
+  are computed at build time from one declaration and injected as finished SVG; the page never
+  positions a node. `tests/test_pipeline_diagram.py` asserts the declaration against the
+  workflow in both directions, so a stage added to the DAG cannot leave the diagram describing
+  the old topology.
+- **Report visual rebuild** (#126): a hero zone carrying the primary endpoint, the
+  burden-response curve and the stacking lift; findings that title the chart they are derived
+  from; a 16-term glossary behind info icons.
+
+### Changed
+- **The primary endpoint carries an interval** (#132). Sensitivity at 98% specificity against
+  verified true negatives had shipped as a bare point estimate — `_wilson` existed but was
+  wired only to the LOD bins. It is now **0.483 [0.424, 0.519]** from a patient-clustered
+  bootstrap with the threshold re-estimated inside every resample, because the threshold is
+  itself an estimate from a finite negative set. Decomposing the width separates two things
+  that had been conflated: clustering inflates the variance **1.26×**, estimating the threshold
+  inflates it **11.3×**.
+- **AUC intervals resample patients, not samples** (#132). `_bootstrap_auc` resampled rows, so
+  every evaluator and holdout interval in the scoreboard treated a patient's repeated
+  timepoints as independent. Measured design effect **1.21** on the stacking AUC — intervals
+  widen ~10%. **CI values from earlier releases are not comparable to these.**
+- **Subgroup AUCs gain a per-class floor, an interval and tier composition** (#134). The panel
+  printed retinoblastoma's AUC on 72 positives at the same visual weight as NSCLC's on 2,254.
+  The floor now counts the scarce class, rows carry patient-clustered intervals (primary
+  evaluator only — every other subgroup table is exploratory), and each row reports the share
+  of its positives that are tumour-confirmed, which ranges from 51% to 90% across histologies.
+- Dual-anchor operating points and the one-sided donor bound (#125, closing #123); per-sample
+  depth metadata as first-class label columns (#122).
+
+### Fixed
+- Chart axis overrides no longer erase axis titles — `PL_LAYOUT` merged layouts with a shallow
+  `Object.assign`, so a partial `{xaxis:{…}}` replaced the whole axis object and dropped its
+  title. Three charts had silently lost a label (#126).
+- Category ticks are forced one per row: plotly thinned them on short plots, and the row it
+  dropped first was the best evaluator at the top of the chart (#126).
+- Two mypy errors that reproduce under the pinned toolchain but not in CI. Neither was type
+  noise — the CLI one guarded a `pivot_table` result that unpacks the characters of a column
+  name when pandas returns a flat Index (#130).
+- `mkdocs build --strict` passes again: four unannotated parameters and one generator without
+  a return annotation had been failing the documented release gate.
+
+### Infrastructure
+- Notebook hygiene tests (#130): a notebook written as nbformat 4.4 carries no cell ids, so
+  nbdev's export hash moves on every run and the sync gate fails on an unrelated PR.
+- An sbatch wrapper for GPU research jobs outside the Nextflow DAG, and an isolated-env recipe
+  that refuses to install unless the target really is isolated (#130).
+- Research scripts for the review campaign: the grouped-CV leakage delta, a two-measure depth
+  re-check, the reporting-precision battery, and the matched-stratum histology analysis
+  (#128, #132, #133).
+
 ## [0.0.32] - 2026-08-18
 
 Scoreboard-contract release (#108, closing #107): the scoreboard stops fabricating values

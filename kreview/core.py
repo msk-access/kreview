@@ -7,6 +7,7 @@ from pathlib import Path
 from functools import lru_cache
 import math
 import pandas as pd
+from collections.abc import Iterator
 import duckdb
 import structlog
 from datetime import datetime
@@ -587,7 +588,7 @@ def iter_feature_chunks(
     chunk_size: int | str = "auto",
     columns: list[str] | None = None,
     target_rows: int = 15_000_000,
-):
+) -> Iterator[tuple[pd.DataFrame, int, int]]:
     """Stream feature data as chunks without accumulating in memory.
 
     This is the memory-safe alternative to `load_feature_cohort`. Each chunk
