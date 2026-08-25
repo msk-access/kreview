@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How kreview runs</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:  #f7f8fa; --color-ink: #1a2233; --color-muted: #66708a; --color-accent: #4650dc;
+      --font-sans:  'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', Georgia, serif;
+      --font-mono:  'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: .66rem; font-weight: 500; letter-spacing: .18em;
+      text-transform: uppercase; color: var(--color-muted); margin-bottom: .5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + .75rem, 2rem); font-weight: 400;
+      letter-spacing: -.02em; line-height: 1.15; margin-bottom: .5rem; }
+    .sub { font-size: .9rem; color: var(--color-muted); margin-bottom: 1.5rem; max-width: 68ch; line-height: 1.5; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .colophon { font-family: var(--font-mono); font-size: .62rem; letter-spacing: .1em; color: var(--color-muted);
+      border-top: 1px solid rgba(26,34,51,.12); margin-top: 1.5rem; padding-top: .75rem; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · kreview · Nextflow</p>
+    <h1>How kreview runs</h1>
+    <p class="sub">One DAG, scattered per feature family and gathered once. Everything between the scatter and the gather runs once per family, split across CPU and GPU queues.</p>
+<svg class="pd-dag" data-level="standard" viewBox="0 0 1400 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="pd-standard-t pd-standard-d">
+  <title id="pd-standard-t">The kreview DAG</title>
+  <desc id="pd-standard-d">Label and extract, then work scatters per feature family across selection, CPU and GPU evaluation and optional ablation, gathers in fuse, and ends in the report.</desc>
+  <defs>
+    <marker id="pd-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#66708a"/></marker>
+    <marker id="pd-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4650dc"/></marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#f7f8fa"/>
+  <path d="M 200,120 H 272" fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#pd-arrow)"/>
+  <rect x="214" y="100" width="44" height="12" rx="2" fill="#f7f8fa"/>
+  <text x="236" y="109" fill="#8a93a8" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">LABELS</text>
+  <path d="M 432,120 H 504" fill="none" stroke="#4650dc" stroke-width="1.2" marker-end="url(#pd-arrow-accent)"/>
+  <rect x="442" y="100" width="52" height="12" rx="2" fill="#f7f8fa"/>
+  <text x="468" y="109" fill="#4650dc" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">FAN ×26</text>
+  <path d="M 664,120 H 736" fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#pd-arrow)"/>
+  <path d="M 664,136 H 692 Q 700,136 700,144 V 256 Q 700,264 708,264 H 736" fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#pd-arrow)"/>
+  <path d="M 584,152 V 400 Q 584,408 592,408 H 736" fill="none" stroke="rgba(26,34,51,0.35)" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#pd-arrow)"/>
+  <rect x="930" y="388" width="68" height="12" rx="2" fill="#f7f8fa"/>
+  <text x="964" y="397" fill="#8a93a8" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">IF ENABLED</text>
+  <path d="M 896,120 H 968" fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#pd-arrow)"/>
+  <rect x="904" y="100" width="56" height="12" rx="2" fill="#f7f8fa"/>
+  <text x="932" y="109" fill="#8a93a8" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">JOIN ×26</text>
+  <path d="M 896,264 H 1016 Q 1024,264 1024,256 V 152" fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#pd-arrow)"/>
+  <path d="M 896,408 H 1056 Q 1064,408 1064,400 V 152" fill="none" stroke="rgba(26,34,51,0.35)" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#pd-arrow)"/>
+  <path d="M 1128,120 H 1200" fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#pd-arrow)"/>
+  <path d="M 1280,152 V 232" fill="none" stroke="#66708a" stroke-width="1.2" marker-end="url(#pd-arrow)"/>
+  <g class="pd-node" data-node="label">
+    <rect x="40" y="88" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="40" y="88" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+    <text x="120" y="126" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Label</text>
+    <text x="120" y="142" fill="#66708a" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">KREVIEW_LABEL</text>
+  </g>
+  <g class="pd-node" data-node="extract">
+    <rect x="272" y="88" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="272" y="88" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+    <text x="352" y="126" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Extract</text>
+    <text x="352" y="142" fill="#66708a" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">26 matrices</text>
+  </g>
+  <g class="pd-node" data-node="select">
+    <rect x="504" y="88" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="504" y="88" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+    <text x="584" y="126" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Select</text>
+    <text x="584" y="142" fill="#66708a" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">GrootCV</text>
+  </g>
+  <g class="pd-node" data-node="evalcpu">
+    <rect x="736" y="88" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="736" y="88" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+    <text x="816" y="126" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Evaluate · CPU</text>
+    <text x="816" y="142" fill="#66708a" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">rf · xgb</text>
+  </g>
+  <g class="pd-node" data-node="evalgpu">
+    <rect x="736" y="232" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="736" y="232" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+    <text x="816" y="270" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Evaluate · GPU</text>
+    <text x="816" y="286" fill="#66708a" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">tabpfn · tabicl</text>
+  </g>
+  <g class="pd-node" data-node="ablate">
+    <rect x="736" y="376" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="736" y="376" width="160" height="64" rx="6" fill="rgba(26,34,51,0.02)" stroke="rgba(26,34,51,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="816" y="414" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Ablate</text>
+    <text x="816" y="430" fill="#66708a" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">cpu + gpu · merge</text>
+  </g>
+  <g class="pd-node" data-node="fuse">
+    <rect x="968" y="88" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="968" y="88" width="160" height="64" rx="6" fill="rgba(26,34,51,0.05)" stroke="#66708a" stroke-width="1"/>
+    <text x="1048" y="126" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Fuse</text>
+    <text x="1048" y="142" fill="#66708a" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">parquet lake</text>
+  </g>
+  <g class="pd-node" data-node="multimodal">
+    <rect x="1200" y="88" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="1200" y="88" width="160" height="64" rx="6" fill="#ffffff" stroke="#1a2233" stroke-width="1"/>
+    <text x="1280" y="126" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Multimodal</text>
+    <text x="1280" y="142" fill="#66708a" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">prep · fit · merge</text>
+  </g>
+  <g class="pd-node" data-node="report">
+    <rect x="1200" y="232" width="160" height="64" rx="6" fill="#f7f8fa"/>
+    <rect x="1200" y="232" width="160" height="64" rx="6" fill="rgba(70,80,220,0.08)" stroke="#4650dc" stroke-width="1"/>
+    <text x="1280" y="270" fill="#1a2233" font-size="12" font-weight="600" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" text-anchor="middle">Report</text>
+    <text x="1280" y="286" fill="#4650dc" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">scoreboard + HTML</text>
+  </g>
+  <line x1="40" y1="464" x2="1360" y2="464" stroke="rgba(26,34,51,0.10)" stroke-width="0.8"/>
+  <text x="40" y="488" fill="#66708a" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.14em">LEGEND</text>
+  <rect x="128" y="480" width="12" height="12" rx="2" fill="#ffffff" stroke="#1a2233" stroke-width="0.8"/>
+  <text x="148" y="489" fill="#66708a" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.1em">NEXTFLOW PROCESS</text>
+  <rect x="320" y="480" width="12" height="12" rx="2" fill="rgba(26,34,51,0.02)" stroke="rgba(26,34,51,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
+  <text x="340" y="489" fill="#66708a" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.1em">OPTIONAL STAGE</text>
+  <rect x="512" y="480" width="12" height="12" rx="2" fill="rgba(26,34,51,0.05)" stroke="#66708a" stroke-width="0.8"/>
+  <text x="532" y="489" fill="#66708a" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.1em">ARTIFACT STORE</text>
+  <rect x="704" y="480" width="12" height="12" rx="2" fill="rgba(70,80,220,0.08)" stroke="#4650dc" stroke-width="0.8"/>
+  <text x="724" y="489" fill="#66708a" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.1em">DELIVERABLE</text>
+</svg>
+    <p class="colophon">GENERATED BY SCRIPTS/BUILD_DIAGRAMS.PY — EDIT NBS/08_PIPELINE_DIAGRAM.IPYNB</p>
+  </div>
+</body>
+</html>
