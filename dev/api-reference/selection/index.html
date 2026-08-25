@@ -5,13 +5,13 @@
       
       
       
-        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/getting-started/installation/">
+        <link rel="canonical" href="https://msk-access.github.io/kreview/dev/api-reference/selection/">
       
       
-        <link rel="prev" href="../..">
+        <link rel="prev" href="../labels/">
       
       
-        <link rel="next" href="../configuration/">
+        <link rel="next" href="../eval-engine/">
       
       
         
@@ -22,7 +22,7 @@
     
     
       
-        <title>Installation - Kreview</title>
+        <title>Feature Selection - Kreview</title>
       
     
     
@@ -92,7 +92,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#installation-guide" class="md-skip">
+        <a href="#feature-selection-api-reference" class="md-skip">
           Skip to content
         </a>
       
@@ -132,7 +132,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Installation
+              Feature Selection
             
           </span>
         </div>
@@ -304,10 +304,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -326,11 +324,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked="">
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2">
         
           
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
@@ -351,7 +351,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -366,37 +366,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Installation
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -412,120 +385,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
-      
-        <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Requirements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#environment-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Environment Setup
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Environment Setup">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#option-1-docker-recommended-batteries-included-method" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 1: Docker (Recommended "Batteries-Included" Method)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#option-2-local-install-pip" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Option 2: Local Install (Pip)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-install-the-package" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. Install the Package
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#optional-sub-packages" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Optional Sub-Packages
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-install-git-hooks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. Install Git Hooks
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-verification-check" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4. Verification Check
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -538,7 +397,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/" class="md-nav__link">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
         
   
   
@@ -566,7 +425,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../pipeline-cli/" class="md-nav__link">
+      <a href="../../getting-started/pipeline-cli/" class="md-nav__link">
         
   
   
@@ -1360,8 +1219,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -1402,13 +1263,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7">
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked="">
         
           
           <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
@@ -1429,7 +1288,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1447,7 +1306,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/cli/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
@@ -1475,7 +1334,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/cli-eval/" class="md-nav__link">
+      <a href="../cli-eval/" class="md-nav__link">
         
   
   
@@ -1503,7 +1362,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/cli-select/" class="md-nav__link">
+      <a href="../cli-select/" class="md-nav__link">
         
   
   
@@ -1531,7 +1390,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/core/" class="md-nav__link">
+      <a href="../core/" class="md-nav__link">
         
   
   
@@ -1559,7 +1418,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/labels/" class="md-nav__link">
+      <a href="../labels/" class="md-nav__link">
         
   
   
@@ -1584,10 +1443,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../api-reference/selection/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feature Selection
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1603,6 +1489,87 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+      
+        <li class="md-nav__item">
+  <a href="#kreview.selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        selection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="selection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#kreview.selection.__all__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __all__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.selection.build_binary_target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_binary_target
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.selection.score_features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        score_features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kreview.selection.select_features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        select_features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1615,7 +1582,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/eval-engine/" class="md-nav__link">
+      <a href="../eval-engine/" class="md-nav__link">
         
   
   
@@ -1643,7 +1610,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/scoreboard/" class="md-nav__link">
+      <a href="../scoreboard/" class="md-nav__link">
         
   
   
@@ -1671,7 +1638,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/report/" class="md-nav__link">
+      <a href="../report/" class="md-nav__link">
         
   
   
@@ -1699,7 +1666,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/report-data/" class="md-nav__link">
+      <a href="../report-data/" class="md-nav__link">
         
   
   
@@ -1727,7 +1694,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/pipeline-diagram/" class="md-nav__link">
+      <a href="../pipeline-diagram/" class="md-nav__link">
         
   
   
@@ -1755,7 +1722,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/features/" class="md-nav__link">
+      <a href="../features/" class="md-nav__link">
         
   
   
@@ -1783,7 +1750,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/registry/" class="md-nav__link">
+      <a href="../registry/" class="md-nav__link">
         
   
   
@@ -1811,7 +1778,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/reproducibility/" class="md-nav__link">
+      <a href="../reproducibility/" class="md-nav__link">
         
   
   
@@ -1893,33 +1860,22 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
       
         <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
+  <a href="#kreview.selection" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Requirements
+        selection
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#environment-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Environment Setup
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Environment Setup">
+    <nav class="md-nav" aria-label="selection">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#option-1-docker-recommended-batteries-included-method" class="md-nav__link">
+  <a href="#kreview.selection.__all__" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Option 1: Docker (Recommended "Batteries-Included" Method)
+        __all__
       
     </span>
   </a>
@@ -1927,10 +1883,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#option-2-local-install-pip" class="md-nav__link">
+  <a href="#kreview.selection.build_binary_target" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Option 2: Local Install (Pip)
+        build_binary_target
       
     </span>
   </a>
@@ -1938,10 +1894,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-install-the-package" class="md-nav__link">
+  <a href="#kreview.selection.score_features" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Install the Package
+        score_features
       
     </span>
   </a>
@@ -1949,21 +1905,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#optional-sub-packages" class="md-nav__link">
+  <a href="#kreview.selection.select_features" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Optional Sub-Packages
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-install-git-hooks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. Install Git Hooks
+        select_features
       
     </span>
   </a>
@@ -1972,17 +1917,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-verification-check" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4. Verification Check
-      
-    </span>
-  </a>
   
 </li>
       
@@ -2029,10 +1963,10 @@
     
     
       <li class="md-path__item">
-        <a href="./" class="md-path__link">
+        <a href="../cli/" class="md-path__link">
           
   <span class="md-ellipsis">
-    Getting Started
+    API Reference
   </span>
 
         </a>
@@ -2054,83 +1988,611 @@
   
 
 
-<h1 id="installation-guide">Installation Guide</h1>
-<p><code>kreview</code> is built to be a high-performance evaluation environment. It depends on DuckDB, XGBoost, <abbr title="SHapley Additive exPlanations">SHAP</abbr>, and scientific Python libraries.</p>
-<h2 id="requirements">Requirements</h2>
+<h1 id="feature-selection-api-reference">Feature Selection API Reference</h1>
+<p>The <code>kreview.selection</code> module scores features and applies the selection strategies —
+<abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr>, hybrid union, and the GrootCV/Leshy family from <code>arfs</code> that became the multimodal
+default in #96. It also owns <code>build_binary_target</code>, the single definition of which label
+tiers form the positive and negative classes.</p>
+<p>For conceptual explanations, see:</p>
 <ul>
-<li>Python ≥ 3.10</li>
-<li><code>pip</code> (latest)</li>
+<li><a href="../../machine-learning/models-and-metrics/">Models And Metrics</a></li>
+<li><a href="../../machine-learning/statistical-tests/">Statistical Tests</a></li>
 </ul>
 <hr>
-<h2 id="environment-setup">Environment Setup</h2>
-<blockquote>
-<p>[!IMPORTANT]
-The report is a single self-contained HTML rendered directly by <code>kreview report</code> — no external tooling (Quarto was removed in the #79 report redesign).</p>
-</blockquote>
-<h3 id="option-1-docker-recommended-batteries-included-method">Option 1: Docker (Recommended "Batteries-Included" Method)</h3>
-<p>The easiest way to run <code>kreview</code> without managing external dependencies is to use our pre-built Docker container (hosted on <abbr title="GitHub Container Registry">GHCR</abbr>). It ships with <code>Python 3.12</code> and all ML libraries:
-</p><div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>docker<span class="w"> </span>pull<span class="w"> </span>ghcr.io/msk-access/kreview:latest
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>docker<span class="w"> </span>run<span class="w"> </span>-v<span class="w"> </span>/your/data:/data<span class="w"> </span>ghcr.io/msk-access/kreview:latest<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>label<span class="w"> </span>--cancer-samplesheet<span class="w"> </span>/data/cancer.csv<span class="w"> </span>...<span class="w">   </span><span class="c1"># stages are driven by Nextflow</span>
-</code></pre></div>
-For more complex execution commands (e.g., binding multiple access paths), see the <a href="../../operations/docker/">Docker Operations Guide</a>.<p></p>
-<h3 id="option-2-local-install-pip">Option 2: Local Install (Pip)</h3>
-<p>Then clone the repository. <code>kreview</code> is developed entirely using <code>nbdev</code>, so the source notebooks (<code>nbs/</code>) act as the active execution environment.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/msk-access/kreview.git
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>kreview
-</code></pre></div>
-<h3 id="2-install-the-package">2. Install the Package</h3>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="" id="__tabbed_1_1" name="__tabbed_1" type="radio"><input id="__tabbed_1_2" name="__tabbed_1" type="radio"><div class="tabbed-labels"><label for="__tabbed_1_1">User Install</label><label for="__tabbed_1_2">Developer Install</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<p>Install the core package with all runtime dependencies:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
-</code></pre></div>
-<p>For GPU model evaluation (TabPFN, TabICL and fine-tuned variants), install with GPU extras:
-</p><div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.[gpu]'</span>
-</code></pre></div>
-This adds <code>tabpfn</code>, <code>tabicl</code>, <code>shapiq</code>, and <code>torch</code> as dependencies.<p></p>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="kreview.selection" class="doc doc-heading">
+            <code>kreview.selection</code>
+
+
+</h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Shared feature scoring and selection library (<abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> / hybrid-union).</p>
+<p>Docs: https://msk-access.github.io/kreview/selection.html.md</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="kreview.selection.__all__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'log'</span><span class="p">,</span> <span class="s1">'MODEL_LABELS'</span><span class="p">,</span> <span class="s1">'POSITIVE_LABELS'</span><span class="p">,</span> <span class="s1">'build_binary_target'</span><span class="p">,</span> <span class="s1">'score_features'</span><span class="p">,</span> <span class="s1">'select_features'</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Feature scoring and selection for kreview.</p>
+<p>Provides shared functions used by both <code>kreview run</code> (monolithic) and
+<code>kreview select</code> (standalone CLI) to ensure identical feature selection
+logic across all execution modes.</p>
+<p>Two public functions:</p>
+<ul>
+<li>:func:<code>score_features</code> — compute univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>, mutual information,
+  and statistical tests (KW, Cohen's d) for every numeric feature column.</li>
+<li>:func:<code>select_features</code> — apply <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> (default) or hybrid-union
+  selection with a zero-variance guard.</li>
+</ul>
+
+    </div>
+
 </div>
-<div class="tabbed-block">
-<p>Install with all linting, testing, <abbr title="Continuous Integration">CI</abbr>, and documentation tools bundled:
-</p><div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.[all]'</span>
-</code></pre></div><p></p>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.selection.build_binary_target" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">build_binary_target</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">label_col</span><span class="o">=</span><span class="s1">'label'</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Filter to modelable samples and build a binary target vector.</p>
+<p>Keeps only samples whose label is in the canonical 5-tier model set
+(True <abbr title="Circulating Tumor DNA">ctDNA</abbr>+, Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>+, Healthy Normal, Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>-/−).
+Returns a binary target: 1 for positives, 0 for negatives.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>df</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>DataFrame with a <code>label</code> column.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>label_col</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the label column.</p>
+              </div>
+            </td>
+            <td>
+                  <code>'label'</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>(model_df, y)</code> where <code>model_df</code> contains only samples with</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>labels in <code>MODEL_LABELS</code> and <code>y</code> is a binary numpy array.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If fewer than 20 samples remain or only one class is
+present (models cannot train).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
 </div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.selection.score_features" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">score_features</span><span class="p">(</span><span class="n">matrix_df</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">label_col</span><span class="o">=</span><span class="s1">'label'</span><span class="p">,</span> <span class="n">cv_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">compute_auc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Score every numeric feature by statistical tests, univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>, and <abbr title="Mutual Information">MI</abbr>.</p>
+<p>Computes per-feature:</p>
+<ul>
+<li><strong>Statistical tests</strong> via :func:<code>evaluate_feature</code>: Kruskal-Wallis,
+  Cohen's d, group medians, etc.</li>
+<li><strong>Univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr></strong> (optional): Cross-validated logistic regression <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>
+  per feature.</li>
+<li><strong>Mutual information</strong>: Quantifies non-linear dependency between feature
+  and binary target.</li>
+</ul>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>matrix_df</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>DataFrame from <code>kreview extract</code> containing
+<code>LABEL_META_COLS</code> metadata columns and numeric feature columns.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>label_col</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the label column (default <code>"label"</code>).</p>
+              </div>
+            </td>
+            <td>
+                  <code>'label'</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cv_folds</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of folds for univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> cross-validation.</p>
+              </div>
+            </td>
+            <td>
+                  <code>5</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>compute_auc</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>False</code>, skip univariate <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> (selection degrades
+to <abbr title="Mutual Information">MI</abbr>-only).</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>DataFrame with one row per feature and columns including</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>feature_column</code>, <code>univariate_auc</code>, <code>mutual_info</code>, plus all</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>columns from :func:<code>evaluate_feature</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If no numeric feature columns found, or insufficient
+samples for scoring.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
 </div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="kreview.selection.select_features" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">select_features</span><span class="p">(</span><span class="n">matrix_df</span><span class="p">,</span> <span class="n">eval_stats</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">top_percentile</span><span class="o">=</span><span class="mf">50.0</span><span class="p">,</span> <span class="n">impute_strategy</span><span class="o">=</span><span class="s1">'median'</span><span class="p">,</span> <span class="n">label_col</span><span class="o">=</span><span class="s1">'label'</span><span class="p">,</span> <span class="n">strategy</span><span class="o">=</span><span class="s1">'mrmr'</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply feature selection and return a filtered matrix.</p>
+<p>Strategies:
+- <code>'mrmr'</code>: Minimum Redundancy Maximum Relevance (redundancy-aware)
+- <code>'hybrid_union'</code>: Top N% <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> ∪ Top N% <abbr title="Mutual Information">MI</abbr> (legacy)</p>
+<p>Selection algorithm (<abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr>):</p>
+<ol>
+<li>Compute <code>n_keep = max(1, n_features × top_percentile / 100)</code>.</li>
+<li>Impute NaNs using <code>impute_strategy</code>.</li>
+<li>Apply <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> to select top <code>n_keep</code> features.</li>
+<li><strong>Variance guard</strong>: drop zero-variance features.</li>
+<li>Return the matrix with only <code>LABEL_META_COLS</code> + selected features.</li>
+</ol>
+<p>Selection algorithm (hybrid_union):</p>
+<ol>
+<li>Compute <code>n_keep = max(1, n_features × top_percentile / 100)</code>.</li>
+<li>Take top <code>n_keep</code> features by <code>univariate_auc</code> (if present).</li>
+<li>Take top <code>n_keep</code> features by <code>mutual_info</code> (if present).</li>
+<li><strong>Union</strong> both sets — captures linear (<abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>) and non-linear (<abbr title="Mutual Information">MI</abbr>) signal.</li>
+<li><strong>Variance guard</strong>: impute + drop zero-variance features.</li>
+<li>Return the matrix with only <code>LABEL_META_COLS</code> + selected features.</li>
+</ol>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>matrix_df</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Full matrix DataFrame from <code>kreview extract</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>eval_stats</code>
+            </td>
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature scoring DataFrame from :func:<code>score_features</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>top_percentile</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Top N% per metric to keep (default 50).</p>
+              </div>
+            </td>
+            <td>
+                  <code>50.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>impute_strategy</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Strategy for NaN imputation before variance check.</p>
+              </div>
+            </td>
+            <td>
+                  <code>'median'</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>label_col</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the label column.</p>
+              </div>
+            </td>
+            <td>
+                  <code>'label'</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>strategy</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Feature selection strategy ('mrmr' or 'hybrid_union').</p>
+              </div>
+            </td>
+            <td>
+                  <code>'mrmr'</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="pandas.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Tuple of <code>(selected_matrix_df, selection_qc_dict)</code>:</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <ul>
+<li><code>selected_matrix_df</code>: DataFrame with metadata + selected features.</li>
+</ul>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="pandas.DataFrame">DataFrame</span>, <span title="dict">dict</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <ul>
+<li><code>selection_qc_dict</code>: Audit trail with counts and method metadata.</li>
+</ul>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If all features are constant after selection (nothing to model).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
 </div>
-<h3 id="optional-sub-packages">Optional Sub-Packages</h3>
-<p>If you only need specific toolchains instead of the full <code>all</code> suite:
-- <strong>Jupyter Only</strong>: <code>pip install -e '.[jupyter]'</code>
-- <strong>Testing Only</strong>: <code>pip install -e '.[test]'</code>
-- <strong>Docs Only</strong>: <code>pip install -e '.[docs]'</code>
-- <strong>Multimodal selectors (GrootCV/Leshy)</strong>: <code>pip install -e '.[arfs]'</code> — required for
-  <code>--multimodal-selection grootcv|leshy</code> (the containers ship it by default).</p>
-<div class="admonition warning">
-<p class="admonition-title"><code>[arfs]</code> and <code>[legacy-boruta]</code> are mutually exclusive</p>
-<p>The deprecated <code>boruta_shap</code> selector needs <code>pip install -e '.[legacy-boruta]'</code>, which
-<strong>cannot coexist</strong> with the <code>arfs</code> extra: BorutaShapPlus pins <code>numpy&lt;=2.0.0</code> while
-arfs 3.0 requires <code>numpy&gt;=2.0.2</code> — pip refuses any environment containing both.
-<code>legacy-boruta</code> exists only to reproduce pre-#96 runs.</p>
-</div>
-<h3 id="3-install-git-hooks">3. Install Git Hooks</h3>
-<div class="admonition tip">
-<p class="admonition-title">Development Hook</p>
-<p>If you are contributing code, install the pre-commit hooks to automatically strip Jupyter notebook metadata and run linters before each commit:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>nbdev-install-hooks
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>pre-commit<span class="w"> </span>install
-</code></pre></div>
-</div>
-<hr>
-<h2 id="4-verification-check">4. Verification Check</h2>
-<p>To quickly verify that the CLI was successfully mapped:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kreview<span class="w"> </span>--help
-</code></pre></div>
-<p>You should see an output tree listing <code>run</code>, <code>label</code>, <code>features-list</code>, and <code>report</code>. If so, you're clear to proceed to <a href="../configuration/">Configuration</a>!</p>
-<div class="admonition info">
-<p class="admonition-title">Listing Registered Features</p>
-<p>You can immediately verify all 26 feature evaluators are discoverable:
-</p><div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kreview<span class="w"> </span>features-list
-</code></pre></div><p></p>
+
+
+
+  </div>
+
+    </div>
+
 </div>
 
 
@@ -2154,7 +2616,7 @@ arfs 3.0 requires <code>numpy&gt;=2.0.2</code> — pip refuses any environment c
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 18, 2026 06:22:42 UTC"><span class="timeago" datetime="2026-08-18T06:22:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 18, 2026 06:22:42 UTC">2026-08-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 25, 2026 17:08:26 UTC"><span class="timeago" datetime="2026-08-25T17:08:26+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 25, 2026 17:08:26 UTC">2026-08-25</span>
   </span>
 
     
@@ -2164,7 +2626,7 @@ arfs 3.0 requires <code>numpy&gt;=2.0.2</code> — pip refuses any environment c
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="April 8, 2026 16:27:54 UTC"><span class="timeago" datetime="2026-04-08T16:27:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="April 8, 2026 16:27:54 UTC">2026-04-08</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 25, 2026 17:08:26 UTC"><span class="timeago" datetime="2026-08-25T17:08:26+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 25, 2026 17:08:26 UTC">2026-08-25</span>
   </span>
 
     

@@ -28,7 +28,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
 <body data-md-color-accent="custom" data-md-color-primary="custom" data-md-color-scheme="default" dir="ltr">
 <input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox">
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox">
@@ -658,6 +658,30 @@
 </a>
 </li>
 <li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/cli-eval/">
+<span class="md-ellipsis">
+    
+  
+    Evaluation CLI
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/cli-select/">
+<span class="md-ellipsis">
+    
+  
+    Selection CLI
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
 <a class="md-nav__link" href="../../api-reference/core/">
 <span class="md-ellipsis">
     
@@ -675,6 +699,18 @@
     
   
     Labeling Engine
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/selection/">
+<span class="md-ellipsis">
+    
+  
+    Feature Selection
   
 
     
@@ -706,11 +742,71 @@
 </a>
 </li>
 <li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/report/">
+<span class="md-ellipsis">
+    
+  
+    Report Rendering
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/report-data/">
+<span class="md-ellipsis">
+    
+  
+    Report Data Layer
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/pipeline-diagram/">
+<span class="md-ellipsis">
+    
+  
+    Pipeline Diagram
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
 <a class="md-nav__link" href="../../api-reference/features/">
 <span class="md-ellipsis">
     
   
     Evaluator Registry
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/registry/">
+<span class="md-ellipsis">
+    
+  
+    Registry Internals
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../api-reference/reproducibility/">
+<span class="md-ellipsis">
+    
+  
+    Reproducibility
   
 
     
@@ -873,12 +969,13 @@
 </nav>
 <pre class="mermaid"><code>flowchart LR
     classDef step fill:#f59e0b,stroke:#b45309,color:#fff;
-    A["Code Freeze\non develop"]:::step --&gt; B["Version Bump"]:::step
-    B --&gt; C["QA Checks"]:::step
-    C --&gt; D["Merge to main"]:::step
-    D --&gt; E["Tag: v*.*.*"]:::step
-    E --&gt; F["CI Auto-Deploys"]:::step
-    F --&gt; G["PyPI + GHCR\n+ Docs"]:::step
+    A["Code Freeze\non develop"]:::step --&gt; B["Cut release/vX.Y.Z\nfrom develop"]:::step
+    B --&gt; C["Version Bump\n+ Changelog"]:::step
+    C --&gt; D["QA Checks"]:::step
+    D --&gt; E["PR release/vX.Y.Z\n→ main"]:::step
+    E --&gt; F["Tag v*.*.* on main"]:::step
+    F --&gt; G["CI Auto-Deploys\nPyPI + GHCR + Docs"]:::step
+    G --&gt; H["Back-merge\nmain → develop"]:::step
 </code></pre>
 <div class="panzoom-info-box panzoom-info-box-bottom panzoom-hidden">
 Use mouse to pan and zoom
@@ -932,11 +1029,24 @@ Use mouse to pan and zoom
 </div>
 </div>
 <h3 id="4-commit-and-merge">4. Commit and Merge</h3>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-5-1" id="__codelineno-5-1" name="__codelineno-5-1"></a>git<span class="w"> </span>add<span class="w"> </span>-A
-<a href="#__codelineno-5-2" id="__codelineno-5-2" name="__codelineno-5-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"chore(release): bump version to 0.1.0"</span>
-<a href="#__codelineno-5-3" id="__codelineno-5-3" name="__codelineno-5-3"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>develop
+<div class="admonition warning">
+<p class="admonition-title">The release branch merges into <code>main</code>, never into <code>develop</code></p>
+<p>This is git-flow, and it is what every release in this repository has actually done —
+<code>release/v0.0.32</code>, <code>release/v0.0.31</code> and <code>release/v0.0.28</code> each merged straight into
+<code>main</code> and were then back-merged (see step 6). Do <strong>not</strong> land the bump on <code>develop</code> and
+then <abbr title="Precision-Recall">PR</abbr> <code>develop</code> → <code>main</code>: anything a colleague merges into <code>develop</code> between the bump
+and that <abbr title="Precision-Recall">PR</abbr> rides into the release without anyone reviewing it as part of the release.</p>
+</div>
+<p>Cut the release branch from <code>develop</code> — note the <code>v</code> prefix, which matches every existing
+release branch — and commit the bump and changelog on it:</p>
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-5-1" id="__codelineno-5-1" name="__codelineno-5-1"></a>git<span class="w"> </span>checkout<span class="w"> </span>develop<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>develop
+<a href="#__codelineno-5-2" id="__codelineno-5-2" name="__codelineno-5-2"></a>git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </span>release/v0.1.0
+<a href="#__codelineno-5-3" id="__codelineno-5-3" name="__codelineno-5-3"></a>git<span class="w"> </span>add<span class="w"> </span>-A
+<a href="#__codelineno-5-4" id="__codelineno-5-4" name="__codelineno-5-4"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"chore(release): bump version to 0.1.0"</span>
+<a href="#__codelineno-5-5" id="__codelineno-5-5" name="__codelineno-5-5"></a>git<span class="w"> </span>push<span class="w"> </span>-u<span class="w"> </span>origin<span class="w"> </span>release/v0.1.0
 </code></pre></div>
-<p>Then create a <abbr title="Precision-Recall">PR</abbr> from <code>develop</code> → <code>main</code> and merge after review.</p>
+<p>Then open a <abbr title="Precision-Recall">PR</abbr> from <code>release/v0.1.0</code> → <strong><code>main</code></strong> and merge after review and green <abbr title="Continuous Integration">CI</abbr>.
+Release-only fixes go on the release branch, so <code>develop</code> stays open for ordinary work.</p>
 <h3 id="5-tag-and-push">5. Tag and Push</h3>
 <div class="admonition warning">
 <p class="admonition-title">This triggers <abbr title="Continuous Integration">CI</abbr> deployment</p>
@@ -947,23 +1057,26 @@ Use mouse to pan and zoom
 <a href="#__codelineno-6-3" id="__codelineno-6-3" name="__codelineno-6-3"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.1.0
 <a href="#__codelineno-6-4" id="__codelineno-6-4" name="__codelineno-6-4"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0
 </code></pre></div>
+<p>Tag <code>main</code> after the release <abbr title="Precision-Recall">PR</abbr> merges — never the release branch, and never <code>develop</code>.</p>
 <h3 id="6-post-release">6. Post-Release</h3>
 <ul class="task-list">
 <li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Verify the <a href="https://pypi.org/project/kreview/">PyPI page</a> shows the new version</li>
 <li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Verify the <a href="https://github.com/msk-access/kreview/pkgs/container/kreview"><abbr title="GitHub Container Registry">GHCR</abbr> package</a> has the new tag</li>
 <li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Verify the <a href="https://msk-access.github.io/kreview/">docs site</a> shows the versioned release</li>
-<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Back-merge <code>main</code> into <code>develop</code>:</li>
+<li class="task-list-item"><label class="task-list-control"><input disabled="" type="checkbox"><span class="task-list-indicator"></span></label> Back-merge <code>main</code> into <code>develop</code> — by <abbr title="Precision-Recall">PR</abbr>, matching #117, #114 and #106:</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a href="#__codelineno-7-1" id="__codelineno-7-1" name="__codelineno-7-1"></a>git<span class="w"> </span>checkout<span class="w"> </span>develop
-<a href="#__codelineno-7-2" id="__codelineno-7-2" name="__codelineno-7-2"></a>git<span class="w"> </span>merge<span class="w"> </span>main
-<a href="#__codelineno-7-3" id="__codelineno-7-3" name="__codelineno-7-3"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>develop
+<div class="highlight"><pre><span></span><code><a href="#__codelineno-7-1" id="__codelineno-7-1" name="__codelineno-7-1"></a>git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </span>chore/back-merge-v0.1.0<span class="w"> </span>main
+<a href="#__codelineno-7-2" id="__codelineno-7-2" name="__codelineno-7-2"></a>git<span class="w"> </span>push<span class="w"> </span>-u<span class="w"> </span>origin<span class="w"> </span>chore/back-merge-v0.1.0
+<a href="#__codelineno-7-3" id="__codelineno-7-3" name="__codelineno-7-3"></a>gh<span class="w"> </span>pr<span class="w"> </span>create<span class="w"> </span>--base<span class="w"> </span>develop<span class="w"> </span>--title<span class="w"> </span><span class="s2">"chore: back-merge main into develop after v0.1.0"</span>
 </code></pre></div>
+<p>Without this, <code>develop</code> never receives the version bump and the next release starts from a
+tree that disagrees with the published one.</p>
 <aside class="md-source-file">
 <span class="md-source-file__fact">
 <span class="md-icon" title="Last update">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
 </span>
-<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="June 3, 2026 19:17:42 UTC"><span class="timeago" datetime="2026-06-03T19:17:42+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="June 3, 2026 19:17:42 UTC">2026-06-03</span>
+<span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 25, 2026 17:15:27 UTC"><span class="timeago" datetime="2026-08-25T17:15:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 25, 2026 17:15:27 UTC">2026-08-25</span>
 </span>
 <span class="md-source-file__fact">
 <span class="md-icon" title="Created">
