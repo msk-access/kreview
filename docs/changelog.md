@@ -65,6 +65,32 @@ Also ships the pipeline DAG as a drawn object and the report's visual rebuild.
 - `mkdocs build --strict` passes again: four unannotated parameters and one generator without
   a return annotation had been failing the documented release gate.
 
+### Documentation
+- **The label taxonomy is six tiers, and the docs said five** — in eleven files, including
+  `AGENTS.md`, which agents read on every turn. Worse, `.agents/rules/labeling-hierarchy.md`
+  and the `ctdna-labeling` skill both stated that a CH-only `Possible ctDNA+` is *"demoted to
+  Possible ctDNA−"*. The code demotes it to `Undetermined` (`LABEL_UNDETERMINED`), which is
+  outside `_MODEL_LABELS` and therefore **excluded from modelling** — following the documented
+  behaviour would have put CH-only samples in the negative class. `docs/biology/ctdna-labeling.md`
+  contradicted itself, prose against its own code block three lines below.
+- **The report interpretation guide described a report that no longer exists** — four tabs, no
+  Methods tab, none of this release's panels. It now covers five tabs, the primary endpoint and
+  its interval, the verification-bias ladder, the run map, the subgroup floor and tier
+  composition, and why the interval width is mostly threshold estimation rather than clustering.
+  Its `#page-5-cohort-qc` link, a leftover from the retired Quarto dashboard, is repointed.
+- **The API reference covered 5 of 13 modules.** `report_data` — which decides what every number
+  in the report means — and `selection` — which decides which features reach a model — were both
+  undocumented while the scoreboard displaying their output had a page. All thirteen now have
+  one, with `cli` on `mkdocs-typer`.
+- **The release guide described a flow no release has used.** It said to land the version bump on
+  `develop` and PR `develop` → `main`; v0.0.32, v0.0.31 and v0.0.28 each merged a
+  `release/vX.Y.Z` branch straight into `main` and back-merged afterwards. The documented path is
+  also riskier — with `develop` as the staging area, anything merged there between the bump and
+  the PR rides into the release unreviewed.
+- README claimed Boruta-SHAP as a multimodal selection option two bullets above its own table
+  naming grootcv the default; Boruta is now a legacy extra that cannot be installed alongside
+  arfs at all.
+
 ### Infrastructure
 - Notebook hygiene tests (#130): a notebook written as nbformat 4.4 carries no cell ids, so
   nbdev's export hash moves on every run and the sync gate fails on an unrelated PR.
