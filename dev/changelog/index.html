@@ -71,7 +71,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -1808,6 +1808,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#infrastructure" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2847,7 +2858,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
+  <a href="#documentation_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Documentation
@@ -3393,6 +3404,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#infrastructure" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4432,7 +4454,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
+  <a href="#documentation_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Documentation
@@ -4990,6 +5012,33 @@ Also ships the pipeline <abbr title="Directed Acyclic Graph">DAG</abbr> as a dra
   name when pandas returns a flat Index (#130).</li>
 <li><code>mkdocs build --strict</code> passes again: four unannotated parameters and one generator without
   a return annotation had been failing the documented release gate.</li>
+</ul>
+<h3 id="documentation">Documentation</h3>
+<ul>
+<li><strong>The label taxonomy is six tiers, and the docs said five</strong> — in eleven files, including
+  <code>AGENTS.md</code>, which agents read on every turn. Worse, <code>.agents/rules/labeling-hierarchy.md</code>
+  and the <code>ctdna-labeling</code> skill both stated that a CH-only <code>Possible ctDNA+</code> is <em>"demoted to
+  Possible <abbr title="Circulating Tumor DNA">ctDNA</abbr>−"</em>. The code demotes it to <code>Undetermined</code> (<code>LABEL_UNDETERMINED</code>), which is
+  outside <code>_MODEL_LABELS</code> and therefore <strong>excluded from modelling</strong> — following the documented
+  behaviour would have put CH-only samples in the negative class. <code>docs/biology/ctdna-labeling.md</code>
+  contradicted itself, prose against its own code block three lines below.</li>
+<li><strong>The report interpretation guide described a report that no longer exists</strong> — four tabs, no
+  Methods tab, none of this release's panels. It now covers five tabs, the primary endpoint and
+  its interval, the verification-bias ladder, the run map, the subgroup floor and tier
+  composition, and why the interval width is mostly threshold estimation rather than clustering.
+  Its <code>#page-5-cohort-qc</code> link, a leftover from the retired Quarto dashboard, is repointed.</li>
+<li><strong>The API reference covered 5 of 13 modules.</strong> <code>report_data</code> — which decides what every number
+  in the report means — and <code>selection</code> — which decides which features reach a model — were both
+  undocumented while the scoreboard displaying their output had a page. All thirteen now have
+  one, with <code>cli</code> on <code>mkdocs-typer</code>.</li>
+<li><strong>The release guide described a flow no release has used.</strong> It said to land the version bump on
+  <code>develop</code> and <abbr title="Precision-Recall">PR</abbr> <code>develop</code> → <code>main</code>; v0.0.32, v0.0.31 and v0.0.28 each merged a
+  <code>release/vX.Y.Z</code> branch straight into <code>main</code> and back-merged afterwards. The documented path is
+  also riskier — with <code>develop</code> as the staging area, anything merged there between the bump and
+  the <abbr title="Precision-Recall">PR</abbr> rides into the release unreviewed.</li>
+<li>README claimed Boruta-<abbr title="SHapley Additive exPlanations">SHAP</abbr> as a multimodal selection option two bullets above its own table
+  naming grootcv the default; Boruta is now a legacy extra that cannot be installed alongside
+  arfs at all.</li>
 </ul>
 <h3 id="infrastructure">Infrastructure</h3>
 <ul>
@@ -5654,7 +5703,7 @@ smoke-tested inside the built CPU image on every <abbr title="Continuous Integra
 <li><strong>Report <abbr title="Directed Acyclic Graph">DAG</abbr> dependency</strong>: Report process now receives both matrices AND <code>*_model_results.json</code> from CPU/GPU eval, enabling complete dashboard rendering (<abbr title="Receiver Operating Characteristic">ROC</abbr>, <abbr title="SHapley Additive exPlanations">SHAP</abbr>, metrics). Report runs in parallel with FUSE + MULTIMODAL.</li>
 <li><strong>Extract module</strong>: <code>extract.nf</code> now accepts <code>labels.parquet</code> as input from upstream <code>KREVIEW_LABEL</code>.</li>
 </ul>
-<h3 id="documentation">Documentation</h3>
+<h3 id="documentation_1">Documentation</h3>
 <ul>
 <li><strong>README</strong>: Comprehensive overhaul — added <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr>/Boruta-<abbr title="SHapley Additive exPlanations">SHAP</abbr>, GPU models, multimodal stacking, Nextflow <abbr title="High-Performance Computing">HPC</abbr>, pipeline architecture Mermaid diagram, fixed stale <code>--workers</code> flag.</li>
 <li><strong>Statistical Tests</strong>: Detailed <abbr title="Minimum Redundancy Maximum Relevance">mRMR</abbr> documentation (optimization objective, F-statistic/Pearson explanation, algorithm steps), Boruta-<abbr title="SHapley Additive exPlanations">SHAP</abbr> documentation (shadow features, <abbr title="SHapley Additive exPlanations">SHAP</abbr> importance, flowchart, configuration table, when-to-choose guide), fixed stale Selection <abbr title="Quality Control">QC</abbr> keys.</li>
@@ -5897,7 +5946,7 @@ smoke-tested inside the built CPU image on every <abbr title="Continuous Integra
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 25, 2026 16:37:16 UTC"><span class="timeago" datetime="2026-08-25T16:37:16+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 25, 2026 16:37:16 UTC">2026-08-25</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 25, 2026 17:50:47 UTC"><span class="timeago" datetime="2026-08-25T17:50:47+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 25, 2026 17:50:47 UTC">2026-08-25</span>
   </span>
 
     
