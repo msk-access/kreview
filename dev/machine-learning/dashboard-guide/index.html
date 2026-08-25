@@ -73,7 +73,7 @@
             body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
             body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
         </style><meta name="panzoom-theme" content="material">
-<meta name="panzoom-data" content='{"selectors": [".d2", ".mermaid"], "initial_zoom_level": 1.0}'> </head>
+<meta name="panzoom-data" content='{"selectors": [".mermaid", ".d2"], "initial_zoom_level": 1.0}'> </head>
   
   
     
@@ -763,15 +763,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
       
         <li class="md-nav__item">
-  <a href="#the-four-tabs" class="md-nav__link">
+  <a href="#the-five-tabs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The four tabs
+        The five tabs
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The four tabs">
+    <nav class="md-nav" aria-label="The five tabs">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -812,6 +812,17 @@
     <span class="md-ellipsis">
       
         4. Run diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-methods-interpretation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Methods &amp; interpretation
       
     </span>
   </a>
@@ -1631,15 +1642,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
       
         <li class="md-nav__item">
-  <a href="#the-four-tabs" class="md-nav__link">
+  <a href="#the-five-tabs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The four tabs
+        The five tabs
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The four tabs">
+    <nav class="md-nav" aria-label="The five tabs">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1680,6 +1691,17 @@
     <span class="md-ellipsis">
       
         4. Run diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-methods-interpretation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Methods &amp; interpretation
       
     </span>
   </a>
@@ -1779,10 +1801,28 @@ report is safe to share). Open it in any browser; nothing is fetched from the ne
 report covers — including evaluators that appear in the scoreboard but lacked model-result
 files (<code>missing_detail</code>). A partial report is always loud, never silently incomplete.</p>
 <hr>
-<h2 id="the-four-tabs">The four tabs</h2>
+<h2 id="the-five-tabs">The five tabs</h2>
 <h3 id="1-cohort-labels">1. Cohort &amp; labels</h3>
-<p>Sample counts, the 5-tier <abbr title="Circulating Tumor DNA">ctDNA</abbr> label taxonomy (n and % per tier), cancer-type
-composition, and the <strong>train/test split composition</strong> by label tier.</p>
+<p>Opens on the <strong>pre-registered primary endpoint</strong> — sensitivity at 98% specificity against
+verified true negatives — with its patient-clustered interval, the burden-response curve
+behind it, and the stacking lift over the best single evaluator.</p>
+<p>Then sample counts, the 6-tier <abbr title="Circulating Tumor DNA">ctDNA</abbr> label taxonomy (n and % per tier; four modelled, with
+<code>Undetermined</code> and <code>Insufficient Data</code> excluded), cancer-type composition, and the
+<strong>train/test split composition</strong> by label tier.</p>
+<div class="admonition important">
+<p class="admonition-title">Which negatives the headline was scored against</p>
+<p>The <strong>verification-bias ladder</strong> shows the same model on the same positives against four
+different negative classes: verified within-patient negatives, all negatives pooled,
+unpaired negatives, and healthy donors. On the v0.0.32 cohort those span <strong>13.1 <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>
+points</strong> — more than any modelling decision in the campaign. The verified-TN rung is the
+defensible one; the donor rung is not less trustworthy so much as a different question
+(between people rather than within a patient), and it is the comparison most screening
+literature reports.</p>
+</div>
+<p>The operating-points panel states both anchors, and its intervals come from a patient-clustered
+bootstrap with the threshold re-estimated inside every resample. Two things inflate that width
+and they are reported separately, because they are not the same size: clustering contributes a
+design effect of ~1.26, estimating the threshold from a finite negative set contributes ~11×.</p>
 <div class="admonition warning">
 <p class="admonition-title">Patient-overlap warning</p>
 <p>If any patient has samples in <strong>both</strong> train and test, a warning banner reports the
@@ -1797,6 +1837,13 @@ holdout <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC
 <code>NO_RESULTS</code>), best model, <abbr title="Cross-Validation">CV</abbr> <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>, holdout <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr>, the <strong>Δ-overfit column</strong> (<abbr title="Cross-Validation">CV</abbr> − holdout),
 operating-point sensitivities, and selection metadata.</p>
 <p><strong>Click any row</strong> for the deep-dive modal:</p>
+<p>Subgroup AUCs in the modal carry a <strong>per-class floor</strong> — at least 30 positives <em>and</em> 30
+negatives, so a group cannot qualify on its negatives alone — a patient-clustered interval
+(computed for the pre-registered primary evaluator; every other subgroup table is
+exploratory), and the share of each group's positives that are tumour-confirmed, which
+ranges from about half to over ninety percent across histologies. Read the <abbr title="Area Under the Receiver Operating Characteristic Curve">AUC</abbr> against that
+share: a group whose positives are largely the ambiguous tier is discriminating a less
+certain set.</p>
 <table>
 <thead>
 <tr>
@@ -1845,13 +1892,21 @@ reference line), stacking precision–recall curves, per-model detail, and — w
 produced it — the leave-one-evaluator-out ablation. If the ablation stage failed, the tab
 says so explicitly instead of rendering blank.</p>
 <h3 id="4-run-diagnostics">4. Run diagnostics</h3>
-<p>Process outcomes (tasks, failures, retry counts) and the longest tasks, from the Nextflow
-execution trace. The trace only exists after the workflow ends, so this tab is empty for
+<p>Opens on the <strong>pipeline run map</strong> — the Nextflow <abbr title="Directed Acyclic Graph">DAG</abbr> drawn with this run's task counts on
+each node. A node standing for several processes reports how many it covers rather than
+summing their task counts, and clicking it opens those processes with their failures,
+slowest task and peak RSS. A stage with no trace row reads <em>no trace</em>, never green.</p>
+<p>Below it, process outcomes (tasks, failures, retry counts) and the longest tasks, from the
+Nextflow execution trace. The trace only exists after the workflow ends, so this tab is empty for
 the in-pipeline render — re-run <code>kreview report</code> on the published output directory to
 fill it in:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>kreview<span class="w"> </span>report<span class="w"> </span>--outdir<span class="w"> </span>/path/to/outdir<span class="w"> </span>--out-dir<span class="w"> </span>reports<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>--trace<span class="w"> </span>/path/to/outdir/pipeline_info/execution_trace.txt
 </code></pre></div>
+<h3 id="5-methods-interpretation">5. Methods &amp; interpretation</h3>
+<p>The same <abbr title="Directed Acyclic Graph">DAG</abbr> in structure form (two densities, no run status), the label definitions, how
+each operating point is derived, and the glossary terms behind the info icons that appear
+throughout the other tabs.</p>
 <hr>
 <h2 id="reading-the-metrics-honestly">Reading the metrics honestly</h2>
 <ul>
@@ -1892,7 +1947,7 @@ fill it in:</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"></path></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 17, 2026 20:39:47 UTC"><span class="timeago" datetime="2026-08-17T20:39:47+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 17, 2026 20:39:47 UTC">2026-08-17</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 25, 2026 16:49:51 UTC"><span class="timeago" datetime="2026-08-25T16:49:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 25, 2026 16:49:51 UTC">2026-08-25</span>
   </span>
 
     
