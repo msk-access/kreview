@@ -91,11 +91,19 @@ nav:
       - Troubleshooting: operations/troubleshooting.md
   - API Reference:
       - CLI: api-reference/cli.md
+      - Evaluation CLI: api-reference/cli-eval.md
+      - Selection CLI: api-reference/cli-select.md
       - Core Operations: api-reference/core.md
       - Labeling Engine: api-reference/labels.md
+      - Feature Selection: api-reference/selection.md
       - Evaluation Engine: api-reference/eval-engine.md
       - Scoreboard: api-reference/scoreboard.md
+      - Report Rendering: api-reference/report.md
+      - Report Data Layer: api-reference/report-data.md
+      - Pipeline Diagram: api-reference/pipeline-diagram.md
       - Evaluator Registry: api-reference/features.md
+      - Registry Internals: api-reference/registry.md
+      - Reproducibility: api-reference/reproducibility.md
   - Changelog: changelog.md
 markdown_extensions:
   - admonition
