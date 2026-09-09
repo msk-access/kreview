@@ -15,43 +15,59 @@
 # cheapest job on the register and four items sit behind it: CH subtraction, the
 # chart-review protocol, and the blinded chart review itself.
 #
-# Everything below is supplied at submit time; nothing cluster-specific is committed.
+# Inputs default to the production values in scripts/run_hpc.sh — that script is the
+# source of truth for where the cohort lives, and these are the same four resources it
+# passes. Override any of them by exporting before sbatch:
 #
-#   export KREVIEW_CANCER_SAMPLESHEET=/path/to/cancer_samplesheet.csv
-#   export KREVIEW_CBIOPORTAL_DIR=/path/to/cbioportal
-#   export KREVIEW_KREWLYZER_DIRS="/path/to/krewlyzer_run1 /path/to/krewlyzer_run2"
-#   export KREVIEW_HEALTHY_XS=/path/to/healthy_samplesheet.csv     # optional
-#   export KREVIEW_LABEL_OUT=/path/to/relabel_out
+#   KREVIEW_CANCER_SAMPLESHEET  KREVIEW_HEALTHY_XS1  KREVIEW_HEALTHY_XS2
+#   KREVIEW_CBIOPORTAL_DIR      KREVIEW_KREWLYZER    KREVIEW_LABEL_OUT
+#
 #   sbatch scripts/hpc/relabel_with_depth.sbatch
 #
-# Runs in the CPU container, so the shipped kreview version is the one that labelled
-# production — no local environment drift.
+# KREVIEW_KREWLYZER accepts either a directory or a manifest .txt listing one directory
+# per line — `Paths.__post_init__` expands the manifest form, which is what the pipeline
+# itself passes. Repeat-by-space is also supported here.
+#
+# Runs in the CPU container, so the kreview doing the labelling is the released one
+# rather than whatever a login node happens to have.
 set -euo pipefail
 
-: "${KREVIEW_CANCER_SAMPLESHEET:?set KREVIEW_CANCER_SAMPLESHEET}"
-: "${KREVIEW_CBIOPORTAL_DIR:?set KREVIEW_CBIOPORTAL_DIR}"
-: "${KREVIEW_KREWLYZER_DIRS:?set KREVIEW_KREWLYZER_DIRS (space-separated)}"
-: "${KREVIEW_LABEL_OUT:?set KREVIEW_LABEL_OUT}"
+KRW_ROOT=/data1/shahr2/share/krewlyzer/0.8.3
+CANCER_SS="${KREVIEW_CANCER_SAMPLESHEET:-$KRW_ROOT/access_12_245/samplesheet.csv}"
+HEALTHY_XS1="${KREVIEW_HEALTHY_XS1:-$KRW_ROOT/healthy_controls/xs1/samplesheet.csv}"
+HEALTHY_XS2="${KREVIEW_HEALTHY_XS2:-$KRW_ROOT/healthy_controls/xs2/samplesheet.csv}"
+CBIO="${KREVIEW_CBIOPORTAL_DIR:-/data1/core006/access/production/resources/cbioportal/current/msk_solid_heme}"
+KREWLYZER="${KREVIEW_KREWLYZER:-$KRW_ROOT/access_12_245 $KRW_ROOT/healthy_controls/xs1 $KRW_ROOT/healthy_controls/xs2}"
+OUT="${KREVIEW_LABEL_OUT:-$PWD/relabel_depth/labels.parquet}"
+CH_MAF="${KREVIEW_CH_HOTSPOT_MAF:-/data1/core006/cch/production/resources/cmo-ch/versions/v1.0/regions_of_interest/versions/v1.0/hotspot-list-ch-pd-v1.maf}"
 
 VERSION="${KREVIEW_VERSION:-0.0.33}"
 IMAGE="docker://ghcr.io/msk-access/kreview:v${VERSION}"
 SIF_DIR="${KREVIEW_SIF_DIR:-$PWD/.singularity}"
-mkdir -p logs "$SIF_DIR" "$(dirname "$KREVIEW_LABEL_OUT")"
+mkdir -p logs "$SIF_DIR" "$(dirname "$OUT")"
 
-# one --krewlyzer-dir per directory; the flag is repeatable
+# Fail here rather than 40 minutes in: every input is checked before the container
+# starts, and a missing one is named.
+for f in "$CANCER_SS" "$HEALTHY_XS1" "$HEALTHY_XS2"; do
+    [ -f "$f" ] || { echo "FATAL: samplesheet not found: $f" >&2; exit 1; }
+done
+[ -d "$CBIO" ] || { echo "FATAL: cbioportal dir not found: $CBIO" >&2; exit 1; }
+
+# --krewlyzer-dir is repeatable and also accepts a manifest .txt
 KRW_ARGS=()
-for d in $KREVIEW_KREWLYZER_DIRS; do
-    [ -d "$d" ] || { echo "FATAL: krewlyzer dir not found: $d" >&2; exit 1; }
+for d in $KREWLYZER; do
+    [ -e "$d" ] || { echo "FATAL: krewlyzer path not found: $d" >&2; exit 1; }
     KRW_ARGS+=(--krewlyzer-dir "$d")
 done
 
-HEALTHY_ARGS=()
-[ -n "${KREVIEW_HEALTHY_XS:-}" ] && HEALTHY_ARGS+=(--healthy-xs "$KREVIEW_HEALTHY_XS")
+CH_ARGS=()
+[ -f "$CH_MAF" ] && CH_ARGS+=(--ch-hotspot-maf "$CH_MAF") \
+  || echo "NOTE: CH hotspot MAF not found, running without CH demotion: $CH_MAF"
 
-echo "host    : $(hostname)"
-echo "image   : $IMAGE"
-echo "krewlyzer dirs: ${KREVIEW_KREWLYZER_DIRS}"
-echo "output  : $KREVIEW_LABEL_OUT"
+echo "host      : $(hostname)"
+echo "image     : $IMAGE"
+echo "krewlyzer : ${KREWLYZER}"
+echo "output    : $OUT"
 
 export SINGULARITYENV_HOME="$PWD/.home"
 export SINGULARITYENV_TMPDIR="$PWD/tmp"
@@ -63,17 +79,19 @@ singularity exec \
     --bind "$PWD:$PWD" --pwd "$PWD" \
     "$IMAGE" \
     kreview label \
-        --cancer-samplesheet "$KREVIEW_CANCER_SAMPLESHEET" \
-        --cbioportal-dir "$KREVIEW_CBIOPORTAL_DIR" \
+        --cancer-samplesheet "$CANCER_SS" \
+        --healthy-xs1-samplesheet "$HEALTHY_XS1" \
+        --healthy-xs2-samplesheet "$HEALTHY_XS2" \
+        --cbioportal-dir "$CBIO" \
         "${KRW_ARGS[@]}" \
-        "${HEALTHY_ARGS[@]}" \
-        --output "$KREVIEW_LABEL_OUT"
+        "${CH_ARGS[@]}" \
+        --output "$OUT"
 
 # The whole point of the job: prove the column arrived and is populated.
 echo "── verifying total_fragments_pf ──"
 singularity exec --bind "$PWD:$PWD" --pwd "$PWD" "$IMAGE" python3 -c "
 import pandas as pd, sys
-lb = pd.read_parquet('${KREVIEW_LABEL_OUT}')
+lb = pd.read_parquet('${OUT}')
 if 'total_fragments_pf' not in lb.columns:
     sys.exit('FATAL: total_fragments_pf absent — --krewlyzer-dir did not take effect')
 n, ok = len(lb), int(lb['total_fragments_pf'].notna().sum())
