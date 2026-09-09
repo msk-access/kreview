@@ -19,6 +19,7 @@ constructions; neither is the unique-fragment count the formal gate requires.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -26,7 +27,10 @@ import numpy as np
 import pandas as pd
 from scipy.stats import mannwhitneyu
 
-D = Path.home() / "Downloads" / "v0.0.32_eval"
+# Overridable because these scripts run on the cluster too, where a laptop
+# Downloads path does not exist — the GPU wrapper would otherwise launch the job
+# and fail on the first read (see scripts/hpc/run_gpu_research.sbatch).
+D = Path(os.environ.get("KREVIEW_OUTDIR", Path.home() / "Downloads" / "v0.0.32_eval"))
 
 
 def coverage_measures() -> pd.DataFrame:

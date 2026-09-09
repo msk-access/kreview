@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -26,7 +27,10 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
-D = Path.home() / "Downloads" / "v0.0.32_eval"
+# Overridable because these scripts run on the cluster too, where a laptop
+# Downloads path does not exist — the GPU wrapper would otherwise launch the job
+# and fail on the first read (see scripts/hpc/run_gpu_research.sbatch).
+D = Path(os.environ.get("KREVIEW_OUTDIR", Path.home() / "Downloads" / "v0.0.32_eval"))
 SEED, FOLDS, BOOT = 42, 5, 300
 rng = np.random.default_rng(SEED)
 
