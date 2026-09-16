@@ -66,6 +66,10 @@ CH_ARGS=()
 
 echo "host      : $(hostname)"
 echo "image     : $IMAGE"
+# The image pins the kreview that does the labelling; this pins the checkout the
+# job script came from. They version independently, so a result is only
+# reproducible with both. Submit dir, since this job runs no host-side code.
+echo "checkout  : $(git -C "$PWD" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "krewlyzer : ${KREWLYZER}"
 echo "output    : $OUT"
 

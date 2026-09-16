@@ -38,6 +38,10 @@ mkdir -p logs "$SIF_DIR"
 
 echo "host      : $(hostname)"
 echo "image     : $IMAGE"
+# The image pins kreview; this pins the checkout $SCRIPT came from, which is a
+# separate thing — research scripts are bind-mounted, never baked into the image.
+# Resolved from the script rather than $PWD so it names the tree actually executed.
+echo "checkout  : $(git -C "$(dirname "$SCRIPT")" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "script    : $SCRIPT $*"
 echo "outdir    : $OUTDIR"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader || {
