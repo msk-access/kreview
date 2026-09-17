@@ -77,8 +77,10 @@ stage subcommands. Supported Nextflow: **v25–v26**. Full module map:
   third-party library, SDK, CLI or cloud service — API syntax, config, setup, version
   migration, library-specific debugging — looks the docs up first, unasked, even when the
   answer seems known. Versioned APIs move and this repo has paid for that twice
-  (`arfs`/LightGBM, `setuptools<81`). Our *own* architecture goes to graphify instead:
-  graphify for what we wrote, Context7 for what we import. `.agents/rules/context7.md`.
+  (`arfs`/LightGBM, `setuptools<81`). Distinct from graphify rather than competing with
+  it: graphify answers *how this codebase fits together* and is advisory; this is a
+  reference lookup against an external surface, and is standing. One question can need
+  both. `.agents/rules/context7.md`.
 
 ## Rules index (`.agents/rules/`, load on demand)
 

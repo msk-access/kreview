@@ -29,10 +29,24 @@ Prefer Context7 over web search for library documentation.
 Refactoring, writing scripts from scratch, debugging business logic, code review, and
 general programming concepts. These are reasoning tasks, not lookup tasks.
 
-**And it is not for this codebase.** Questions about kreview's own architecture, modules or
-file relationships go to `graphify query` / `graphify explain` (see `CLAUDE.md`), which
-returns a scoped subgraph of *this* repo. Context7 covers third-party surfaces only. The
-split is: graphify for what we wrote, Context7 for what we import.
+## How this relates to graphify
+
+Not "ours versus theirs" — they answer different **questions**, and one task can need both.
+
+**graphify** is a comprehension tool over this repo's knowledge graph: how the pieces fit,
+what connects to what, where something happens. It earns its place on questions that span
+files, where it replaces grep by returning a scoped subgraph. `CLAUDE.md` is explicit that
+it is *advisory*, and that it should be skipped for edits, unrelated files and quick
+lookups.
+
+**Context7** is a reference lookup against an external surface: what the API is, how it is
+configured, what moved between versions. That is a standing rule, not advisory, because
+the failure it prevents is silent — a confidently wrong answer from stale training data.
+
+So the two are not alternatives on one axis, and "how do we use DuckDB here" is really two
+questions. graphify shows where and how we already call it; Context7 says whether that call
+is still current. Reaching for graphify on a third-party API returns our own usage, which
+may itself be out of date — that is the failure mode this split exists to prevent.
 
 ## How
 
