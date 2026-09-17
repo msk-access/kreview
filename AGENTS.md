@@ -73,6 +73,12 @@ stage subcommands. Supported Nextflow: **v25–v26**. Full module map:
 - **Outward actions ask first:** pushing to shared branches, publishing images, creating
   releases, submitting SLURM jobs that spend the group allocation — confirm, every time.
 - **Commits:** conventional-commit format (`type(scope): summary`); never `git add -A` blind.
+- **Library docs come from Context7, not memory.** Any question or edit touching a
+  third-party library, SDK, CLI or cloud service — API syntax, config, setup, version
+  migration, library-specific debugging — looks the docs up first, unasked, even when the
+  answer seems known. Versioned APIs move and this repo has paid for that twice
+  (`arfs`/LightGBM, `setuptools<81`). Our *own* architecture goes to graphify instead:
+  graphify for what we wrote, Context7 for what we import. `.agents/rules/context7.md`.
 
 ## Rules index (`.agents/rules/`, load on demand)
 
@@ -83,6 +89,7 @@ stage subcommands. Supported Nextflow: **v25–v26**. Full module map:
 - `parquet-only.md` — I/O format convention.
 - `code-quality.md` — style, typing, dedup expectations.
 - `git-conventions.md` — branching, commit, release flow.
+- `context7.md` — when to pull live library docs, and when to use graphify instead.
 
 ## Skills & memory
 
