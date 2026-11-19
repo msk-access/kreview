@@ -98,7 +98,8 @@ upstream of it should be re-measured twice.
 
 | # | Item | Why | Gate | Effort |
 |---|---|---|---|---|
-| R1 | **Patient-grouped CV at every site** | Grouping exists in exactly one place today: the train/test split (`labels.py:798`, `StratifiedGroupKFold`). All **8** CV construction sites in `eval_engine.py` use plain `StratifiedKFold`. `groups` is already plumbed to every call site for the *bootstrap interval* (#132), so the splitter swap is bounded but is not one line. | — | M |
+| R1 | **Patient-grouped CV at every site** | Grouping exists in exactly one place today: the train/test split (`labels.py:798`, `StratifiedGroupKFold`). All **8** CV construction sites in `eval_engine.py` use plain `StratifiedKFold`, and **6 of the 8 sit in functions that take no patient argument at all** — `univariate_auc` (called from `selection.py` with only feature, labels and fold settings), `_inner_cv_sensitivity`, `ablate_feature_groups`, `multimodal_single` (twice) and `multimodal_ablation`. Only `cpu_models` and `gpu_models` carry `patients`, and that reaches the *bootstrap interval* (#132), **not** the splitter. So R1 is threading patient ids down through those callers as well as swapping splitters, and `multimodal_single` is the one that produces the headline score. ⚠️ `ablate_feature_groups` already has a `groups` parameter holding **feature** groups; do not overload it. | — | M |
+| R1a | **Paired grouped-vs-ungrouped on the headline arm** (was D1) | Must run *inside* R1, on identical inputs, before R5. R5 changes features and CV at once, so comparing it to v0.0.33 cannot isolate leakage, and the `tabicl_ft` arm that produces the headline is still the only one never tested under grouping. CPU arms moved ≤0.005 AUC. Needs no extra production run. | R1 | S |
 | R2 | **krewlyzer fragment-model release** | One definition of a fragment; `{sample}.fragments.parquet` as a declared output. Upstream repo, own acceptance rule. | — | L |
 | R3 | **Pre-registration note in `ANALYSIS_PLAN.md`** | Written *before* the run: krewlyzer version, which value-changing policies were accepted, and the statement that earlier numbers are not comparable. Required by the file's own between-runs rule. | R1, R2 | S |
 | R4 | **Declare the new outputs** | `fragments.parquet` declared as known and **not read** by the tabular loader; the by-class tables declared. A cohort mixing two krewlyzer fragment-model versions must **raise**, not load. | R2 | S |
@@ -215,8 +216,10 @@ Recorded because what was *rejected and why* is the part that gets re-proposed.
 
 Everything now routes through one gate.
 
-1. **R1 → R3 → R5.** The re-baseline. R2 is upstream and on its own clock; R1 is ours and can
-   start today. Every number in Tracks B, N and X is provisional until R5 lands.
+1. **R1 → R1a → R3 → R5.** The re-baseline. R2 is upstream and on its own clock; R1 is ours and can
+   start today. Every number in Tracks B, N and X is provisional until R5 lands. **R1a is the
+   last chance to measure leakage on the headline arm**: once R5 changes features and CV
+   together, no comparison against v0.0.33 can separate the two.
 2. **§2 → N1, N2, X2.** The local research track is blocked on restoring the evaluation outputs,
    not on effort. Fix that before planning around "local, CPU, cheap".
 3. **F7 chain:** D2 or R5 → D3 → E5 → D4. The flag set moves with the re-baseline, so running
